@@ -88,7 +88,6 @@ def probe_rust() -> tuple[dict[str, Any] | None, str | None]:
             capture_output=True,
             text=True,
             check=False,
-            close_fds=True,
             timeout=3,
         )
     except (OSError, subprocess.TimeoutExpired):

@@ -249,7 +249,7 @@ make the decision from those spans, and return a versioned changeset for guarded
 3. `understand` selects bounded, hash-verified context.
 4. `plan` compiles `simplicio.fast.plandag/v2`.
 5. The LLM decides and returns `simplicio.fast.changeset/v2`.
-6. `apply` delegates mechanical edits to Dev CLI; dry-run is the default. If the native adapter is unavailable or refuses the v2 contract, Fast reports the refusal and may use its explicit atomic bootstrap fallback; the receipt remains versioned and never labels that path as integrated.
+6. `delivery --changeset changeset.json` wraps the same guarded executor in a delivery receipt. It is a dry-run by default; `--write --profile loop-standalone` performs the local atomic path, verifies before/after hashes, refreshes the snapshot and makes identical retries idempotent. Full writes fail closed until a verified Runtime authorization is integrated. If the native adapter is unavailable or refuses the v2 contract, Fast reports the refusal and may use its explicit atomic bootstrap fallback; the receipt remains versioned and never labels that path as integrated.
 7. Runtime authorizes effects and Loop validates/converges.
 8. Fast incrementally refreshes changed files.
 

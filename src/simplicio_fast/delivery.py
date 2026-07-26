@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .processor import ProjectProcessor
 from .snapshot import Snapshot, build_snapshot
 
 
@@ -30,7 +31,6 @@ def _source_commit(root: Path) -> tuple[str | None, str | None]:
             capture_output=True,
             text=True,
             check=False,
-            close_fds=True,
         )
     except OSError:
         return None, "git_unavailable"
@@ -120,4 +120,120 @@ class DeliveryEngine:
                 "timings": {"prepare_wall_ms": (time.perf_counter_ns() - started) / 1_000_000},
             }
         _atomic_json(cache_path, receipt)
+        return receipt
+
+    def deliver(
+        self,
+        changeset: dict[str, Any],
+        *,
+        profile: str,
+        engine_receipt: dict[str, Any],
+        write: bool = False,
+        idempotency_key: str | None = None,
+        runtime_authorized: bool = False,
+    ) -> dict[str, Any]:
+        """Execute one guarded changeset and persist a replay-safe delivery receipt.
+
+        Loop standalone may use the local guarded executor. Full write effects are
+        fail-closed until a Runtime authorization receipt is supplied. Dry-runs
+        remain available in both profiles for inspection and planning.
+        """
+        started = time.perf_counter_ns()
+        if profile not in PROFILE_NAMES:
+            raise ValueError(f"unsupported delivery profile: {profile}")
+        if changeset.get("schema") != "simplicio.fast.changeset/v2":
+            raise ValueError("unsupported changeset schema")
+        if not isinstance(changeset.get("changes"), list) or not changeset["changes"]:
+            raise ValueError("changeset must contain at least one change")
+        if not self.snapshot.is_file():
+            build_snapshot(self.root, self.snapshot)
+        canonical = json.dumps(changeset, sort_keys=True, separators=(",", ":"))
+        change_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        request_key = idempotency_key or hashlib.sha256(
+            json.dumps(
+                {"changeset": change_digest, "profile": profile, "write": write},
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        result_path = self.cache / "delivery" / f"{request_key}.json"
+        if result_path.is_file():
+            cached = json.loads(result_path.read_text(encoding="utf-8"))
+            cached["idempotency"] = {
+                **cached.get("idempotency", {}),
+                "key": request_key,
+                "hit": True,
+                "replayed": True,
+            }
+            cached["cache"] = {"L0_delivery": "hit", "key": request_key}
+            return cached
+
+        with Snapshot(self.snapshot) as snapshot:
+            before_generation = snapshot.generation
+        if profile == "full" and write and not runtime_authorized:
+            receipt = {
+                "schema": SCHEMA,
+                "status": "blocked",
+                "profile": PROFILE_NAMES[profile],
+                "engine": engine_receipt,
+                "engine_version": __version__,
+                "changeset": {"schema": changeset["schema"], "sha256": change_digest},
+                "base_generation": before_generation,
+                "idempotency": {"key": request_key, "hit": False, "replayed": False},
+                "cache": {"L0_delivery": "miss", "key": request_key},
+                "ownership": {
+                    "source_writer": "simplicio-dev-cli",
+                    "full_effect_authority": "simplicio-runtime",
+                    "mutation_applied": False,
+                },
+                "reason_codes": ["runtime_authorization_required"],
+                "timings": {"delivery_wall_ms": (time.perf_counter_ns() - started) / 1_000_000},
+            }
+            _atomic_json(result_path, receipt)
+            return receipt
+
+        applied_receipt = ProjectProcessor(self.root, self.snapshot).apply_changeset(
+            changeset, write=write
+        )
+        applied = bool(applied_receipt.get("applied"))
+        after_generation = before_generation
+        refresh = {"attempted": False, "status": "not-needed"}
+        if write and applied:
+            refresh["attempted"] = True
+            build_snapshot(self.root, self.snapshot)
+            with Snapshot(self.snapshot) as snapshot:
+                after_generation = snapshot.generation
+            refresh["status"] = "refreshed"
+        outcome = "applied" if applied else "dry_run" if not write else "refused"
+        reason_codes = []
+        if applied_receipt.get("reason_code"):
+            reason_codes.append(str(applied_receipt["reason_code"]))
+        if not applied:
+            reason_codes.append("changeset_not_applied")
+        receipt = {
+            "schema": SCHEMA,
+            "status": outcome,
+            "profile": PROFILE_NAMES[profile],
+            "engine": engine_receipt,
+            "engine_version": __version__,
+            "changeset": {
+                "schema": changeset["schema"],
+                "sha256": change_digest,
+                "files": [change["path"] for change in changeset["changes"]],
+            },
+            "apply": applied_receipt,
+            "base_generation": before_generation,
+            "result_generation": after_generation,
+            "idempotency": {"key": request_key, "hit": False, "replayed": False},
+            "cache": {"L0_delivery": "miss", "key": request_key},
+            "ownership": {
+                "source_writer": "simplicio-dev-cli",
+                "full_effect_authority": "simplicio-runtime" if profile == "full" else "local-guard",
+                "mutation_applied": applied,
+            },
+            "refresh": refresh,
+            "reason_codes": reason_codes,
+            "timings": {"delivery_wall_ms": (time.perf_counter_ns() - started) / 1_000_000},
+        }
+        _atomic_json(result_path, receipt)
         return receipt
