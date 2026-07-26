@@ -1,9 +1,13 @@
 # AGENTS.md
 
-## Purpose
+## Purpose and identity
 
-This repository is the central in-memory project processor. It coordinates Mapper extraction,
-binary/mmap storage, bounded understanding, PlanDAG compilation and Dev CLI edits.
+`simplicio-fast` is semantic project memory and guarded change coordination for AI coding tools.
+It ingests source repositories into incremental binary/mmap snapshots, returns bounded
+hash-verified context, compiles PlanDAGs, coordinates isolated generations and emits receipts.
+
+Fast is not an LLM, scheduler, policy authority or source-of-truth database. Source files remain
+authoritative; `.sfast` and `.simplicio-fast/` data are disposable derived state.
 
 ## Mandatory Mapper rule
 
@@ -35,6 +39,15 @@ must not be reported as the fully integrated production path.
 9. Loop runs tests, corrections and delivery convergence.
 10. Fast refreshes changed semantic inputs after validation.
 
+For a new agent or LLM, the shortest correct explanation is:
+
+```text
+repository files -> Mapper ContextGraph -> Fast snapshot/mmap -> bounded context -> PlanDAG
+  -> hash-guarded changeset -> Dev CLI -> Runtime authorization -> Loop convergence
+```
+
+The LLM decides from bounded context. Fast does not decide policy or silently mutate source code.
+
 ## Worktrees and parallel slots
 
 - Use one canonical base snapshot from the default branch.
@@ -59,10 +72,19 @@ simplicio-fast query UserService
 simplicio-fast context UserService --root .
 simplicio-fast doctor
 simplicio-fast refresh .
+simplicio-fast capabilities --help
+simplicio-fast base .
+simplicio-fast overlay . --base-generation <generation> --worktree-id <id>
+simplicio-fast merge UserService --base-generation <generation> --worktree-id <id> --overlay-generation <generation>
+simplicio-fast rollout shadow --generation <generation>
+simplicio-fast rollout rollback --reason "validation failed"
 ```
 
 `apply` is dry-run by default. All machine-facing commands emit versioned JSON. Preserve the
 `schema` field and reject unknown major schema versions.
+
+When discovering the tool, run `simplicio-fast --help`; the top-level help is intentionally written
+for both humans and LLM/tool callers and explains ownership boundaries and the normal flow.
 
 ## Context safety
 
@@ -88,5 +110,8 @@ python -m compileall -q src tests benchmarks
 python benchmarks/run.py
 ```
 
-An agent may claim completion only when implementation, tests, schema compatibility, stale-source
-behavior, documentation and benchmark isolation have been verified.
+Also verify `simplicio-fast --help`, `doctor`, the real CLI context receipt, and the applicable
+rollout receipt. An agent may claim completion only when implementation, tests, schema
+compatibility, stale-source behavior, documentation, image references and benchmark isolation
+have been verified. Never report Runtime or Loop evidence from a Fast-only test; label unavailable
+cross-repository capabilities explicitly.

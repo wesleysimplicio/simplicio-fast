@@ -1,7 +1,7 @@
 [project]
 name = "simplicio-fast"
-version = "2.0.0"
-description = "Binary, memory-mapped semantic snapshots for agentic code workflows"
+version = "2.0.1"
+description = "Semantic project memory and guarded change coordination for AI coding tools"
 requires-python = ">=3.11"
 dependencies = [
   "simplicio-mapper>=0.24.2",

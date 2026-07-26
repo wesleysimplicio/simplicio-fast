@@ -1,15 +1,15 @@
 <p align="center">
-  <img src="assets/simplicio-fast-hero.webp" alt="simplicio-fast turns source code into a shared binary semantic memory for fast agent execution" width="100%" />
+  <img src="assets/simplicio-fast-hero-v3.png" alt="simplicio-fast turns source code into a shared binary semantic memory for fast agent execution" width="100%" />
 </p>
 
 <h1 align="center">simplicio-fast</h1>
 
 <p align="center">
-  <strong>Binary, incremental, memory-mapped semantic context for software agents.</strong>
+  <strong>Semantic project memory and guarded change coordination for AI coding tools.</strong>
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.0-22c55e?style=for-the-badge" alt="Version 2.0.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.1-22c55e?style=for-the-badge" alt="Version 2.0.1"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+"></a>
   <a href="https://github.com/wesleysimplicio/simplicio-fast/issues"><img src="https://img.shields.io/github/issues/wesleysimplicio/simplicio-fast?style=for-the-badge" alt="Open issues"></a>
   <img src="https://img.shields.io/badge/runtime_dependencies-0-111827?style=for-the-badge" alt="Zero runtime dependencies">
@@ -38,11 +38,25 @@
 
 ## What is simplicio-fast?
 
-Most coding agents repeatedly reopen files, parse the same project and send oversized context to an LLM. `simplicio-fast` builds a compact binary semantic snapshot once, maps it read-only with the operating system, and incrementally reparses only changed files.
+`simplicio-fast` is the semantic project-memory layer for AI coding workflows. It turns a repository
+into a versioned, memory-mapped snapshot, selects small hash-verified context packets, compiles
+plans, and produces guarded changeset/rollout receipts. The source files remain authoritative; the
+snapshot is a disposable, incrementally refreshed cache.
 
-Version 2 makes Fast the central processor: it invokes Mapper for canonical extraction, holds the
-result in binary memory, understands tasks, compiles PlanDAGs and delegates verified source edits
-to Dev CLI.
+In one sentence: **Fast helps an agent understand the right code and prove which generation a
+proposed change came from, without becoming the LLM, scheduler or policy authority.**
+
+Version 2.x coordinates the boundaries between Mapper, Dev CLI, Loop and Runtime:
+
+| Fast owns | Other Simplicio components own |
+|---|---|
+| ingestion, binary/mmap memory, bounded context, PlanDAG and hash guards | canonical ContextGraph extraction (Mapper) |
+| generation IDs, worktree overlays and rollout receipts | mechanical source mutation (Dev CLI) |
+| deterministic JSON contracts and fail-closed fallback | policy/effects/receipts (Runtime) and retries/slots/convergence (Loop) |
+
+Fast is **not** an LLM, an autonomous scheduler, a source-of-truth database, or a replacement for
+Runtime authorization. It is the small, inspectable coordination layer between repository files and
+those tools.
 
 ```text
 normal source files
@@ -72,7 +86,7 @@ The source repository always remains the source of truth. A `.sfast` file is a d
 > `simplicio-fast` is designed for broad repository use, but speedups are workload-dependent. The current ~23× result is a measured POC query benchmark, not a universal guarantee. Small repositories and cold one-shot runs may see little or no gain.
 
 <p align="center">
-  <img src="assets/simplicio-fast-shared-memory.webp" alt="One immutable memory-mapped snapshot shared by isolated worktrees" width="920" />
+  <img src="assets/simplicio-fast-shared-memory-v3.png" alt="One immutable memory-mapped snapshot shared by isolated worktrees" width="920" />
 </p>
 
 <p align="center"><em>One canonical memory image, many isolated consumers and future worktree overlays.</em></p>
@@ -115,7 +129,7 @@ python -m pip install -e .
 
 The integrated install includes `simplicio-mapper` and `simplicio-cli`.
 
-## CLI
+## CLI and agent contract
 
 ```bash
 simplicio-fast --help
@@ -126,8 +140,19 @@ simplicio-fast context --help
 simplicio-fast impact --help
 simplicio-fast stats --help
 simplicio-fast doctor --help
+simplicio-fast capabilities --help
+simplicio-fast base --help
+simplicio-fast overlay --help
+simplicio-fast merge --help
+simplicio-fast rollout --help
 simplicio-fast serve --help
 ```
+
+Run `simplicio-fast --help` first when integrating a new tool or LLM. Its command descriptions
+state the role of each surface: build/refresh memory, query or bound context, plan a task, validate
+or apply a hash-guarded changeset, inspect readiness, coordinate overlays, and emit rollout state.
+All machine-facing responses are versioned JSON; consumers must preserve `schema`, generation and
+receipt fields and must never read `.sfast` offsets directly.
 
 Build and query the current repository:
 
@@ -214,9 +239,10 @@ curl -X PUT http://127.0.0.1:3000/users/USER_ID \
 curl -X DELETE http://127.0.0.1:3000/users/USER_ID
 ```
 
-## How an LLM should use it
+## How an LLM or tool should use it
 
-An LLM should not read the `.sfast` binary directly. A deterministic adapter queries the snapshot and returns a small context packet.
+An LLM or tool should not read the `.sfast` binary directly. Ask Fast for a bounded context packet,
+make the decision from those spans, and return a versioned changeset for guarded execution.
 
 1. The task reaches Fast through the Agent or Loop.
 2. Fast invokes Mapper and stores the canonical graph in mmap.
@@ -227,7 +253,7 @@ An LLM should not read the `.sfast` binary directly. A deterministic adapter que
 7. Runtime authorizes effects and Loop validates/converges.
 8. Fast incrementally refreshes changed files.
 
-Version 2.0.0 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
+Version 2.0.1 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
 `query` and the CRUD proof. Internal mapping/editing remain bootstrap fallbacks when integrations
 are absent; `doctor` identifies whether the complete integrated path is ready.
 The `build`, `query`, direct-index `search`, bounded `context`, typed `impact`, `stats` and
@@ -238,7 +264,7 @@ The compatibility matrix and the atomic shadow/canary/rollback receipt contract
 are documented in [`docs/issue-8-v2-validation.md`](docs/issue-8-v2-validation.md).
 
 <p align="center">
-  <img src="assets/simplicio-fast-verified-flow.webp" alt="Compact context moving through planning, editing, testing and verification gates" width="920" />
+  <img src="assets/simplicio-fast-verified-flow-v3.png" alt="Compact context moving through planning, editing, testing and verification gates" width="920" />
 </p>
 
 <p align="center"><em>Compact context enters; verified normal source code leaves.</em></p>
@@ -292,7 +318,7 @@ python -m compileall -q src tests benchmarks
 python benchmarks/run.py
 ```
 
-Version 2.0.0 covers:
+Version 2.0.1 covers:
 
 - complete user CRUD and later status change;
 - normalized-email conflict;
@@ -309,7 +335,7 @@ are emitted as `null`, never estimated.
 
 ## Current scope
 
-Ready:
+Ready in Fast 2.0.1:
 
 - Python 3.11+;
 - Python AST classes, functions and async functions;
@@ -317,20 +343,17 @@ Ready:
 - read-only `mmap`;
 - incremental SHA-256 reuse;
 - atomic writes;
-- CRUD, tests and benchmark.
+- CRUD, tests and benchmark;
+- Mapper/Dev CLI readiness checks with explicit fallback receipts;
+- canonical base generations, isolated worktree overlays, leases and refresh;
+- provenance, apply and rollout receipts for shadow, canary, integrated and rollback states.
 
-Planned:
+External boundaries and follow-ups:
 
-- direct/hash symbol index;
-- imports, references and call graph;
-- context budgets and token accounting;
-- canonical default-branch generation manifest plus isolated worktree overlays;
-- TypeScript, Rust and C# capability-negotiated fallback adapters;
-- leases/pins, conservative GC, atomic receipts and debounced refresh;
 - full Mapper, Dev CLI, Loop and Runtime integration remains an integration concern:
   callers must pass Mapper-owned handles and must not read Fast offsets directly;
 - central daemon and native parser bindings remain follow-up work;
-- shadow/canary/rollback rollout receipts are implemented and versioned.
+- cross-repository promotion remains owned and verified by the corresponding Loop/Runtime projects.
 
 ## Ecosystem architecture
 
@@ -362,5 +385,5 @@ See the granular cross-repository plan:
 
 ## License and status
 
-Version 2.0.0 is the first integrated processor contract. Review [CHANGELOG.md](CHANGELOG.md),
+Version 2.0.1 is the documentation and visual refresh of the integrated processor contract. Review [CHANGELOG.md](CHANGELOG.md),
 `AGENTS.md` and open issues before making it mandatory across the entire Simplicio ecosystem.
