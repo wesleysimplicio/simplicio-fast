@@ -7,8 +7,8 @@ adapters and snapshot with:
 
 ```powershell
 simplicio-fast --help
-simplicio-fast build . -o .simplicio-fast/project.sfast
-simplicio-fast doctor -s .simplicio-fast/project.sfast
+simplicio-fast build . -o .simplicio/fast/project.sfast
+simplicio-fast doctor -s .simplicio/fast/project.sfast
 ```
 
 `doctor` reports `integrated_ready: true` only when compatible Mapper and Dev

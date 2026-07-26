@@ -9,11 +9,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from simplicio_fast.cli import main, source_commit
+from simplicio_fast.cli import DEFAULT_SNAPSHOT, build_parser, main, source_commit
 from simplicio_fast.snapshot import build_snapshot
 
 
 class ContextProvenanceTest(unittest.TestCase):
+    def test_default_snapshot_is_inside_simplicio_state_root(self) -> None:
+        args = build_parser().parse_args(["build"])
+        self.assertEqual(".simplicio/fast/project.sfast", DEFAULT_SNAPSHOT)
+        self.assertEqual(DEFAULT_SNAPSHOT, args.output)
+
     def invoke(self, *args: str) -> tuple[int, dict[str, object]]:
         output = io.StringIO()
         with patch.object(sys, "argv", ["simplicio-fast", *args]), contextlib.redirect_stdout(output):

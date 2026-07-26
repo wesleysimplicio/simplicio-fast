@@ -1,3 +1,4 @@
+# Legacy Fast state; new generated state is rooted at .simplicio/fast/.
 .simplicio-fast/
 .simplicio/
 .mapper-handoff.json

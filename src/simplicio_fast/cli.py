@@ -15,7 +15,8 @@ from .users.http import serve
 from .users.repository import JsonUserRepository
 from .users.service import UserService
 
-DEFAULT_SNAPSHOT = ".simplicio-fast/project.sfast"
+DEFAULT_STATE_DIR = ".simplicio/fast"
+DEFAULT_SNAPSHOT = f"{DEFAULT_STATE_DIR}/project.sfast"
 
 
 def emit(value: object) -> None:
@@ -207,7 +208,7 @@ def build_parser() -> argparse.ArgumentParser:
         "mode",
         choices=("shadow", "canary", "integrated", "fallback", "rollback"),
     )
-    rollout.add_argument("--state", default=".simplicio-fast/rollout.json")
+    rollout.add_argument("--state", default=f"{DEFAULT_STATE_DIR}/rollout.json")
     rollout.add_argument("--generation")
     rollout.add_argument("--reason")
 
