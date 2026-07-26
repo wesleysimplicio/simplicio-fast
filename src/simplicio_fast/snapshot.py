@@ -15,6 +15,7 @@ import json
 import mmap
 import os
 import struct
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -242,6 +243,13 @@ def _signature(node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) -> s
         return ""
 
 
+class SnapshotBuildTimeout(TimeoutError):
+    """Raised when a bounded build cannot complete before its deadline."""
+
+    code = "snapshot_build_timeout"
+    recovery = "retry with a larger timeout or exclude generated/vendor source directories"
+
+
 class SourceEncodingError(ValueError):
     code = "source_encoding_unreadable"
 
@@ -394,13 +402,38 @@ def _build_v2(entries: list[tuple[str, bytes, int, list[Symbol]]], relations: li
     checksum = hashlib.sha256(payload).digest()
     payload[: HEADER.size] = HEADER.pack(MAGIC, VERSION, ENDIAN_MARKER, section_count, generation_int, directory_offset, directory_size, total_size, checksum)
     output.parent.mkdir(parents=True, exist_ok=True)
-    temporary = output.with_suffix(f".{os.getpid()}.tmp")
-    temporary.write_bytes(payload)
-    temporary.replace(output)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=output.parent,
+            prefix=f".{output.name}.{os.getpid()}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_name = temporary.name
+            temporary.write(payload)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        temporary_path = Path(temporary_name)
+        # Validate the exact bytes before publishing. The old snapshot remains
+        # available until this succeeds and os.replace performs one atomic swap.
+        with Snapshot(temporary_path):
+            pass
+        os.replace(temporary_path, output)
+        temporary_name = None
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
     return total_size, checksum.hex()
 
 
-def build_snapshot(root: Path, output: Path) -> BuildMetrics:
+def build_snapshot(
+    root: Path,
+    output: Path,
+    *,
+    timeout_seconds: float | None = None,
+) -> BuildMetrics:
     wall_start = time.perf_counter()
     cpu_start = time.process_time()
     root = root.resolve()
@@ -409,15 +442,29 @@ def build_snapshot(root: Path, output: Path) -> BuildMetrics:
     previous_relations: list[Relation] = []
     previous_symbol_files: dict[str, str] = {}
     if output.exists():
-        with Snapshot(output) as snapshot:
-            previous = snapshot.grouped()
-            previous_relations = snapshot.relations()
-            previous_symbol_files = {symbol.qualified_name: symbol.file for symbol in snapshot.symbols()}
+        try:
+            with Snapshot(output) as snapshot:
+                previous = snapshot.grouped()
+                previous_relations = snapshot.relations()
+                previous_symbol_files = {symbol.qualified_name: symbol.file for symbol in snapshot.symbols()}
+        except (OSError, ValueError):
+            # A snapshot is disposable derived state. Ignore invalid/truncated
+            # cache bytes and rebuild from authoritative source files. _build_v2
+            # keeps the existing path untouched until its replacement validates.
+            previous = {}
+            previous_relations = []
+            previous_symbol_files = {}
 
     entries: list[tuple[str, bytes, int, list[Symbol]]] = []
     relations: list[Relation] = []
     parsed = reused = 0
+    deadline = None if timeout_seconds is None else wall_start + timeout_seconds
     for path in source_files(root):
+        if deadline is not None and time.perf_counter() >= deadline:
+            raise SnapshotBuildTimeout(
+                f"snapshot build exceeded {timeout_seconds:g}s before publishing; "
+                "the previous snapshot was preserved"
+            )
         relative = path.relative_to(root).as_posix()
         contents = path.read_bytes()
         digest = hashlib.sha256(contents).digest()
