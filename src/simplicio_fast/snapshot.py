@@ -9,6 +9,7 @@ their hashes remain authoritative.
 from __future__ import annotations
 
 import ast
+import tokenize
 import hashlib
 import json
 import mmap
@@ -241,12 +242,31 @@ def _signature(node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) -> s
         return ""
 
 
+class SourceEncodingError(ValueError):
+    code = "source_encoding_unreadable"
+
+    def __init__(self, path: Path, cause: BaseException) -> None:
+        self.path = path.as_posix()
+        self.recovery = "add a PEP 263 encoding cookie or remove the binary-looking source file"
+        super().__init__(
+            f"{self.code} path={self.path} recovery={self.recovery} cause={type(cause).__name__}"
+        )
+
+
+def _read_python_source(path: Path) -> str:
+    try:
+        with tokenize.open(path) as source:
+            return source.read()
+    except (SyntaxError, UnicodeDecodeError) as error:
+        raise SourceEncodingError(path, error) from error
+
+
 def _parse_file(path: Path, relative_path: str, repository: str) -> tuple[list[Symbol], list[Relation]]:
     if path.suffix.casefold() not in {".py", ".pyi"}:
         from .adapters import parse_path
 
         return parse_path(path, relative_path), []
-    tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative_path)
+    tree = ast.parse(_read_python_source(path), filename=relative_path)
     collector = _Collector(relative_path, repository)
     collector.visit(tree)
     return collector.symbols, collector.relations

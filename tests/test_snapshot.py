@@ -9,6 +9,7 @@ from simplicio_fast.snapshot import (
     LEGACY_HEADER,
     LEGACY_SYMBOL_RECORD,
     MAGIC,
+    SourceEncodingError,
     Snapshot,
     StaleSnapshotError,
     build_snapshot,
@@ -136,6 +137,26 @@ class SnapshotTest(unittest.TestCase):
             with Snapshot(output) as snapshot:
                 self.assertEqual(1, snapshot.format_version)
                 self.assertEqual("A", snapshot.find_exact("A")[0].name)
+
+
+    def test_python_encoding_policy_is_explicit(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            latin = root / "latin.py"
+            latin.write_bytes(b"# coding: latin-1\nclass Caf\xe9:\n    pass\n")
+            output = root / "project.sfast"
+
+            build_snapshot(root, output)
+            with Snapshot(output) as snapshot:
+                self.assertEqual("Café", snapshot.find_exact("Café")[0].name)
+
+            invalid = root / "invalid.py"
+            invalid.write_bytes(b"\xff\xfe\x00\x01")
+            with self.assertRaises(SourceEncodingError) as raised:
+                build_snapshot(root, output)
+            self.assertEqual("source_encoding_unreadable", raised.exception.code)
+            self.assertIn("invalid.py", str(raised.exception))
+
 
 
 if __name__ == "__main__":
