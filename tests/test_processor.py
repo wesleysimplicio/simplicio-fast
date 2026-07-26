@@ -348,5 +348,36 @@ class ProjectProcessorTest(unittest.TestCase):
                 load_changeset(payload)
 
 
+    def test_consecutive_crlf_changesets_use_physical_byte_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "app.py"
+            source.write_bytes(b"value = 1\r\n")
+            processor = ProjectProcessor(root, root / "project.sfast")
+
+            def changeset(value: int) -> dict[str, object]:
+                return {
+                    "schema": "simplicio.fast.changeset/v2",
+                    "changes": [{
+                        "path": "app.py",
+                        "expected_sha256": hashlib.sha256(source.read_bytes()).hexdigest(),
+                        "replacements": [{"start_line": 1, "end_line": 1, "content": f"value = {value}"}],
+                    }],
+                }
+
+            with patch("simplicio_fast.processor.run_dev_cli_changeset", return_value=None):
+                first = processor.apply_changeset(changeset(2), write=True)
+                second = processor.apply_changeset(changeset(3), write=True)
+
+            self.assertEqual(b"value = 3\r\n", source.read_bytes())
+            self.assertEqual(
+                first["files"][0]["after_sha256"],
+                second["files"][0]["before_sha256"],
+            )
+            self.assertEqual("raw-file-bytes", second["files"][0]["byte_representation"])
+            self.assertEqual("crlf", second["files"][0]["newline"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
