@@ -1,5 +1,7 @@
 .simplicio-fast/
+.simplicio/
 coverage/
+.coverage
 data/*.json
 benchmarks/results/*.json
 __pycache__/

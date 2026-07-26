@@ -14,7 +14,11 @@ DEFAULT_SNAPSHOT = ".simplicio-fast/project.sfast"
 
 
 def emit(value: object) -> None:
-    print(json.dumps(value, indent=2, ensure_ascii=False))
+    print(json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True))
+
+
+def json_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--json", action="store_true", help="emit deterministic JSON (the default)")
 
 
 def snapshot_argument(parser: argparse.ArgumentParser) -> None:
@@ -53,6 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
             default=DEFAULT_SNAPSHOT,
             help=f"output snapshot path (default: {DEFAULT_SNAPSHOT})",
         )
+        json_option(command)
 
     query = commands.add_parser(
         "query",
@@ -62,6 +67,20 @@ def build_parser() -> argparse.ArgumentParser:
     query.add_argument("term", help="case-insensitive symbol or qualified-name substring")
     snapshot_argument(query)
     query.add_argument("--limit", type=int, default=50, help="maximum matches (default: 50)")
+    json_option(query)
+
+    search = commands.add_parser(
+        "search",
+        help="search direct indexes by name, path or kind",
+        description="Resolve symbols from direct indexes without deserializing the full symbol table.",
+    )
+    search.add_argument("term", help="case-insensitive name or qualified-name substring")
+    snapshot_argument(search)
+    search.add_argument("--limit", type=int, default=50, help="maximum matches (default: 50)")
+    search.add_argument("--prefix", action="store_true", help="match names beginning with term")
+    search.add_argument("--path", help="restrict matches to a relative source path")
+    search.add_argument("--kind", choices=("class", "function", "async_function"))
+    json_option(search)
 
     context = commands.add_parser(
         "context",
@@ -76,6 +95,22 @@ def build_parser() -> argparse.ArgumentParser:
     context.add_argument("--max-results", type=int, default=10)
     context.add_argument("--max-lines", type=int, default=120)
     context.add_argument("--max-bytes", type=int, default=32_000)
+    context.add_argument("--max-tokens", type=int, default=8_000)
+    json_option(context)
+
+    impact = commands.add_parser(
+        "impact",
+        help="return typed imports, references, calls and test relations",
+        description="Return bounded deterministic impact relationships for a symbol or term.",
+    )
+    impact.add_argument("term", help="symbol, path or relation term")
+    snapshot_argument(impact)
+    impact.add_argument("--limit", type=int, default=100)
+    json_option(impact)
+
+    stats = commands.add_parser("stats", help="show snapshot generation and section statistics")
+    snapshot_argument(stats)
+    json_option(stats)
 
     doctor = commands.add_parser(
         "doctor",
@@ -83,6 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Check Python, snapshot structure and query readiness; emits JSON.",
     )
     snapshot_argument(doctor)
+    json_option(doctor)
 
     server = commands.add_parser("serve", help="run the user CRUD proof-of-concept API")
     server.add_argument("--port", type=int, default=3000)
@@ -109,13 +145,26 @@ def main() -> None:
                 emit(
                     {
                         "schema": "simplicio.fast.query/v1",
-                        "snapshot_version": 1,
-                        "matches": [
-                            asdict(item) for item in snapshot.find(args.term)[: args.limit]
-                        ],
+                        "snapshot_version": snapshot.format_version,
+                        "matches": [asdict(item) for item in snapshot.find(args.term)[: args.limit]],
+                    }
+                )
+        elif args.command == "search":
+            if args.limit < 1:
+                parser.error("--limit must be positive")
+            with Snapshot(Path(args.snapshot)) as snapshot:
+                matches = snapshot.search(args.term, prefix=args.prefix, path=args.path, kind=args.kind)
+                emit(
+                    {
+                        "schema": "simplicio.fast.search/v1",
+                        "snapshot_version": snapshot.format_version,
+                        "filters": {"prefix": args.prefix, "path": args.path, "kind": args.kind},
+                        "matches": [asdict(item) for item in matches[: args.limit]],
                     }
                 )
         elif args.command == "context":
+            if min(args.max_results, args.max_lines, args.max_bytes, args.max_tokens) < 1:
+                parser.error("context limits must be positive")
             with Snapshot(Path(args.snapshot)) as snapshot:
                 spans = snapshot.context(
                     Path(args.root),
@@ -123,19 +172,36 @@ def main() -> None:
                     max_results=args.max_results,
                     max_lines=args.max_lines,
                     max_bytes=args.max_bytes,
+                    max_tokens=args.max_tokens,
                 )
                 emit(
                     {
                         "schema": "simplicio.fast.context/v1",
-                        "snapshot_version": 1,
+                        "snapshot_version": snapshot.format_version,
                         "limits": {
                             "max_results": args.max_results,
                             "max_lines": args.max_lines,
                             "max_bytes": args.max_bytes,
+                            "max_tokens": args.max_tokens,
                         },
                         "spans": [asdict(item) for item in spans],
                     }
                 )
+        elif args.command == "impact":
+            if args.limit < 1:
+                parser.error("--limit must be positive")
+            with Snapshot(Path(args.snapshot)) as snapshot:
+                emit(
+                    {
+                        "schema": "simplicio.fast.impact/v1",
+                        "snapshot_version": snapshot.format_version,
+                        "query": args.term,
+                        "relations": [asdict(item) for item in snapshot.impact(args.term)[: args.limit]],
+                    }
+                )
+        elif args.command == "stats":
+            with Snapshot(Path(args.snapshot)) as snapshot:
+                emit({"schema": "simplicio.fast.stats/v1", "stats": snapshot.stats()})
         elif args.command == "doctor":
             path = Path(args.snapshot)
             checks: list[dict[str, object]] = [
@@ -147,16 +213,21 @@ def main() -> None:
                 },
             ]
             if path.is_file():
-                with Snapshot(path) as snapshot:
+                try:
+                    with Snapshot(path) as snapshot:
+                        checks.append(
+                            {
+                                "name": "snapshot_integrity",
+                                "status": "pass",
+                                "detail": snapshot.stats(),
+                            }
+                        )
+                except (OSError, ValueError) as error:
                     checks.append(
                         {
                             "name": "snapshot_integrity",
-                            "status": "pass",
-                            "detail": {
-                                "files": snapshot.file_count,
-                                "symbols": snapshot.symbol_count,
-                                "format": "SFAST001/v1",
-                            },
+                            "status": "fail",
+                            "detail": {"error": type(error).__name__, "message": str(error)},
                         }
                     )
             ready = all(check["status"] == "pass" for check in checks)
