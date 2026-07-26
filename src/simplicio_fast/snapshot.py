@@ -9,7 +9,6 @@ their hashes remain authoritative.
 from __future__ import annotations
 
 import ast
-import bisect
 import hashlib
 import json
 import mmap
@@ -18,7 +17,6 @@ import struct
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 MAGIC = b"SFAST001"
 LEGACY_VERSION = 1
@@ -421,6 +419,7 @@ def build_snapshot(root: Path, output: Path) -> BuildMetrics:
 class Snapshot:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._sha256: str | None = None
         self._file = path.open("rb")
         try:
             size = os.fstat(self._file.fileno()).st_size
@@ -448,7 +447,7 @@ class Snapshot:
         if magic != MAGIC or version != LEGACY_VERSION or total_size != len(self._map):
             raise ValueError("invalid or unsupported SFAST001/v1 snapshot")
         self.format_version = LEGACY_VERSION
-        self.generation = ""
+        self._header_generation = ""
         self.relation_count = 0
         self._sections = {}
         if self.file_count > MAX_FILES or self.symbol_count > MAX_SYMBOLS:
@@ -501,7 +500,7 @@ class Snapshot:
         if any(a < b and c < d and max(a, c) < min(b, d) for i, (a, b) in enumerate(regions) for c, d in regions[i + 1 :]):
             raise ValueError("overlapping snapshot sections")
         self.format_version = VERSION
-        self.generation = f"{generation:016x}"
+        self._header_generation = f"{generation:016x}"
         self._sections = sections
         if sections["files"][1] % FILE_RECORD.size or sections["symbols"][1] % SYMBOL_RECORD.size:
             raise ValueError("section length is not a whole number of records")
@@ -557,6 +556,21 @@ class Snapshot:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+    @property
+    def sha256(self) -> str:
+        """Digest the exact bytes exposed by the read-only mmap, once."""
+        if self._sha256 is None:
+            digest = hashlib.sha256()
+            for offset in range(0, len(self._map), 1024 * 1024):
+                digest.update(self._map[offset : offset + 1024 * 1024])
+            self._sha256 = digest.hexdigest()
+        return self._sha256
+
+    @property
+    def generation(self) -> str:
+        """Return the stable public generation derived from the opened bytes."""
+        return f"{MAGIC.decode('ascii')}:{self.sha256}"
 
     def _section_bytes(self, name: str) -> bytes:
         offset, length = self._sections[name]

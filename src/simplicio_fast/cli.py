@@ -1,5 +1,6 @@
 import argparse
 import json
+import subprocess
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -15,6 +16,23 @@ DEFAULT_SNAPSHOT = ".simplicio-fast/project.sfast"
 
 def emit(value: object) -> None:
     print(json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True))
+
+
+def source_commit(root: Path) -> tuple[str | None, str | None]:
+    """Return the checked-out commit, or a reason when root is outside Git."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "--verify", "HEAD^{commit}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None, "git_unavailable"
+    commit = result.stdout.strip()
+    if result.returncode or not commit:
+        return None, "not_a_git_checkout"
+    return commit, None
 
 
 def json_option(parser: argparse.ArgumentParser) -> None:
@@ -165,24 +183,39 @@ def main() -> None:
         elif args.command == "context":
             if min(args.max_results, args.max_lines, args.max_bytes, args.max_tokens) < 1:
                 parser.error("context limits must be positive")
-            with Snapshot(Path(args.snapshot)) as snapshot:
+            root = Path(args.root).resolve()
+            snapshot_path = Path(args.snapshot).resolve()
+            limits = {
+                "max_results": args.max_results,
+                "max_lines": args.max_lines,
+                "max_bytes": args.max_bytes,
+                "max_tokens": args.max_tokens,
+            }
+            with Snapshot(snapshot_path) as snapshot:
                 spans = snapshot.context(
-                    Path(args.root),
+                    root,
                     args.term,
                     max_results=args.max_results,
                     max_lines=args.max_lines,
                     max_bytes=args.max_bytes,
                     max_tokens=args.max_tokens,
                 )
+                commit, commit_reason = source_commit(root)
                 emit(
                     {
                         "schema": "simplicio.fast.context/v1",
                         "snapshot_version": snapshot.format_version,
-                        "limits": {
-                            "max_results": args.max_results,
-                            "max_lines": args.max_lines,
-                            "max_bytes": args.max_bytes,
-                            "max_tokens": args.max_tokens,
+                        "limits": limits,
+                        "provenance": {
+                            "schema": "simplicio.fast.provenance/v1",
+                            "repository_root": str(root),
+                            "source_commit": commit,
+                            "source_commit_reason": commit_reason,
+                            "snapshot_path": str(snapshot_path),
+                            "snapshot_sha256": snapshot.sha256,
+                            "snapshot_generation": snapshot.generation,
+                            "span_count": len(spans),
+                            "limits": limits,
                         },
                         "spans": [asdict(item) for item in spans],
                     }

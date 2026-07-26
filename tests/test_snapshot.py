@@ -2,7 +2,6 @@ import tempfile
 import unittest
 import hashlib
 import random
-import struct
 from pathlib import Path
 
 from simplicio_fast.snapshot import (
