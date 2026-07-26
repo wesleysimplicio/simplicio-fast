@@ -103,6 +103,9 @@ def probe_rust() -> tuple[dict[str, Any] | None, str | None]:
         return None, "rust_manifest_schema_mismatch"
     if manifest.get("engine") != "rust" or manifest.get("status") != "available":
         return None, "rust_manifest_not_healthy"
+    conformance = manifest.get("conformance")
+    if not isinstance(conformance, dict) or conformance.get("passed") is not True:
+        return None, "rust_conformance_missing"
     return manifest, None
 
 
