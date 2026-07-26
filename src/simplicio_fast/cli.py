@@ -472,7 +472,7 @@ def main() -> None:
             overlay_value, _ = store.watch_once(args.worktree_id, args.base_generation)
             emit({"schema": "simplicio.fast.watch/v1", "changed": overlay_value is not None,
                   "overlay": asdict(overlay_value) if overlay_value else None})
-    except (FileNotFoundError, RuntimeError, ValueError, StaleSnapshotError) as error:
+    except (FileNotFoundError, RuntimeError, ValueError, SnapshotBuildTimeout, StaleSnapshotError) as error:
         emit(
             {
                 "schema": "simplicio.fast.error/v1",
