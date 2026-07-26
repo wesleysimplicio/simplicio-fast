@@ -121,7 +121,5 @@ class ContextProvenanceTest(unittest.TestCase):
 
         with patch("simplicio_fast.cli.subprocess.run", side_effect=OSError("git unavailable")):
             self.assertEqual((None, "git_unavailable"), source_commit(Path(".")))
-
-
 if __name__ == "__main__":
     unittest.main()

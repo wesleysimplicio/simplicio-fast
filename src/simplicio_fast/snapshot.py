@@ -42,7 +42,10 @@ SECTION_RECORD = struct.Struct("<16sQQ32s")
 FILE_RECORD = struct.Struct("<IIQ32s16s")
 SYMBOL_RECORD = struct.Struct("<IIIIIIIIII32s")
 REQUIRED_SECTIONS = ("files", "symbols", "relations", "indexes", "strings")
-KIND_TO_ID = {"class": 1, "function": 2, "async_function": 3}
+KIND_TO_ID = {
+    "class": 1, "function": 2, "async_function": 3, "import": 4,
+    "namespace": 5, "interface": 6, "struct": 7, "trait": 8, "enum": 9,
+}
 ID_TO_KIND = {value: key for key, value in KIND_TO_ID.items()}
 RELATION_KINDS = {"import", "reference", "call", "definition", "test"}
 
@@ -57,6 +60,8 @@ class Symbol:
     end_line: int
     symbol_id: str = ""
     signature: str = ""
+    base_generation: str | None = None
+    overlay_generation: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +99,8 @@ class ContextSpan:
     content: str
     symbol_id: str = ""
     tokens: int = 0
+    base_generation: str | None = None
+    overlay_generation: str | None = None
 
 
 class StaleSnapshotError(RuntimeError):
@@ -235,6 +242,10 @@ def _signature(node: ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef) -> s
 
 
 def _parse_file(path: Path, relative_path: str, repository: str) -> tuple[list[Symbol], list[Relation]]:
+    if path.suffix.casefold() not in {".py", ".pyi"}:
+        from .adapters import parse_path
+
+        return parse_path(path, relative_path), []
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative_path)
     collector = _Collector(relative_path, repository)
     collector.visit(tree)
@@ -251,7 +262,10 @@ def source_files(root: Path) -> list[Path]:
     ignored = {".git", ".venv", "__pycache__", ".simplicio-fast", ".simplicio", "node_modules"}
     return sorted(
         path
-        for path in root.rglob("*.py")
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.casefold() in {
+            ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".rs", ".cs"
+        }
         if not any(part in ignored for part in path.relative_to(root).parts)
     )
 
@@ -559,17 +573,18 @@ class Snapshot:
 
     @property
     def sha256(self) -> str:
-        """Digest the exact bytes exposed by the read-only mmap, once."""
-        if self._sha256 is None:
-            digest = hashlib.sha256()
-            for offset in range(0, len(self._map), 1024 * 1024):
-                digest.update(self._map[offset : offset + 1024 * 1024])
-            self._sha256 = digest.hexdigest()
+        """Return the digest of the exact snapshot bytes opened by mmap."""
+        if self._sha256 is not None:
+            return self._sha256
+        digest = hashlib.sha256()
+        for offset in range(0, len(self._map), 1024 * 1024):
+            digest.update(self._map[offset : offset + 1024 * 1024])
+        self._sha256 = digest.hexdigest()
         return self._sha256
 
     @property
     def generation(self) -> str:
-        """Return the stable public generation derived from the opened bytes."""
+        """Return a stable generation handle derived only from snapshot bytes."""
         return f"{MAGIC.decode('ascii')}:{self.sha256}"
 
     def _section_bytes(self, name: str) -> bytes:

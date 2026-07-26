@@ -1,8 +1,12 @@
 [project]
 name = "simplicio-fast"
-version = "1.0.0"
+version = "2.0.0"
 description = "Binary, memory-mapped semantic snapshots for agentic code workflows"
 requires-python = ">=3.11"
+dependencies = [
+  "simplicio-mapper>=0.24.2",
+  "simplicio-cli>=0.16.3",
+]
 
 [project.scripts]
 simplicio-fast = "simplicio_fast.cli:main"

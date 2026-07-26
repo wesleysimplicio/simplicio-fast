@@ -32,6 +32,8 @@ class SnapshotTest(unittest.TestCase):
                 self.assertEqual("User.save", context[0].symbol)
                 self.assertIn("def save", context[0].content)
                 self.assertEqual(64, len(context[0].source_sha256))
+                self.assertEqual(64, len(snapshot.sha256))
+                self.assertEqual(f"SFAST001:{snapshot.sha256}", snapshot.generation)
 
             warm = build_snapshot(root, output)
             self.assertEqual(0, warm.parsed_files)
