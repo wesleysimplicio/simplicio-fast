@@ -108,10 +108,11 @@ impl SnapshotReader {
         let expected_digest = slice32(&bytes, 48)?;
         let mut whole = bytes.clone();
         whole[48..80].fill(0);
-        let digest = Sha256::digest(&whole);
-        if digest.as_slice() != expected_digest {
+        let payload_digest = Sha256::digest(&whole);
+        if payload_digest.as_slice() != expected_digest {
             return Err(SnapshotError::Invalid("snapshot checksum mismatch".into()));
         }
+        let snapshot_digest = Sha256::digest(&bytes);
 
         let directory_end = directory_offset + directory_size;
         let mut sections = BTreeMap::new();
@@ -179,7 +180,7 @@ impl SnapshotReader {
         Ok(Self {
             bytes,
             sections,
-            digest: digest.into(),
+            digest: snapshot_digest.into(),
         })
     }
 
