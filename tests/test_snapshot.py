@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from simplicio_fast.snapshot import Snapshot, build_snapshot
+from simplicio_fast.snapshot import Snapshot, StaleSnapshotError, build_snapshot
 
 
 class SnapshotTest(unittest.TestCase):
@@ -18,12 +18,19 @@ class SnapshotTest(unittest.TestCase):
             with Snapshot(output) as snapshot:
                 matches = snapshot.find("save")
                 self.assertEqual("User.save", matches[0].qualified_name)
+                context = snapshot.context(root, "save")
+                self.assertEqual("User.save", context[0].symbol)
+                self.assertIn("def save", context[0].content)
+                self.assertEqual(64, len(context[0].source_sha256))
 
             warm = build_snapshot(root, output)
             self.assertEqual(0, warm.parsed_files)
             self.assertEqual(1, warm.reused_files)
 
             source.write_text(source.read_text() + "\ndef deactivate():\n    return False\n")
+            with Snapshot(output) as snapshot:
+                with self.assertRaises(StaleSnapshotError):
+                    snapshot.context(root, "save")
             changed = build_snapshot(root, output)
             self.assertEqual(1, changed.parsed_files)
             with Snapshot(output) as snapshot:
