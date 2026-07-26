@@ -135,6 +135,20 @@ class ContextProvenanceTest(unittest.TestCase):
         with patch("simplicio_fast.cli.subprocess.run", side_effect=OSError("git unavailable")):
             self.assertEqual((None, "git_unavailable"), source_commit(Path(".")))
 
+    def test_build_rejects_oversized_source_with_structured_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "sample.py"
+            source.write_text("def save():\n    return True\n", encoding="utf-8")
+            snapshot = root / "snapshot.sfast"
+            code, payload = self.invoke(
+                "build", str(root), "-o", str(snapshot), "--max-file-bytes", "4"
+            )
+            self.assertEqual(2, code)
+            self.assertEqual("simplicio.fast.error/v1", payload["schema"])
+            self.assertEqual("SourceFileTooLarge", payload["error"])
+            self.assertFalse(snapshot.exists())
+
     def test_doctor_reports_stable_recovery_and_refresh_repairs_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

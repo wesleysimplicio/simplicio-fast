@@ -103,8 +103,14 @@ def build_parser() -> argparse.ArgumentParser:
             default=120.0,
             help="maximum build time in seconds before failing without publishing (default: 120)",
         )
-        json_option(command)
 
+        command.add_argument(
+            "--max-file-bytes",
+            type=int,
+            default=8 * 1024 * 1024,
+            help="reject a source file larger than this before parsing (default: 8388608)",
+        )
+        json_option(command)
     query = commands.add_parser(
         "query",
         help="find classes and functions in a snapshot",
@@ -261,7 +267,12 @@ def main() -> None:
         if args.command in {"build", "refresh", "ingest"}:
             processor = ProjectProcessor(Path(args.root), Path(args.output))
             if args.command == "ingest":
-                emit(processor.ingest())
+                emit(
+                    processor.ingest(
+                        timeout_seconds=args.timeout,
+                        max_file_bytes=args.max_file_bytes,
+                    )
+                )
                 return
             emit(
                 {
@@ -273,6 +284,7 @@ def main() -> None:
                             Path(args.root),
                             Path(args.output),
                             timeout_seconds=args.timeout,
+                            max_file_bytes=args.max_file_bytes,
                         )
                     ),
                 }
