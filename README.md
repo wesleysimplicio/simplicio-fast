@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.2-22c55e?style=for-the-badge" alt="Version 2.0.2"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.3-22c55e?style=for-the-badge" alt="Version 2.0.3"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+"></a>
   <a href="https://github.com/wesleysimplicio/simplicio-fast/issues"><img src="https://img.shields.io/github/issues/wesleysimplicio/simplicio-fast?style=for-the-badge" alt="Open issues"></a>
   <img src="https://img.shields.io/badge/runtime_dependencies-0-111827?style=for-the-badge" alt="Zero runtime dependencies">
@@ -253,7 +253,7 @@ make the decision from those spans, and return a versioned changeset for guarded
 7. Runtime authorizes effects and Loop validates/converges.
 8. Fast incrementally refreshes changed files.
 
-Version 2.0.2 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
+Version 2.0.3 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
 `query` and the CRUD proof. Internal mapping/editing remain bootstrap fallbacks when integrations
 are absent; `doctor` identifies whether the complete integrated path is ready.
 The `build`, `query`, direct-index `search`, bounded `context`, typed `impact`, `stats` and
@@ -318,7 +318,7 @@ python -m compileall -q src tests benchmarks
 python benchmarks/run.py
 ```
 
-Version 2.0.2 covers:
+Version 2.0.3 covers:
 
 - complete user CRUD and later status change;
 - normalized-email conflict;
@@ -335,7 +335,7 @@ are emitted as `null`, never estimated.
 
 ## Current scope
 
-Ready in Fast 2.0.2:
+Ready in Fast 2.0.3:
 
 - Python 3.11+;
 - Python AST classes, functions and async functions;
@@ -385,5 +385,5 @@ See the granular cross-repository plan:
 
 ## License and status
 
-Version 2.0.2 adds the safe native-hash fallback for guarded apply. Review [CHANGELOG.md](CHANGELOG.md),
+Version 2.0.3 adds the Windows snapshot recovery and concurrent overlay stabilization. Review [CHANGELOG.md](CHANGELOG.md),
 `AGENTS.md` and open issues before making it mandatory across the entire Simplicio ecosystem.
