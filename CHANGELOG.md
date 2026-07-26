@@ -1,5 +1,25 @@
 # Changelog
 
+## 2.0.0 - 2026-07-26
+
+Simplicio Fast becomes a standalone project processor instead of requiring Mapper or Dev CLI.
+
+### Added
+
+- `ingest`: absorb a repository into the incremental binary snapshot.
+- `understand`: resolve bounded, hash-verified context directly from a natural-language task.
+- `plan`: compile understanding into `simplicio.fast.plandag/v2`.
+- `apply`: validate and optionally write `simplicio.fast.changeset/v2` operations.
+- Dry-run by default and SHA-256 guards for every edited source file.
+- Deterministic validation command discovery for Python, Node and Rust projects.
+
+### Architecture
+
+- Mapper and Dev CLI are optional compatibility adapters.
+- Fast owns project ingestion, semantic context, plan compilation and structured source edits.
+- Runtime remains the authority for policy, execution and receipts.
+- Loop remains responsible for slots, retries, convergence and delivery.
+
 ## 1.0.0 - 2026-07-26
 
 First stable proof-of-concept release.
