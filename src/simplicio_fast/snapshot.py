@@ -39,6 +39,21 @@ class BuildMetrics:
     cpu_ms: float
 
 
+@dataclass(frozen=True, slots=True)
+class ContextSpan:
+    symbol: str
+    kind: str
+    file: str
+    start_line: int
+    end_line: int
+    source_sha256: str
+    content: str
+
+
+class StaleSnapshotError(RuntimeError):
+    pass
+
+
 class _Collector(ast.NodeVisitor):
     def __init__(self, file: str) -> None:
         self.file = file
@@ -248,6 +263,65 @@ class Snapshot:
             for symbol in self.symbols()
             if needle in symbol.name.casefold() or needle in symbol.qualified_name.casefold()
         ]
+
+    def context(
+        self,
+        root: Path,
+        query: str,
+        *,
+        max_results: int = 10,
+        max_lines: int = 120,
+        max_bytes: int = 32_000,
+    ) -> list[ContextSpan]:
+        if max_results < 1 or max_lines < 1 or max_bytes < 1:
+            raise ValueError("context limits must be positive")
+        root = root.resolve()
+        expected_hashes = {path: digest for path, digest in self.files()}
+        spans: list[ContextSpan] = []
+        consumed = 0
+        seen: set[tuple[str, int, int]] = set()
+        for symbol in self.find(query):
+            if len(spans) >= max_results:
+                break
+            path = (root / symbol.file).resolve()
+            try:
+                path.relative_to(root)
+            except ValueError as error:
+                raise ValueError(f"snapshot path escapes root: {symbol.file}") from error
+            contents = path.read_bytes()
+            actual_hash = hashlib.sha256(contents).digest()
+            if actual_hash != expected_hashes[symbol.file]:
+                raise StaleSnapshotError(
+                    f"source changed after snapshot: {symbol.file}; run simplicio-fast refresh"
+                )
+            start = symbol.line
+            end = min(symbol.end_line, start + max_lines - 1)
+            key = (symbol.file, start, end)
+            if key in seen:
+                continue
+            lines = contents.decode("utf-8").splitlines()
+            snippet = "\n".join(lines[start - 1 : end])
+            size = len(snippet.encode())
+            if consumed + size > max_bytes:
+                remaining = max_bytes - consumed
+                if remaining <= 0:
+                    break
+                snippet = snippet.encode()[:remaining].decode("utf-8", errors="ignore")
+                size = len(snippet.encode())
+            seen.add(key)
+            consumed += size
+            spans.append(
+                ContextSpan(
+                    symbol=symbol.qualified_name,
+                    kind=symbol.kind,
+                    file=symbol.file,
+                    start_line=start,
+                    end_line=end,
+                    source_sha256=actual_hash.hex(),
+                    content=snippet,
+                )
+            )
+        return spans
 
     def grouped(self) -> dict[str, tuple[bytes, list[Symbol]]]:
         hashes = dict(self.files())
