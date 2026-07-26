@@ -29,3 +29,25 @@ incremental reuse. Page-fault fields are `null` when the host does not expose th
 dependency is added. If the operating system cannot expose peak RSS, the benchmark still emits a
 partial JSON receipt with schema `simplicio.fast.benchmark/v1`, `status: "partial"`,
 `peak_rss_kib: null`, a deterministic `peak_rss_reason` code and `metrics_status: "partial"`.
+
+## User CRUD benchmark
+
+The CRUD benchmark validates create, read, update and delete through the service and real HTTP API,
+then measures Fast semantic context retrieval and incremental snapshot reuse.
+
+| Artifact | Purpose |
+|---|---|
+| [Markdown report](reports/crud-benchmark.md) | Methodology, results and interpretation |
+| [PDF report](reports/crud-benchmark.pdf) | Rendered two-page A4 report |
+| [JSON receipt](results/crud-latest.json) | Machine-readable `simplicio.fast.crud-benchmark/v1` data |
+
+Observed medians from 100 complete cycles:
+
+- direct CRUD cycle: 0.536 ms;
+- HTTP CRUD cycle: 3.990 ms;
+- Fast `UserService` semantic context: 0.330 ms;
+- one-file incremental refresh: 3.852 ms, reusing three of four files.
+
+These operations have different boundaries. Do not present semantic-context latency as an HTTP
+speedup ratio. This benchmark does not estimate LLM tokens, provider cost or complete
+software-delivery savings.
