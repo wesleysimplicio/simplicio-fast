@@ -1,5 +1,8 @@
 .simplicio-fast/
+.simplicio/
+.mapper-handoff.json
 coverage/
+.coverage
 data/*.json
 benchmarks/results/*.json
 __pycache__/

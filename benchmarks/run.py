@@ -1,4 +1,6 @@
 import ast
+import concurrent.futures
+import ctypes
 import json
 import statistics
 import sys
@@ -10,6 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from simplicio_fast.snapshot import Snapshot, build_snapshot, source_files
+from simplicio_fast.workspace import WorkspaceStore
 
 
 def _unavailable(reason: str) -> dict[str, int | str | None]:
@@ -97,6 +100,35 @@ def generate_project(root: Path, files: int = 500) -> None:
         )
 
 
+def measure_shared_slots(root: Path, snapshot_path: Path, slots: int, repetitions: int = 10) -> dict[str, float | int | str]:
+    store = WorkspaceStore(root, root / ".bench-store")
+    base = store.build_base()
+    wall: list[float] = []
+    cpu: list[float] = []
+    rss = peak_rss_kib()
+    for _ in range(repetitions):
+        wall_start = time.perf_counter()
+        cpu_start = time.process_time()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=slots) as executor:
+            list(executor.map(lambda index: store.create_overlay(f"slot-{slots}-{index}", base.generation_id), range(slots)))
+        wall.append((time.perf_counter() - wall_start) * 1000)
+        cpu.append((time.process_time() - cpu_start) * 1000)
+        observed = peak_rss_kib()
+        if observed is not None:
+            rss = max(rss or observed, observed)
+    return {
+        "slots": slots,
+        "repetitions": repetitions,
+        "mode": "one-canonical-base-plus-isolated-overlays",
+        "wall_median_ms": statistics.median(wall),
+        "wall_p95_ms": sorted(wall)[max(0, int(repetitions * 0.95) - 1)],
+        "cpu_median_ms": statistics.median(cpu),
+        "peak_rss_kib": rss,
+        "peak_rss_reason": None if rss is not None else "native process RSS unavailable on this host",
+        "base_generation": base.generation_id,
+    }
+
+
 def baseline_query(root: Path, term: str) -> int:
     matches = 0
     for path in source_files(root):
@@ -166,6 +198,9 @@ def main() -> None:
             "snapshot_no_change_build": asdict(warm_build),
             "snapshot_one_file_change": asdict(incremental),
             "changed_symbol_visible": changed_visible,
+            "shared_base_overlay_slots": [
+                measure_shared_slots(root, snapshot_path, slots) for slots in (1, 5, 20)
+            ],
             "query_speedup": baseline["wall_median_ms"] / mapped["wall_median_ms"],
             "query_cpu_reduction_percent": (
                 1 - mapped["cpu_median_ms"] / baseline["cpu_median_ms"]

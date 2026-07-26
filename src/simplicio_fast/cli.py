@@ -10,6 +10,8 @@ from pathlib import Path
 from . import __version__
 from .processor import ProjectProcessor, load_changeset
 from .snapshot import Snapshot, StaleSnapshotError, build_snapshot
+from .adapters import capability_report
+from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
 from .users.http import serve
 from .users.repository import JsonUserRepository
 from .users.service import UserService
@@ -137,6 +139,50 @@ def build_parser() -> argparse.ArgumentParser:
 
     server = commands.add_parser("serve", help="run the user CRUD proof-of-concept API")
     server.add_argument("--port", type=int, default=3000)
+
+    base = commands.add_parser("base", help="build an immutable canonical base generation")
+    base.add_argument("root", nargs="?", default=".")
+    base.add_argument("--storage", default=None, help="generation storage directory")
+
+    overlay = commands.add_parser("overlay", help="build an isolated worktree overlay")
+    overlay.add_argument("root", nargs="?", default=".")
+    overlay.add_argument("--storage", default=None)
+    overlay.add_argument("--base-generation", required=True)
+    overlay.add_argument("--worktree-id", required=True)
+
+    merge = commands.add_parser("merge", help="query a composed base plus overlay view")
+    merge.add_argument("term", nargs="?", default="")
+    merge.add_argument("--root", default=".")
+    merge.add_argument("--storage", default=None)
+    merge.add_argument("--base-generation", required=True)
+    merge.add_argument("--worktree-id")
+    merge.add_argument("--overlay-generation")
+    merge.add_argument("--max-results", type=int, default=50)
+
+    capabilities = commands.add_parser("capabilities", help="report parser capability negotiation")
+
+    pin = commands.add_parser("pin", help="acquire a lease protecting a generation from GC")
+    pin.add_argument("generation")
+    pin.add_argument("--root", default=".")
+    pin.add_argument("--storage", default=None)
+    pin.add_argument("--owner", required=True)
+    pin.add_argument("--ttl", type=float, default=3600)
+
+    release = commands.add_parser("release", help="release a generation lease")
+    release.add_argument("lease_id")
+    release.add_argument("--root", default=".")
+    release.add_argument("--storage", default=None)
+
+    gc = commands.add_parser("gc", help="list or remove unleased generations")
+    gc.add_argument("--root", default=".")
+    gc.add_argument("--storage", default=None)
+    gc.add_argument("--apply", action="store_true")
+
+    watch = commands.add_parser("watch", help="refresh an overlay once after source changes")
+    watch.add_argument("root", nargs="?", default=".")
+    watch.add_argument("--storage", default=None)
+    watch.add_argument("--base-generation", required=True)
+    watch.add_argument("--worktree-id", required=True)
     return parser
 
 
@@ -282,6 +328,42 @@ def main() -> None:
             service = UserService(JsonUserRepository(Path("data/users.json")))
             print(f"simplicio-fast listening on http://127.0.0.1:{args.port}")
             serve(service, port=args.port)
+        elif args.command == "base":
+            manifest = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).build_base()
+            emit({"schema": MANIFEST_SCHEMA, "manifest": manifest.to_dict()})
+        elif args.command == "overlay":
+            overlay_value = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).create_overlay(
+                args.worktree_id, args.base_generation
+            )
+            emit({"schema": OVERLAY_SCHEMA, "overlay": asdict(overlay_value)})
+        elif args.command == "merge":
+            if args.worktree_id and not args.overlay_generation:
+                raise ValueError("--overlay-generation is required with --worktree-id")
+            with WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).open(
+                args.base_generation, worktree_id=args.worktree_id, overlay_generation=args.overlay_generation
+            ) as view:
+                matches = view.find(args.term)[: args.max_results] if args.term else view.symbols()[: args.max_results]
+                emit({
+                    "schema": "simplicio.fast.merge/v1",
+                    "base_generation": view.base_generation,
+                    "overlay_generation": view.overlay_generation,
+                    "matches": [asdict(item) for item in matches],
+                })
+        elif args.command == "capabilities":
+            emit({"schema": "simplicio.fast.capabilities/v1", "capabilities": [asdict(item) for item in capability_report()]})
+        elif args.command == "pin":
+            lease = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).pin(args.generation, args.owner, args.ttl)
+            emit({"schema": "simplicio.fast.lease/v1", "lease": asdict(lease)})
+        elif args.command == "release":
+            WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).release_lease(args.lease_id)
+            emit({"schema": "simplicio.fast.lease/v1", "released": args.lease_id})
+        elif args.command == "gc":
+            emit(WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).gc(apply=args.apply))
+        elif args.command == "watch":
+            store = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None)
+            overlay_value, _ = store.watch_once(args.worktree_id, args.base_generation)
+            emit({"schema": "simplicio.fast.watch/v1", "changed": overlay_value is not None,
+                  "overlay": asdict(overlay_value) if overlay_value else None})
     except (FileNotFoundError, RuntimeError, ValueError, StaleSnapshotError) as error:
         emit(
             {

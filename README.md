@@ -97,7 +97,7 @@ Reproduce it instead of trusting the table:
 python benchmarks/run.py
 ```
 
-The command records wall time, CPU time, peak RSS, cold build, warm query, no-change rebuild, one-file rebuild and whether the changed symbol became visible. Use at least ten repetitions and identical hardware/configuration when comparing integrations.
+The command records wall time, CPU time, peak RSS (or `null` plus an explicit reason when the host does not expose it), cold build, warm query, no-change rebuild, one-file rebuild and whether the changed symbol became visible. It also measures the shared-base overlay path at 1, 5 and 20 slots with ten repetitions per row. Use identical hardware/configuration when comparing integrations.
 
 Peak RSS is reported in KiB using POSIX `resource.getrusage` or Windows
 `GetProcessMemoryInfo` through the standard-library `ctypes` bridge. If the operating system
@@ -145,6 +145,37 @@ normalized repository root, source commit (or an explicit non-Git reason), snaps
 stable snapshot generation and effective limits. Consumers can pin that generation and verify
 the source hashes on every returned span; they must continue to obtain semantic context through
 Mapper rather than reading `.sfast` internals.
+
+## Canonical generations and worktree overlays
+
+Issue #3 adds a versioned coordination layer without making `.sfast` a public
+context contract. Build one immutable base generation from the default branch,
+then create one delta per worktree:
+
+```bash
+simplicio-fast base .
+simplicio-fast overlay . --base-generation <base-generation> --worktree-id slot-1
+simplicio-fast merge UserService --base-generation <base-generation> \
+  --worktree-id slot-1 --overlay-generation <overlay-generation>
+```
+
+The manifest binds the generation to the source commit, configuration,
+parser capabilities and source SHA-256 values. Overlay records contain only
+changed-file symbols and tombstones; merge is read-only and never rewrites the
+canonical base. Results carry `base_generation` and `overlay_generation` so a
+Mapper/Runtime caller can pin a bounded, auditable context attempt.
+
+Use `simplicio-fast pin` while an attempt is active and `simplicio-fast gc`
+afterward. GC is dry-run by default and never removes a generation protected by
+an unexpired lease. `simplicio-fast watch` performs a debounced refresh pass;
+watchers should call the same operation after filesystem events rather than
+building a full snapshot in every slot.
+
+Supported adapters are Python AST plus deterministic fallback extractors for
+TypeScript, Rust and C#. `simplicio-fast capabilities` reports whether a native
+parser is available, whether fallback extraction is active, and why a language
+is unavailable. Fallback results are bounded semantic hints and should be
+verified by the native toolchain before mutation.
 
 ## CRUD proof of concept
 
@@ -241,10 +272,12 @@ Planned:
 - direct/hash symbol index;
 - imports, references and call graph;
 - context budgets and token accounting;
-- default-branch snapshot plus worktree overlays;
-- TypeScript, Rust and C# adapters;
-- full Mapper, Dev CLI, Loop and Runtime integration;
-- central daemon, leases, receipts, shadow/canary and rollback.
+- canonical default-branch generation manifest plus isolated worktree overlays;
+- TypeScript, Rust and C# capability-negotiated fallback adapters;
+- leases/pins, conservative GC, atomic receipts and debounced refresh;
+- full Mapper, Dev CLI, Loop and Runtime integration remains an integration concern:
+  callers must pass Mapper-owned handles and must not read Fast offsets directly;
+- central daemon, native parser bindings, shadow/canary and rollback remain follow-up work.
 
 ## Ecosystem architecture
 
