@@ -134,6 +134,12 @@ PYTHONPATH=src python -m simplicio_fast.cli build .
 PYTHONPATH=src python -m simplicio_fast.cli query UserService
 ```
 
+The bounded `context --json` response includes a versioned `provenance` receipt with the
+normalized repository root, source commit (or an explicit non-Git reason), snapshot digest,
+stable snapshot generation and effective limits. Consumers can pin that generation and verify
+the source hashes on every returned span; they must continue to obtain semantic context through
+Mapper rather than reading `.sfast` internals.
+
 ## CRUD proof of concept
 
 The repository includes a dependency-free user API to prove the full cycle: create normal source, map it, query it, alter its behavior and refresh only the changed semantic input.

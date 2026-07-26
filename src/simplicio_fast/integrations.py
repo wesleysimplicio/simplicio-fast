@@ -9,6 +9,17 @@ from pathlib import Path
 from typing import Any
 
 
+def _contract_hash(value: bytes | str) -> str:
+    """Match simplicio-dev-cli's text hash while preserving Fast's byte guard."""
+    if isinstance(value, bytes):
+        try:
+            value = value.decode("utf-8")
+        except UnicodeDecodeError:
+            return hashlib.sha256(value).hexdigest()
+    normalized = value.replace("\r\n", "\n").replace("\r", "\n")
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def run_mapper(root: Path) -> dict[str, Any] | None:
     sibling = Path(sys.executable).with_name("simplicio-mapper")
     executable = shutil.which("simplicio-mapper") or (
@@ -54,7 +65,11 @@ def run_dev_cli_changeset(
         relative = change["path"]
         touched.append(relative)
         path = root / relative
-        lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+        raw = path.read_bytes()
+        actual = hashlib.sha256(raw).hexdigest()
+        if actual != change["expected_sha256"]:
+            raise ValueError(f"stale source hash for {relative}")
+        lines = raw.decode("utf-8").splitlines(keepends=True)
         for replacement in change["replacements"]:
             start = replacement["start_line"]
             end = replacement["end_line"]
@@ -69,8 +84,8 @@ def run_dev_cli_changeset(
                     "start_line": start,
                     "end_line": end,
                     "text": text,
-                    "file_sha256": change["expected_sha256"],
-                    "range_sha256": hashlib.sha256(range_text.encode()).hexdigest(),
+                    "file_sha256": _contract_hash(raw),
+                    "range_sha256": _contract_hash(range_text),
                 }
             )
     result = execute_plan(

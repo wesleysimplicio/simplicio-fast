@@ -1,6 +1,7 @@
 import argparse
 import importlib.metadata
 import json
+import subprocess
 import shutil
 import sys
 from dataclasses import asdict
@@ -18,6 +19,22 @@ DEFAULT_SNAPSHOT = ".simplicio-fast/project.sfast"
 
 def emit(value: object) -> None:
     print(json.dumps(value, indent=2, ensure_ascii=False))
+
+
+def source_commit(root: Path) -> tuple[str | None, str | None]:
+    """Return the checkout commit, or an explicit reason when unavailable."""
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return None, "git_unavailable"
+    if result.returncode or not result.stdout.strip():
+        return None, "not_a_git_checkout"
+    return result.stdout.strip(), None
 
 
 def snapshot_argument(parser: argparse.ArgumentParser) -> None:
@@ -167,14 +184,17 @@ def main() -> None:
                 )
             )
         elif args.command == "context":
+            root = Path(args.root).resolve()
+            snapshot_path = Path(args.snapshot).resolve()
             with Snapshot(Path(args.snapshot)) as snapshot:
                 spans = snapshot.context(
-                    Path(args.root),
+                    root,
                     args.term,
                     max_results=args.max_results,
                     max_lines=args.max_lines,
                     max_bytes=args.max_bytes,
                 )
+                commit, commit_reason = source_commit(root)
                 emit(
                     {
                         "schema": "simplicio.fast.context/v1",
@@ -183,6 +203,21 @@ def main() -> None:
                             "max_results": args.max_results,
                             "max_lines": args.max_lines,
                             "max_bytes": args.max_bytes,
+                        },
+                        "provenance": {
+                            "schema": "simplicio.fast.provenance/v1",
+                            "repository_root": str(root),
+                            "source_commit": commit,
+                            "source_commit_reason": commit_reason,
+                            "snapshot_path": str(snapshot_path),
+                            "snapshot_sha256": snapshot.sha256,
+                            "snapshot_generation": snapshot.generation,
+                            "span_count": len(spans),
+                            "limits": {
+                                "max_results": args.max_results,
+                                "max_lines": args.max_lines,
+                                "max_bytes": args.max_bytes,
+                            },
                         },
                         "spans": [asdict(item) for item in spans],
                     }

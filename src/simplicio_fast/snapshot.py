@@ -197,6 +197,7 @@ def build_snapshot(root: Path, output: Path) -> BuildMetrics:
 class Snapshot:
     def __init__(self, path: Path) -> None:
         self.path = path
+        self._sha256: str | None = None
         self._file = path.open("rb")
         self._map = mmap.mmap(self._file.fileno(), 0, access=mmap.ACCESS_READ)
         (
@@ -224,6 +225,22 @@ class Snapshot:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+    @property
+    def sha256(self) -> str:
+        """Return the digest of the exact snapshot bytes opened by mmap."""
+        if self._sha256 is not None:
+            return self._sha256
+        digest = hashlib.sha256()
+        for offset in range(0, len(self._map), 1024 * 1024):
+            digest.update(self._map[offset : offset + 1024 * 1024])
+        self._sha256 = digest.hexdigest()
+        return self._sha256
+
+    @property
+    def generation(self) -> str:
+        """Return a stable generation handle derived only from snapshot bytes."""
+        return f"SFAST{VERSION:03d}:{self.sha256}"
 
     def _text(self, offset: int, length: int) -> str:
         start = self.strings_offset + offset
