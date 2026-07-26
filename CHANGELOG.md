@@ -1,5 +1,11 @@
 # Changelog
-## 2.0.3 - 2026-07-26
+## 2.0.4 - 2026-07-26
+
+### Fixed
+
+- Stabilizes Fast git, Mapper and workspace subprocess receipts on Windows Python 3.14 with explicit handle inheritance control.
+- Keeps the structured dry-run native-output hash-mismatch rollback contract covered by regression tests.
+
 
 ### Fixed
 
