@@ -144,7 +144,7 @@ def _atomic_json(path: Path, value: object) -> None:
 def _commit(root: Path) -> str:
     try:
         return subprocess.check_output(
-            ["git", "-C", str(root), "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True, close_fds=True
+            ["git", "-C", str(root), "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"

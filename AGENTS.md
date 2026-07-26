@@ -67,6 +67,8 @@ simplicio-fast understand "implement user authentication"
 simplicio-fast plan "implement user authentication"
 simplicio-fast apply changeset.json
 simplicio-fast apply changeset.json --write
+simplicio-fast delivery "prepare change" --profile loop-standalone
+simplicio-fast delivery "apply change" --changeset changeset.json --profile loop-standalone
 simplicio-fast build .
 simplicio-fast query UserService
 simplicio-fast context UserService --root .
@@ -82,6 +84,12 @@ simplicio-fast rollout rollback --reason "validation failed"
 
 `apply` is dry-run by default. All machine-facing commands emit versioned JSON. Preserve the
 `schema` field and reject unknown major schema versions.
+
+`delivery` prepares bounded context when no `--changeset` is supplied. With a
+`simplicio.fast.changeset/v2`, it performs a guarded dry-run by default or a local atomic
+Loop-standalone write with `--write`, records source hashes and refreshes the snapshot. Full
+writes fail closed until a verified Runtime authorization is integrated; repeated requests use
+the delivery idempotency receipt.
 
 When discovering the tool, run `simplicio-fast --help`; the top-level help is intentionally written
 for both humans and LLM/tool callers and explains ownership boundaries and the normal flow.

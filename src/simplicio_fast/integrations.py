@@ -102,7 +102,6 @@ def run_mapper(root: Path) -> dict[str, Any] | None:
         text=True,
         capture_output=True,
         check=False,
-        close_fds=True,
     )
     if completed.returncode != 0:
         raise RuntimeError(

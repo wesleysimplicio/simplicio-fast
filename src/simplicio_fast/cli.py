@@ -36,7 +36,6 @@ def source_commit(root: Path) -> tuple[str | None, str | None]:
             capture_output=True,
             text=True,
             check=False,
-            close_fds=True,
         )
     except OSError:
         return None, "git_unavailable"
@@ -189,7 +188,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     delivery = commands.add_parser(
         "delivery",
-        help="prepare bounded delivery context and emit a cache/provenance receipt",
+        help="prepare or execute guarded delivery and emit a cache/provenance receipt",
     )
     delivery.add_argument("task", help="task or issue text")
     delivery.add_argument("--root", default=".", help="repository root (default: .)")
@@ -197,6 +196,9 @@ def build_parser() -> argparse.ArgumentParser:
     delivery.add_argument("--cache", default=None, help="delivery cache directory")
     delivery.add_argument("--profile", choices=("full", "loop-standalone"), default="loop-standalone")
     delivery.add_argument("--max-bytes", type=int, default=32_000)
+    delivery.add_argument("--changeset", default=None, help="optional simplicio.fast.changeset/v2 JSON")
+    delivery.add_argument("--write", action="store_true", help="apply a validated changeset; dry-run is the default")
+    delivery.add_argument("--idempotency-key", default=None, help="stable delivery replay key")
 
     apply_command = commands.add_parser(
         "apply",
@@ -364,13 +366,27 @@ def main() -> None:
             else:
                 emit(processor.plan(args.task, max_bytes=args.max_bytes))
         elif args.command == "delivery":
-            emit(
-                DeliveryEngine(
-                    Path(args.root),
-                    Path(args.snapshot),
-                    Path(args.cache) if args.cache else None,
-                ).prepare(args.task, profile=args.profile, engine_receipt=selection.receipt())
+            delivery_engine = DeliveryEngine(
+                Path(args.root),
+                Path(args.snapshot),
+                Path(args.cache) if args.cache else None,
             )
+            if args.changeset:
+                emit(
+                    delivery_engine.deliver(
+                        load_changeset(Path(args.changeset)),
+                        profile=args.profile,
+                        engine_receipt=selection.receipt(),
+                        write=args.write,
+                        idempotency_key=args.idempotency_key,
+                    )
+                )
+            else:
+                emit(
+                    delivery_engine.prepare(
+                        args.task, profile=args.profile, engine_receipt=selection.receipt()
+                    )
+                )
         elif args.command == "apply":
             processor = ProjectProcessor(Path(args.root), Path(DEFAULT_SNAPSHOT))
             emit(
