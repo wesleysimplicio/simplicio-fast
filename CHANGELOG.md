@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.0.6 - 2026-07-26
+
+### Fixed
+
+- Raises the validated snapshot capacity to 512 MiB for supported large Windows repositories.
+- Emits SnapshotTooLarge before allocation/publication when the hard bound is exceeded.
+
+
 ## 2.0.5 - 2026-07-26
 
 ### Fixed
