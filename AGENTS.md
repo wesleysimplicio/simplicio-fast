@@ -2,37 +2,38 @@
 
 ## Purpose
 
-This repository provides binary, incremental, memory-mapped semantic storage. It does not replace
-the canonical project understanding contract.
+This repository is the central in-memory project processor. It coordinates Mapper extraction,
+binary/mmap storage, bounded understanding, PlanDAG compilation and Dev CLI edits.
 
 ## Mandatory Mapper rule
 
-**Every agent, LLM, Loop slot, Runtime operator or Dev CLI flow using Simplicio Fast MUST use
-`simplicio-mapper` as the canonical context producer.**
+**Every integrated agent, LLM, Loop slot or Runtime flow using Simplicio Fast MUST use
+`simplicio-mapper` for project extraction and `simplicio-dev-cli` for source mutation.**
 
 - Mapper owns the public ContextGraph, stable IDs and semantic compatibility.
-- Fast owns binary persistence, incremental extraction and mmap-backed lookup.
+- Fast owns orchestration, binary persistence, incremental memory, context selection and PlanDAG.
+- Dev CLI owns mechanical source edits and edit receipts.
 - Consumers must request context through Mapper handles.
 - Consumers must not interpret `.sfast` offsets or internal records directly.
 - Consumers must not create a second public context contract.
 - If Mapper is missing, incompatible or unhealthy, agentic execution must stop with an actionable
   diagnostic. It must never continue with an empty or fabricated context.
 
-The standalone Fast CLI may be used directly only for development, diagnostics, format tests and
-benchmarks. Direct CLI use is not the official agent integration path.
+Fast's internal extractor/editor are explicit bootstrap fallbacks for development and tests. They
+must not be reported as the fully integrated production path.
 
 ## Required agent workflow
 
-1. Run Mapper/Fast capability and health checks.
-2. Resolve the repository default branch and canonical Mapper ContextGraph handle.
-3. Build or refresh one Fast base snapshot for that branch and configuration.
+1. Fast invokes Mapper to extract the canonical project graph.
+2. Fast compiles Mapper output into the binary mmap representation.
+3. Fast resolves bounded context and compiles a PlanDAG for the task.
 4. Pin the snapshot generation for the entire attempt.
-5. Ask Mapper for relevant symbols and context; Mapper may use Fast internally.
-6. Verify source hashes before creating or applying a patch.
-7. Modify normal source files only. Never mutate `.sfast` as source code.
-8. Run the repository's tests and validation gates.
-9. Refresh only changed files after a verified patch.
-10. Emit generation, context, validation and fallback receipts.
+5. The LLM decides using only the selected context.
+6. Fast compiles a hash-guarded changeset.
+7. Dev CLI validates and performs normal source edits.
+8. Runtime authorizes effects and records receipts when available.
+9. Loop runs tests, corrections and delivery convergence.
+10. Fast refreshes changed semantic inputs after validation.
 
 ## Worktrees and parallel slots
 
@@ -43,11 +44,16 @@ benchmarks. Direct CLI use is not the official agent integration path.
 - Pin base and overlay generation IDs in checkpoints and handoffs.
 - In speculative execution, only the verified winner may promote source changes or refresh state.
 
-## Current 1.0 commands
+## Current 2.0 commands
 
 ```bash
 simplicio-fast --version
 simplicio-fast --help
+simplicio-fast ingest .
+simplicio-fast understand "implement user authentication"
+simplicio-fast plan "implement user authentication"
+simplicio-fast apply changeset.json
+simplicio-fast apply changeset.json --write
 simplicio-fast build .
 simplicio-fast query UserService
 simplicio-fast context UserService --root .
@@ -55,8 +61,8 @@ simplicio-fast doctor
 simplicio-fast refresh .
 ```
 
-All machine-facing commands emit versioned JSON. Preserve the `schema` field and reject unknown
-major schema versions.
+`apply` is dry-run by default. All machine-facing commands emit versioned JSON. Preserve the
+`schema` field and reject unknown major schema versions.
 
 ## Context safety
 

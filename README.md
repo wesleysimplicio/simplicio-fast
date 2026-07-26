@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/wesleysimplicio/simplicio-fast/releases"><img src="https://img.shields.io/badge/version-1.0.0-22c55e?style=for-the-badge" alt="Version 1.0.0"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.0-22c55e?style=for-the-badge" alt="Version 2.0.0"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+"></a>
   <a href="https://github.com/wesleysimplicio/simplicio-fast/issues"><img src="https://img.shields.io/github/issues/wesleysimplicio/simplicio-fast?style=for-the-badge" alt="Open issues"></a>
   <img src="https://img.shields.io/badge/runtime_dependencies-0-111827?style=for-the-badge" alt="Zero runtime dependencies">
@@ -39,6 +39,10 @@
 ## What is simplicio-fast?
 
 Most coding agents repeatedly reopen files, parse the same project and send oversized context to an LLM. `simplicio-fast` builds a compact binary semantic snapshot once, maps it read-only with the operating system, and incrementally reparses only changed files.
+
+Version 2 makes Fast the central processor: it invokes Mapper for canonical extraction, holds the
+result in binary memory, understands tasks, compiles PlanDAGs and delegates verified source edits
+to Dev CLI.
 
 ```text
 normal source files
@@ -103,7 +107,7 @@ cd simplicio-fast
 python -m pip install -e .
 ```
 
-No runtime package is required by version 1.0.0.
+The integrated install includes `simplicio-mapper` and `simplicio-cli`.
 
 ## CLI
 
@@ -117,7 +121,9 @@ simplicio-fast serve --help
 Build and query the current repository:
 
 ```bash
-simplicio-fast build .
+simplicio-fast ingest .
+simplicio-fast understand "change UserService"
+simplicio-fast plan "change UserService"
 simplicio-fast query UserService
 ```
 
@@ -160,15 +166,18 @@ curl -X DELETE http://127.0.0.1:3000/users/USER_ID
 
 An LLM should not read the `.sfast` binary directly. A deterministic adapter queries the snapshot and returns a small context packet.
 
-1. The task reaches the Agent or Loop.
-2. Mapper resolves a canonical context handle.
-3. Runtime executes `search`, `context` and `impact` under policy.
-4. The LLM receives only relevant symbols, source spans and hashes.
-5. The Agent writes normal source patches.
-6. Runtime validates hashes, tests and receipts.
-7. Fast incrementally refreshes changed files.
+1. The task reaches Fast through the Agent or Loop.
+2. Fast invokes Mapper and stores the canonical graph in mmap.
+3. `understand` selects bounded, hash-verified context.
+4. `plan` compiles `simplicio.fast.plandag/v2`.
+5. The LLM decides and returns `simplicio.fast.changeset/v2`.
+6. `apply` delegates mechanical edits to Dev CLI; dry-run is the default.
+7. Runtime authorizes effects and Loop validates/converges.
+8. Fast incrementally refreshes changed files.
 
-Today, version 1.0.0 provides `build`, `query` and the Python POC. The full `context`, `impact`, Mapper, Dev CLI, Loop and Runtime integrations are tracked in the [integration epic](https://github.com/wesleysimplicio/simplicio-fast/issues/1).
+Version 2.0.0 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
+`query` and the CRUD proof. Internal mapping/editing remain bootstrap fallbacks when integrations
+are absent; `doctor` identifies whether the complete integrated path is ready.
 
 <p align="center">
   <img src="assets/simplicio-fast-verified-flow.webp" alt="Compact context moving through planning, editing, testing and verification gates" width="920" />
@@ -201,7 +210,7 @@ PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests benchmarks
 ```
 
-Version 1.0.0 covers:
+Version 2.0.0 covers:
 
 - complete user CRUD and later status change;
 - normalized-email conflict;
@@ -235,9 +244,9 @@ Planned:
 
 | Project | Responsibility |
 |---|---|
-| `simplicio-fast` | binary semantic storage and incremental queries |
-| `simplicio-mapper` | canonical public ContextGraph and stable IDs |
-| `simplicio-dev-cli` | PlanDAG compilation using context handles |
+| `simplicio-fast` | central processor, mmap memory, understanding and PlanDAG |
+| `simplicio-mapper` | canonical project extraction and stable IDs |
+| `simplicio-dev-cli` | guarded mechanical source edits |
 | `simplicio-loop` | orientation, slots, convergence and delivery |
 | `simplicio-runtime` | deterministic execution, policy and receipts |
 | `simplicio-agent` | decisions, context selection and patch strategy |
@@ -261,4 +270,5 @@ See the granular cross-repository plan:
 
 ## License and status
 
-Version 1.0.0 is a stable **proof of concept**, not yet a mandatory production dependency of the Simplicio ecosystem. Review [CHANGELOG.md](CHANGELOG.md) and open issues before adopting its binary schema as a long-lived external contract.
+Version 2.0.0 is the first integrated processor contract. Review [CHANGELOG.md](CHANGELOG.md),
+`AGENTS.md` and open issues before making it mandatory across the entire Simplicio ecosystem.

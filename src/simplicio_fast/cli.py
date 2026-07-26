@@ -1,11 +1,14 @@
 import argparse
+import importlib.metadata
 import json
 import subprocess
+import shutil
 import sys
 from dataclasses import asdict
 from pathlib import Path
 
 from . import __version__
+from .processor import ProjectProcessor, load_changeset
 from .snapshot import Snapshot, StaleSnapshotError, build_snapshot
 from .users.http import serve
 from .users.repository import JsonUserRepository
@@ -53,13 +56,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("build", "refresh"):
+    for name in ("build", "refresh", "ingest"):
         command = commands.add_parser(
             name,
             help=(
                 "build a snapshot, reusing unchanged files"
                 if name == "build"
-                else "incrementally refresh the snapshot after source changes"
+                else (
+                    "incrementally refresh the snapshot after source changes"
+                    if name == "refresh"
+                    else "absorb a project into the binary semantic processor"
+                )
             ),
             description="Parse changed Python files and atomically publish a complete snapshot.",
         )
@@ -94,6 +101,33 @@ def build_parser() -> argparse.ArgumentParser:
     context.add_argument("--max-lines", type=int, default=120)
     context.add_argument("--max-bytes", type=int, default=32_000)
 
+    for name in ("understand", "plan"):
+        command = commands.add_parser(
+            name,
+            help=(
+                "understand a task using bounded project context"
+                if name == "understand"
+                else "compile a task and semantic context into a PlanDAG"
+            ),
+        )
+        command.add_argument("task", help="task or goal in natural language")
+        command.add_argument("--root", default=".", help="repository root (default: .)")
+        snapshot_argument(command)
+        command.add_argument("--max-bytes", type=int, default=48_000)
+
+    apply_command = commands.add_parser(
+        "apply",
+        help="validate or apply a hash-guarded structured changeset",
+        description=(
+            "Dry-run by default. Use --write only after inspecting the generated receipt."
+        ),
+    )
+    apply_command.add_argument("changeset", help="path to simplicio.fast.changeset/v2 JSON")
+    apply_command.add_argument("--root", default=".", help="repository root (default: .)")
+    apply_command.add_argument(
+        "--write", action="store_true", help="atomically replace validated source files"
+    )
+
     doctor = commands.add_parser(
         "doctor",
         help="validate installation and snapshot integrity",
@@ -110,7 +144,11 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     try:
-        if args.command in {"build", "refresh"}:
+        if args.command in {"build", "refresh", "ingest"}:
+            processor = ProjectProcessor(Path(args.root), Path(args.output))
+            if args.command == "ingest":
+                emit(processor.ingest())
+                return
             emit(
                 {
                     "schema": "simplicio.fast.build/v1",
@@ -132,6 +170,19 @@ def main() -> None:
                         ],
                     }
                 )
+        elif args.command in {"understand", "plan"}:
+            processor = ProjectProcessor(Path(args.root), Path(args.snapshot))
+            if args.command == "understand":
+                emit(asdict(processor.understand(args.task, max_bytes=args.max_bytes)))
+            else:
+                emit(processor.plan(args.task, max_bytes=args.max_bytes))
+        elif args.command == "apply":
+            processor = ProjectProcessor(Path(args.root), Path(DEFAULT_SNAPSHOT))
+            emit(
+                processor.apply_changeset(
+                    load_changeset(Path(args.changeset)), write=args.write
+                )
+            )
         elif args.command == "context":
             root = Path(args.root).resolve()
             snapshot_path = Path(args.snapshot).resolve()
@@ -173,8 +224,37 @@ def main() -> None:
                 )
         elif args.command == "doctor":
             path = Path(args.snapshot)
+            def distribution(name: str) -> str | None:
+                try:
+                    return importlib.metadata.version(name)
+                except importlib.metadata.PackageNotFoundError:
+                    return None
+
+            mapper_version = distribution("simplicio-mapper")
+            dev_cli_version = distribution("simplicio-cli")
+            script_dir = Path(sys.executable).parent
+            mapper_executable = shutil.which("simplicio-mapper") or (
+                str(script_dir / "simplicio-mapper")
+                if (script_dir / "simplicio-mapper").is_file()
+                else None
+            )
+            dev_cli_executable = shutil.which("simplicio-cli") or (
+                str(script_dir / "simplicio-cli")
+                if (script_dir / "simplicio-cli").is_file()
+                else None
+            )
             checks: list[dict[str, object]] = [
                 {"name": "python", "status": "pass", "detail": sys.version.split()[0]},
+                {
+                    "name": "simplicio_mapper",
+                    "status": "pass" if mapper_version and mapper_executable else "fail",
+                    "detail": mapper_version or "not installed",
+                },
+                {
+                    "name": "simplicio_dev_cli",
+                    "status": "pass" if dev_cli_version and dev_cli_executable else "fail",
+                    "detail": dev_cli_version or "not installed",
+                },
                 {
                     "name": "snapshot_exists",
                     "status": "pass" if path.is_file() else "fail",
@@ -202,7 +282,7 @@ def main() -> None:
             service = UserService(JsonUserRepository(Path("data/users.json")))
             print(f"simplicio-fast listening on http://127.0.0.1:{args.port}")
             serve(service, port=args.port)
-    except (FileNotFoundError, ValueError, StaleSnapshotError) as error:
+    except (FileNotFoundError, RuntimeError, ValueError, StaleSnapshotError) as error:
         emit(
             {
                 "schema": "simplicio.fast.error/v1",
