@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,16 @@ class PlanNode:
     depends_on: list[str]
     inputs: dict[str, Any]
     acceptance: list[str]
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedChange:
+    path: Path
+    relative: str
+    expected_sha256: str
+    original: bytes
+    updated: bytes
+    replacements: int
 
 
 def task_terms(task: str) -> list[str]:
@@ -196,18 +207,86 @@ class ProjectProcessor:
         changes = changeset.get("changes")
         if not isinstance(changes, list) or not changes:
             raise ValueError("changeset must contain at least one change")
-        delegated = run_dev_cli_changeset(self.root, changeset, write=write)
+        prepared = self._prepare_changes(changes)
+        before = self._file_records(prepared)
+        try:
+            delegated = run_dev_cli_changeset(self.root, changeset, write=write)
+        except ValueError as error:
+            if "stale source hash" in str(error):
+                raise
+            delegated = self._native_refusal("native_adapter_error", str(error))
+        except Exception as error:
+            delegated = self._native_refusal("native_adapter_error", str(error))
+
         if delegated is not None:
-            status = delegated["result"].get("status")
-            if status != "ok":
-                raise ValueError(f"simplicio-dev-cli refused changeset: {delegated['result']}")
-            return {
-                "schema": "simplicio.fast.apply-receipt/v2",
-                "mode": "write" if write else "dry-run",
-                "executor": delegated,
-                "files": delegated["result"].get("files", []),
-            }
-        prepared: list[tuple[Path, str, str, int]] = []
+            result = delegated.get("result")
+            if not isinstance(result, dict):
+                result = {"status": "refused", "code": "invalid_native_receipt"}
+                delegated = {**delegated, "result": result}
+            if self._native_succeeded(result, write=write):
+                after = self._file_records(prepared)
+                if not write and any(
+                    item["after_sha256"] != item["before_sha256"] for item in after
+                ):
+                    self._restore_prepared(prepared)
+                    raise ValueError("simplicio-dev-cli wrote during a dry-run")
+                return self._receipt(
+                    mode="write" if write else "dry-run",
+                    executor=delegated,
+                    files=after,
+                    native={
+                        "status": "ok",
+                        "before_sha256": {item["path"]: item["before_sha256"] for item in before},
+                        "after_sha256": {item["path"]: item["after_sha256"] for item in after},
+                        "no_write_proof": not write,
+                    },
+                    no_write_proof=not write,
+                    outcome="applied" if write else "dry_run",
+                    applied=write,
+                    write_attempted=write,
+                    reason_code=None,
+                    rollback={"attempted": False, "status": "not-needed", "restored_paths": []},
+                )
+
+            native_before = self._file_records(prepared)
+            restored = self._restore_prepared(prepared)
+            native_after = self._file_records(prepared)
+            if any(item["after_sha256"] != item["before_sha256"] for item in native_after):
+                raise RuntimeError("native refusal could not be rolled back safely")
+            return self._fallback_receipt(
+                prepared,
+                write=write,
+                reason="native_adapter_refused",
+                native={
+                    "adapter": delegated.get("adapter", "simplicio-dev-cli"),
+                    "status": result.get("status", "refused"),
+                    "result": result,
+                    "before_sha256": {item["path"]: item["before_sha256"] for item in native_before},
+                    "after_sha256": {item["path"]: item["after_sha256"] for item in native_after},
+                    "rollback": {"attempted": bool(restored), "restored": restored},
+                    "no_write_proof": True,
+                },
+                reason_code=str(result.get("code") or "native_adapter_refused"),
+                rollback={"attempted": True, "status": "restored", "restored_paths": restored},
+            )
+
+        return self._fallback_receipt(
+            prepared,
+            write=write,
+            reason="simplicio-dev-cli is not installed",
+            native={
+                "adapter": "simplicio-dev-cli",
+                "status": "unavailable",
+                "before_sha256": {item["path"]: item["before_sha256"] for item in before},
+                "after_sha256": {item["path"]: item["before_sha256"] for item in before},
+                "no_write_proof": True,
+            },
+            reason_code="native_unavailable",
+            rollback={"attempted": False, "status": "not-needed", "restored_paths": []},
+        )
+
+    def _prepare_changes(self, changes: list[Any]) -> list[PreparedChange]:
+        prepared: list[PreparedChange] = []
         for change in changes:
             relative = change.get("path")
             expected = change.get("expected_sha256")
@@ -248,37 +327,155 @@ class ProjectProcessor:
                 suffix = "\n" if content and not content.endswith("\n") else ""
                 lines[start - 1 : end] = [content + suffix]
             updated = "".join(lines)
-            prepared.append((path, relative, updated, len(replacements)))
-        receipt = {
-            "schema": "simplicio.fast.apply-receipt/v2",
-            "mode": "write" if write else "dry-run",
-            "executor": {
-                "adapter": "internal-bootstrap",
-                "status": "fallback",
-                "reason": "simplicio-dev-cli is not installed",
-            },
-            "files": [
-                {
-                    "path": relative,
-                    "replacements": count,
-                    "result_sha256": hashlib.sha256(updated.encode()).hexdigest(),
-                }
-                for _, relative, updated, count in prepared
-            ],
+            prepared.append(
+                PreparedChange(
+                    path=path,
+                    relative=relative,
+                    expected_sha256=expected,
+                    original=original,
+                    updated=updated.encode("utf-8"),
+                    replacements=len(replacements),
+                )
+            )
+        return prepared
+
+    @staticmethod
+    def _native_refusal(code: str, message: str) -> dict[str, Any]:
+        return {
+            "adapter": "simplicio-dev-cli",
+            "status": "refused",
+            "result": {"status": "refused", "code": code, "message": message},
         }
+
+    @staticmethod
+    def _native_succeeded(result: dict[str, Any], *, write: bool) -> bool:
+        if result.get("status") != "ok":
+            return False
+        errors = result.get("errors")
+        if isinstance(errors, list) and errors:
+            return False
+        return not (write and result.get("applied") is False)
+
+    @staticmethod
+    def _file_records(prepared: list[PreparedChange]) -> list[dict[str, Any]]:
+        records: list[dict[str, Any]] = []
+        for item in prepared:
+            current = item.path.read_bytes()
+            records.append(
+                {
+                    "path": item.relative,
+                    "replacements": item.replacements,
+                    "expected_sha256": item.expected_sha256,
+                    "before_sha256": hashlib.sha256(item.original).hexdigest(),
+                    "after_sha256": hashlib.sha256(current).hexdigest(),
+                    "result_sha256": hashlib.sha256(item.updated).hexdigest(),
+                }
+            )
+        return records
+
+    @staticmethod
+    def _receipt(
+        *,
+        mode: str,
+        executor: dict[str, Any],
+        files: list[dict[str, Any]],
+        native: dict[str, Any],
+        no_write_proof: bool,
+        outcome: str,
+        applied: bool,
+        write_attempted: bool,
+        reason_code: str | None,
+        rollback: dict[str, Any],
+    ) -> dict[str, Any]:
+        return {
+            "schema": "simplicio.fast.apply-receipt/v2",
+            "mode": mode,
+            "executor": executor,
+            "files": files,
+            "native": native,
+            "no_write_proof": no_write_proof,
+            "outcome": outcome,
+            "applied": applied,
+            "write_attempted": write_attempted,
+            "reason_code": reason_code,
+            "rollback": rollback,
+        }
+
+    def _fallback_receipt(
+        self,
+        prepared: list[PreparedChange],
+        *,
+        write: bool,
+        reason: str,
+        native: dict[str, Any],
+        reason_code: str,
+        rollback: dict[str, Any],
+    ) -> dict[str, Any]:
         if write:
-            temporary: list[tuple[Path, Path]] = []
-            try:
-                for path, _, updated, _ in prepared:
-                    temp = path.with_suffix(f"{path.suffix}.{os.getpid()}.simplicio-fast")
-                    temp.write_text(updated, encoding="utf-8")
-                    temporary.append((temp, path))
-                for temp, path in temporary:
-                    temp.replace(path)
-            finally:
-                for temp, _ in temporary:
-                    temp.unlink(missing_ok=True)
-        return receipt
+            self._write_prepared(prepared)
+        files = self._file_records(prepared)
+        expected_after = {
+            item.relative: hashlib.sha256((item.updated if write else item.original)).hexdigest()
+            for item in prepared
+        }
+        if any(item["after_sha256"] != expected_after[item["path"]] for item in files):
+            raise RuntimeError("internal fallback produced an unexpected output hash")
+        fallback = {
+            "adapter": "internal-bootstrap",
+            "status": "fallback",
+            "reason": reason,
+            "write_applied": write,
+            "no_write_proof": not write,
+        }
+        return self._receipt(
+            mode="write" if write else "dry-run",
+            executor=fallback,
+            files=files,
+            native=native,
+            no_write_proof=not write,
+            outcome="applied" if write else "dry_run",
+            applied=write,
+            write_attempted=write,
+            reason_code=reason_code,
+            rollback=rollback,
+        )
+
+    @staticmethod
+    def _atomic_replace(path: Path, data: bytes) -> None:
+        temporary: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=path.parent, prefix=f".{path.name}.", suffix=".simplicio-fast", delete=False
+            ) as handle:
+                temporary = handle.name
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            Path(temporary).replace(path)
+        finally:
+            if temporary:
+                Path(temporary).unlink(missing_ok=True)
+
+    def _write_prepared(self, prepared: list[PreparedChange]) -> None:
+        applied: list[PreparedChange] = []
+        try:
+            for item in prepared:
+                if item.path.read_bytes() != item.original:
+                    raise ValueError(f"stale source hash for {item.relative}")
+                self._atomic_replace(item.path, item.updated)
+                applied.append(item)
+        except Exception:
+            for item in reversed(applied):
+                self._atomic_replace(item.path, item.original)
+            raise
+
+    def _restore_prepared(self, prepared: list[PreparedChange]) -> list[str]:
+        restored: list[str] = []
+        for item in prepared:
+            if item.path.read_bytes() != item.original:
+                self._atomic_replace(item.path, item.original)
+                restored.append(item.relative)
+        return restored
 
 
 def load_changeset(path: Path) -> dict[str, Any]:
