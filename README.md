@@ -367,6 +367,24 @@ External boundaries and follow-ups:
 | `simplicio-agent` | decisions, context selection and patch strategy |
 | `simplicio-code` | integrated developer experience |
 
+
+
+## V3 architecture and execution profiles
+
+Fast is the semantic CPU/cache engine for comprehension and guarded change delivery. It keeps
+repository meaning hot across orientation, impact analysis, planning, editing, validation and
+retries. The source tree remains authoritative; snapshots are derived state.
+
+- **Full:** Mapper → Fast → Dev CLI, coordinated by Loop and governed by Runtime.
+- **Loop standalone:** Loop → Fast, with Mapper and Dev CLI adapters encapsulated; Runtime,
+  Agent and Code are optional.
+- **Engines:** Python remains the reference/fallback; Rust is selected by \`auto\` only after
+  health, schema and conformance gates pass. A healthy Rust fast path does not load Python.
+
+See [ADR-0001](docs/ADR-0001-fast-v3-ownership.md) and the
+[contract matrix](docs/fast-v3-contract-matrix.md). The executable delivery-engine work is
+tracked in [issue #46](https://github.com/wesleysimplicio/simplicio-fast/issues/46).
+
 ## Star history
 
 [![Star History Chart](https://api.star-history.com/svg?repos=wesleysimplicio/simplicio-fast&type=Date)](https://star-history.com/#wesleysimplicio/simplicio-fast&Date)
