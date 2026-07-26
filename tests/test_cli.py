@@ -26,13 +26,13 @@ class ContextProvenanceTest(unittest.TestCase):
         return exit_code, json.loads(output.getvalue())
 
     def make_git_repo(self, root: Path) -> str:
-        subprocess.run(["git", "init", "-b", "main", str(root)], check=True, capture_output=True)
-        subprocess.run(["git", "-C", str(root), "config", "user.email", "tests@example.invalid"], check=True)
-        subprocess.run(["git", "-C", str(root), "config", "user.name", "Simplicio Tests"], check=True)
-        subprocess.run(["git", "-C", str(root), "add", "sample.py"], check=True)
-        subprocess.run(["git", "-C", str(root), "commit", "-m", "fixture"], check=True, capture_output=True)
+        subprocess.run(["git", "init", "-b", "main", str(root)], check=True, capture_output=True, close_fds=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.email", "tests@example.invalid"], check=True, close_fds=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.name", "Simplicio Tests"], check=True, close_fds=True)
+        subprocess.run(["git", "-C", str(root), "add", "sample.py"], check=True, close_fds=True)
+        subprocess.run(["git", "-C", str(root), "commit", "-m", "fixture"], check=True, capture_output=True, close_fds=True)
         return subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True
+            ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True, close_fds=True
         ).stdout.strip()
 
     def test_git_receipt_is_deterministic_and_byte_exact(self) -> None:

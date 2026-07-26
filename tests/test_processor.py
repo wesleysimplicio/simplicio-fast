@@ -314,8 +314,10 @@ class ProjectProcessorTest(unittest.TestCase):
                 return {"result": {"status": "ok"}}
 
             with patch("simplicio_fast.processor.run_dev_cli_changeset", side_effect=mutating_success):
-                with self.assertRaisesRegex(ValueError, "dry-run"):
-                    processor.apply_changeset(changeset, write=False)
+                receipt = processor.apply_changeset(changeset, write=False)
+            self.assertEqual("native_output_hash_mismatch", receipt["reason_code"])
+            self.assertEqual("dry_run", receipt["outcome"])
+            self.assertTrue(receipt["rollback"]["attempted"])
             self.assertEqual("value = 1\n", source.read_text())
             self.assertEqual(10, original)
 
