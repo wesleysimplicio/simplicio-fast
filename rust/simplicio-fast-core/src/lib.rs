@@ -54,6 +54,18 @@ pub struct SnapshotStats {
     pub generation: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct RustSymbol {
+    pub name: String,
+    pub qualified_name: String,
+    pub kind: String,
+    pub file: String,
+    pub line: u32,
+    pub end_line: u32,
+    pub symbol_id: String,
+    pub signature: String,
+}
+
 #[derive(Debug, Clone)]
 struct Section {
     offset: usize,
@@ -203,6 +215,80 @@ impl SnapshotReader {
             generation: format!("SFAST001:{}", hex(&self.digest)),
         }
     }
+
+    pub fn symbols(&self) -> Result<Vec<RustSymbol>, SnapshotError> {
+        let files = self.file_paths()?;
+        let strings = &self.sections["strings"];
+        let symbols = &self.sections["symbols"];
+        let mut result = Vec::with_capacity(symbols.length / SYMBOL_RECORD_SIZE);
+        for index in 0..symbols.length / SYMBOL_RECORD_SIZE {
+            let base = symbols.offset + index * SYMBOL_RECORD_SIZE;
+            let name = read_text(
+                &self.bytes,
+                strings,
+                u32_at(&self.bytes, base)? as usize,
+                u32_at(&self.bytes, base + 4)? as usize,
+            )?;
+            let qualified_name = read_text(
+                &self.bytes,
+                strings,
+                u32_at(&self.bytes, base + 8)? as usize,
+                u32_at(&self.bytes, base + 12)? as usize,
+            )?;
+            let signature = read_text(
+                &self.bytes,
+                strings,
+                u32_at(&self.bytes, base + 16)? as usize,
+                u32_at(&self.bytes, base + 20)? as usize,
+            )?;
+            let file_index = u32_at(&self.bytes, base + 24)? as usize;
+            let file = files
+                .get(file_index)
+                .ok_or_else(|| SnapshotError::Invalid("symbol file index out of bounds".into()))?;
+            let kind = kind_name(u32_at(&self.bytes, base + 36)?)?;
+            let symbol_id = hex_bytes(&self.bytes[base + 40..base + 72]);
+            result.push(RustSymbol {
+                name,
+                qualified_name,
+                kind,
+                file: file.clone(),
+                line: u32_at(&self.bytes, base + 28)?,
+                end_line: u32_at(&self.bytes, base + 32)?,
+                symbol_id,
+                signature,
+            });
+        }
+        Ok(result)
+    }
+
+    pub fn query(&self, term: &str, limit: usize) -> Result<Vec<RustSymbol>, SnapshotError> {
+        let needle = term.to_lowercase();
+        Ok(self
+            .symbols()?
+            .into_iter()
+            .filter(|symbol| {
+                symbol.name.to_lowercase().contains(&needle)
+                    || symbol.qualified_name.to_lowercase().contains(&needle)
+            })
+            .take(limit)
+            .collect())
+    }
+
+    fn file_paths(&self) -> Result<Vec<String>, SnapshotError> {
+        let files = &self.sections["files"];
+        let strings = &self.sections["strings"];
+        let mut paths = Vec::with_capacity(files.length / FILE_RECORD_SIZE);
+        for index in 0..files.length / FILE_RECORD_SIZE {
+            let base = files.offset + index * FILE_RECORD_SIZE;
+            paths.push(read_text(
+                &self.bytes,
+                strings,
+                u32_at(&self.bytes, base)? as usize,
+                u32_at(&self.bytes, base + 4)? as usize,
+            )?);
+        }
+        Ok(paths)
+    }
 }
 
 pub fn manifest() -> serde_json::Value {
@@ -225,6 +311,35 @@ fn region_valid(offset: usize, length: usize, total: usize) -> bool {
 
 fn section_bytes<'a>(bytes: &'a [u8], section: &Section) -> &'a [u8] {
     &bytes[section.offset..section.offset + section.length]
+}
+
+fn read_text(
+    bytes: &[u8],
+    strings: &Section,
+    offset: usize,
+    length: usize,
+) -> Result<String, SnapshotError> {
+    if !region_valid(offset, length, strings.length) {
+        return Err(SnapshotError::Invalid("string bounds out of range".into()));
+    }
+    String::from_utf8(bytes[strings.offset + offset..strings.offset + offset + length].to_vec())
+        .map_err(|_| SnapshotError::Invalid("invalid UTF-8 string".into()))
+}
+
+fn kind_name(kind: u32) -> Result<String, SnapshotError> {
+    let value = match kind {
+        1 => "class",
+        2 => "function",
+        3 => "async_function",
+        4 => "import",
+        5 => "namespace",
+        6 => "interface",
+        7 => "struct",
+        8 => "trait",
+        9 => "enum",
+        _ => return Err(SnapshotError::Invalid("unknown symbol kind".into())),
+    };
+    Ok(value.into())
 }
 
 fn u16_at(bytes: &[u8], offset: usize) -> Result<u16, SnapshotError> {
@@ -258,6 +373,10 @@ fn slice32(bytes: &[u8], offset: usize) -> Result<&[u8; 32], SnapshotError> {
 }
 
 fn hex(bytes: &[u8; 32]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn hex_bytes(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 

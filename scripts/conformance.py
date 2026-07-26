@@ -63,6 +63,34 @@ def _rust_stats(rust: Path, snapshot: Path) -> dict[str, Any]:
     return stats
 
 
+def _python_query(snapshot: Path, term: str) -> list[dict[str, Any]]:
+    payload = _json_command([
+        sys.executable,
+        "-m",
+        "simplicio_fast.cli",
+        "query",
+        term,
+        "--snapshot",
+        str(snapshot),
+        "--limit",
+        "50",
+        "--fast-engine",
+        "python",
+    ])
+    matches = payload.get("matches")
+    if not isinstance(matches, list):
+        raise RuntimeError("python_query_missing")
+    return matches
+
+
+def _rust_query(rust: Path, snapshot: Path, term: str) -> list[dict[str, Any]]:
+    payload = _json_command([str(rust), "--query", str(snapshot), term, "--limit", "50", "--json"])
+    matches = payload.get("matches")
+    if not isinstance(matches, list):
+        raise RuntimeError("rust_query_missing")
+    return matches
+
+
 def normalize(stats: dict[str, Any]) -> dict[str, Any]:
     return {
         "format_version": stats.get("format_version", stats.get("version")),
@@ -75,7 +103,12 @@ def normalize(stats: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run(snapshot: Path, rust: Path) -> dict[str, Any]:
+def normalize_symbols(symbols: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    fields = ("name", "qualified_name", "kind", "file", "line", "end_line", "symbol_id", "signature")
+    return [{field: symbol.get(field) for field in fields} for symbol in symbols]
+
+
+def run(snapshot: Path, rust: Path, term: str | None = None) -> dict[str, Any]:
     snapshot_digest = hashlib.sha256(snapshot.read_bytes()).hexdigest()
     python = _python_stats(snapshot)
     rust_stats = _rust_stats(rust, snapshot)
@@ -86,13 +119,26 @@ def run(snapshot: Path, rust: Path) -> dict[str, Any]:
         for key in python_normalized
         if python_normalized[key] != rust_normalized[key]
     }
+    queries: dict[str, Any] = {}
+    if term:
+        python_symbols = normalize_symbols(_python_query(snapshot, term))
+        rust_symbols = normalize_symbols(_rust_query(rust, snapshot, term))
+        queries = {
+            "term": term,
+            "python": python_symbols,
+            "rust": rust_symbols,
+            "match": python_symbols == rust_symbols,
+        }
+    query_mismatch = bool(queries and not queries["match"])
     return {
         "schema": SCHEMA,
-        "status": "pass" if not mismatches else "fail",
+        "status": "pass" if not mismatches and not query_mismatch else "fail",
         "snapshot": str(snapshot.resolve()),
         "snapshot_sha256": snapshot_digest,
         "engines": {"python": python_normalized, "rust": rust_normalized},
         "mismatches": mismatches,
+        "queries": queries,
+        "query_mismatch": query_mismatch,
     }
 
 
@@ -101,9 +147,10 @@ def main() -> int:
     parser.add_argument("--snapshot", type=Path, required=True)
     parser.add_argument("--rust", type=Path, required=True)
     parser.add_argument("--json-out", type=Path)
+    parser.add_argument("--term", help="also compare a public symbol query")
     args = parser.parse_args()
     try:
-        receipt = run(args.snapshot, args.rust)
+        receipt = run(args.snapshot, args.rust, args.term)
     except (OSError, RuntimeError) as error:
         receipt = {
             "schema": SCHEMA,
@@ -113,9 +160,10 @@ def main() -> int:
         }
     output = json.dumps(receipt, indent=2, sort_keys=True)
     if args.json_out:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(output + "\n", encoding="utf-8")
     print(output)
-    return 0 if receipt["status"] == "pass" else 2
+    return 0 if receipt["status"] == "pass" and not receipt.get("query_mismatch") else 2
 
 
 if __name__ == "__main__":
