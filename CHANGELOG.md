@@ -6,6 +6,8 @@ Simplicio Fast becomes a standalone project processor instead of requiring Mappe
 
 ### Added
 
+- Cross-platform benchmark peak-RSS collection with deterministic partial receipts when the
+  operating system cannot expose the metric.
 - `ingest`: absorb a repository into the incremental binary snapshot.
 - `understand`: resolve bounded, hash-verified context directly from a natural-language task.
 - `plan`: compile understanding into `simplicio.fast.plandag/v2`.

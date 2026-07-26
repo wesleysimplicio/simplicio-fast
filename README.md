@@ -99,6 +99,12 @@ python benchmarks/run.py
 
 The command records wall time, CPU time, peak RSS, cold build, warm query, no-change rebuild, one-file rebuild and whether the changed symbol became visible. Use at least ten repetitions and identical hardware/configuration when comparing integrations.
 
+Peak RSS is reported in KiB using POSIX `resource.getrusage` or Windows
+`GetProcessMemoryInfo` through the standard-library `ctypes` bridge. If the operating system
+cannot expose the metric, the command still completes with a partial receipt: `peak_rss_kib` is
+`null`, `peak_rss_reason` contains a deterministic reason code, and both `status` and
+`metrics_status` are `"partial"` in the `simplicio.fast.benchmark/v1` receipt.
+
 ## Install
 
 ```bash

@@ -1,6 +1,5 @@
 import ast
 import json
-import resource
 import statistics
 import sys
 import tempfile
@@ -11,6 +10,76 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from simplicio_fast.snapshot import Snapshot, build_snapshot, source_files
+
+
+def _unavailable(reason: str) -> dict[str, int | str | None]:
+    return {"value": None, "reason": reason}
+
+
+def _posix_peak_rss_kib(platform: str) -> dict[str, int | str | None]:
+    try:
+        import resource
+    except ImportError:
+        return _unavailable("posix_resource_module_unavailable")
+
+    try:
+        value = int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    except (AttributeError, OSError, ValueError):
+        return _unavailable("posix_resource_getrusage_unavailable")
+
+    # Linux and the BSDs report KiB; macOS reports bytes.
+    if platform == "darwin":
+        value //= 1024
+    return {"value": value, "reason": None}
+
+
+def _windows_peak_rss_kib() -> dict[str, int | str | None]:
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        class ProcessMemoryCounters(ctypes.Structure):
+            _fields_ = [
+                ("cb", wintypes.DWORD),
+                ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t),
+                ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t),
+                ("PeakPagefileUsage", ctypes.c_size_t),
+            ]
+
+        counters = ProcessMemoryCounters()
+        counters.cb = ctypes.sizeof(counters)
+        process = ctypes.windll.kernel32.GetCurrentProcess()
+        get_memory_info = ctypes.windll.psapi.GetProcessMemoryInfo
+        get_memory_info.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(ProcessMemoryCounters),
+            wintypes.DWORD,
+        ]
+        get_memory_info.restype = wintypes.BOOL
+        if not get_memory_info(process, ctypes.byref(counters), counters.cb):
+            return _unavailable("windows_get_process_memory_info_failed")
+        return {"value": int(counters.PeakWorkingSetSize // 1024), "reason": None}
+    except (AttributeError, ImportError, OSError, TypeError, ValueError):
+        return _unavailable("windows_process_memory_api_unavailable")
+
+
+def peak_rss_metric(platform: str | None = None) -> dict[str, int | str | None]:
+    """Return a deterministic peak-RSS value and an unavailable reason, if any."""
+    platform = sys.platform if platform is None else platform
+    if platform == "win32":
+        return _windows_peak_rss_kib()
+    return _posix_peak_rss_kib(platform)
+
+
+def peak_rss_kib() -> int | None:
+    """Return peak RSS in KiB for callers that only need the numeric value."""
+    return peak_rss_metric()["value"]  # type: ignore[return-value]
 
 
 def generate_project(root: Path, files: int = 500) -> None:
@@ -79,11 +148,17 @@ def main() -> None:
         with Snapshot(snapshot_path) as snapshot:
             changed_visible = len(snapshot.find("deactivate_user")) == 1
 
+        peak_rss = peak_rss_metric()
+        status = "complete" if peak_rss["reason"] is None else "partial"
         result = {
+            "schema": "simplicio.fast.benchmark/v1",
+            "status": status,
             "environment": {
                 "python": sys.version.split()[0],
                 "generated_files": 500,
-                "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                "peak_rss_kib": peak_rss["value"],
+                "peak_rss_reason": peak_rss["reason"],
+                "metrics_status": status,
             },
             "baseline_ast_query": baseline,
             "snapshot_cold_build": asdict(cold),
