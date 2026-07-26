@@ -12,6 +12,7 @@ from .snapshot import Snapshot, SnapshotBuildTimeout, StaleSnapshotError, build_
 from .adapters import capability_report
 from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
 from .engine import EngineSelectionError, select_engine
+from .delivery import DeliveryEngine
 from .users.http import serve
 from .users.repository import JsonUserRepository
 from .users.service import UserService
@@ -186,6 +187,17 @@ def build_parser() -> argparse.ArgumentParser:
         snapshot_argument(command)
         command.add_argument("--max-bytes", type=int, default=48_000)
 
+    delivery = commands.add_parser(
+        "delivery",
+        help="prepare bounded delivery context and emit a cache/provenance receipt",
+    )
+    delivery.add_argument("task", help="task or issue text")
+    delivery.add_argument("--root", default=".", help="repository root (default: .)")
+    snapshot_argument(delivery)
+    delivery.add_argument("--cache", default=None, help="delivery cache directory")
+    delivery.add_argument("--profile", choices=("full", "loop-standalone"), default="loop-standalone")
+    delivery.add_argument("--max-bytes", type=int, default=32_000)
+
     apply_command = commands.add_parser(
         "apply",
         help="validate or apply a hash-guarded structured changeset",
@@ -350,6 +362,14 @@ def main() -> None:
                 emit(asdict(processor.understand(args.task, max_bytes=args.max_bytes)))
             else:
                 emit(processor.plan(args.task, max_bytes=args.max_bytes))
+        elif args.command == "delivery":
+            emit(
+                DeliveryEngine(
+                    Path(args.root),
+                    Path(args.snapshot),
+                    Path(args.cache) if args.cache else None,
+                ).prepare(args.task, profile=args.profile, engine_receipt=selection.receipt())
+            )
         elif args.command == "apply":
             processor = ProjectProcessor(Path(args.root), Path(DEFAULT_SNAPSHOT))
             emit(
