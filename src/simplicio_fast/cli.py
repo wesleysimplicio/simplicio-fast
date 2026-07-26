@@ -11,6 +11,7 @@ from .rollout import RolloutController
 from .snapshot import Snapshot, SnapshotBuildTimeout, StaleSnapshotError, build_snapshot
 from .adapters import capability_report
 from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
+from .engine import EngineSelectionError, select_engine
 from .users.http import serve
 from .users.repository import JsonUserRepository
 from .users.service import UserService
@@ -74,6 +75,12 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "--fast-engine",
+        choices=("auto", "rust", "python", "off"),
+        default="auto",
+        help="select the Fast engine: Rust only after a healthy probe, or Python fallback (default: auto)",
+    )
     commands = parser.add_subparsers(dest="command", required=True)
 
     for name in ("build", "refresh", "ingest"):
@@ -257,6 +264,17 @@ def build_parser() -> argparse.ArgumentParser:
     watch.add_argument("--storage", default=None)
     watch.add_argument("--base-generation", required=True)
     watch.add_argument("--worktree-id", required=True)
+
+    # Accept the selector both before and after the subcommand.  Suppressing
+    # the subparser default preserves an explicit top-level value.
+    for command in commands.choices.values():
+        command.add_argument(
+            "--fast-engine",
+            dest="fast_engine",
+            choices=("auto", "rust", "python", "off"),
+            default=argparse.SUPPRESS,
+            help=argparse.SUPPRESS,
+        )
     return parser
 
 
@@ -264,6 +282,18 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
     try:
+        selection = select_engine(args.fast_engine)
+        if selection.selected == "rust":
+            raise EngineSelectionError(
+                {
+                    "schema": "simplicio.fast.engine-selection/v1",
+                    "requested": args.fast_engine,
+                    "selected": "unavailable",
+                    "reason": "rust_engine_probe_passed_but_cli_bridge_is_not_implemented",
+                    "executable": selection.executable,
+                    "manifest": selection.manifest,
+                }
+            )
         if args.command in {"build", "refresh", "ingest"}:
             processor = ProjectProcessor(Path(args.root), Path(args.output))
             if args.command == "ingest":
@@ -471,7 +501,12 @@ def main() -> None:
                     "matches": [asdict(item) for item in matches],
                 })
         elif args.command == "capabilities":
-            emit({"schema": "simplicio.fast.capabilities/v1", "capabilities": [asdict(item) for item in capability_report()]})
+            emit({
+                "schema": "simplicio.fast.capabilities/v1",
+                "engine": selection.receipt(),
+                "engine_manifest": selection.manifest,
+                "capabilities": [asdict(item) for item in capability_report()],
+            })
         elif args.command == "pin":
             lease = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).pin(args.generation, args.owner, args.ttl)
             emit({"schema": "simplicio.fast.lease/v1", "lease": asdict(lease)})
@@ -485,6 +520,9 @@ def main() -> None:
             overlay_value, _ = store.watch_once(args.worktree_id, args.base_generation)
             emit({"schema": "simplicio.fast.watch/v1", "changed": overlay_value is not None,
                   "overlay": asdict(overlay_value) if overlay_value else None})
+    except EngineSelectionError as error:
+        emit(error.receipt)
+        raise SystemExit(2) from error
     except (FileNotFoundError, RuntimeError, ValueError, SnapshotBuildTimeout, StaleSnapshotError) as error:
         emit(
             {
