@@ -263,6 +263,16 @@ directly. Full cross-repository integration is tracked in the [integration epic]
 The compatibility matrix and the atomic shadow/canary/rollback receipt contract
 are documented in [`docs/issue-8-v2-validation.md`](docs/issue-8-v2-validation.md).
 
+### Verified address catalog (Python reference)
+
+`simplicio_fast.catalog.AddressCatalog` keeps the complete Mapper SHA-256 as the
+authoritative identity and derives a short handle scoped to the normalized repository
+and generation. `resolve`, `resolve_many`, `verify`, `stat` and binary `save`/`load`
+validate payload digests and fail closed for cross-repository, stale-generation,
+tombstoned or corrupted handles. The catalog never exposes `.sfast` offsets. Rust/mmap
+integration, context-packet handle transport and golden Python/Rust fixtures remain
+explicit follow-up gates for issue #59.
+
 <p align="center">
   <img src="assets/simplicio-fast-verified-flow-v3.png" alt="Compact context moving through planning, editing, testing and verification gates" width="920" />
 </p>
