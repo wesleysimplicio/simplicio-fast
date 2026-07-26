@@ -239,22 +239,22 @@ class ProjectProcessor:
                     delegated = {**delegated, "result": result}
                 else:
                     return self._receipt(
-                    mode="write" if write else "dry-run",
-                    executor=delegated,
-                    files=after,
-                    native={
-                        "status": "ok",
-                        "before_sha256": {item["path"]: item["before_sha256"] for item in before},
-                        "after_sha256": {item["path"]: item["after_sha256"] for item in after},
-                        "no_write_proof": not write,
-                    },
-                    no_write_proof=not write,
-                    outcome="applied" if write else "dry_run",
-                    applied=write,
-                    write_attempted=write,
-                    reason_code=None,
-                    rollback={"attempted": False, "status": "not-needed", "restored_paths": []},
-                )
+                        mode="write" if write else "dry-run",
+                        executor=delegated,
+                        files=after,
+                        native={
+                            "status": "ok",
+                            "before_sha256": {item["path"]: item["before_sha256"] for item in before},
+                            "after_sha256": {item["path"]: item["after_sha256"] for item in after},
+                            "no_write_proof": not write,
+                        },
+                        no_write_proof=not write,
+                        outcome="applied" if write else "dry_run",
+                        applied=write,
+                        write_attempted=write,
+                        reason_code=None,
+                        rollback={"attempted": False, "status": "not-needed", "restored_paths": []},
+                    )
 
             native_before = self._file_records(prepared)
             restored = self._restore_prepared(prepared)
