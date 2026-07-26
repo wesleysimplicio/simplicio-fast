@@ -13,10 +13,22 @@ from simplicio_fast.snapshot import (
     Snapshot,
     StaleSnapshotError,
     build_snapshot,
+    source_files,
 )
 
 
 class SnapshotTest(unittest.TestCase):
+    def test_source_files_prunes_ignored_directories_before_traversal(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app.py").write_text("def run():\n    return True\n")
+            (root / "node_modules" / "nested").mkdir(parents=True)
+            (root / "node_modules" / "nested" / "ignored.py").write_text("def ignored():\n    pass\n")
+            (root / ".git" / "objects").mkdir(parents=True)
+            (root / ".git" / "objects" / "ignored.py").write_text("def ignored():\n    pass\n")
+
+            self.assertEqual([root / "app.py"], source_files(root))
+
     def test_binary_snapshot_query_and_incremental_reuse(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -19,7 +19,10 @@ DEFAULT_SNAPSHOT = ".simplicio-fast/project.sfast"
 
 
 def emit(value: object) -> None:
-    print(json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True))
+    # JSON is a machine-readable CLI contract.  Escape non-ASCII characters so
+    # Windows consoles using a legacy code page cannot fail while emitting a
+    # valid receipt containing source text or Unicode symbols.
+    print(json.dumps(value, indent=2, ensure_ascii=True, sort_keys=True))
 
 
 def source_commit(root: Path) -> tuple[str | None, str | None]:
@@ -217,7 +220,7 @@ def build_parser() -> argparse.ArgumentParser:
     merge.add_argument("--overlay-generation")
     merge.add_argument("--max-results", type=int, default=50)
 
-    capabilities = commands.add_parser("capabilities", help="report parser capability negotiation")
+    commands.add_parser("capabilities", help="report parser capability negotiation")
 
     pin = commands.add_parser("pin", help="acquire a lease protecting a generation from GC")
     pin.add_argument("generation")
