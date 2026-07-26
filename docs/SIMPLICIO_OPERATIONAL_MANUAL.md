@@ -26,6 +26,14 @@ context or claiming an integrated write.
 5. Use `apply --write` only after the source hashes and acceptance checks pass.
 6. Refresh the snapshot and rerun the validation commands from the receipt.
 
+When Dev CLI is installed but rejects a valid `simplicio.fast.changeset/v2`
+contract (including a native hash mismatch on Windows), `apply` records the
+native refusal, verifies a no-write/rollback proof, and uses Fast's explicit
+internal atomic fallback. The resulting `simplicio.fast.apply-receipt/v2`
+contains before/after SHA-256 values for every target and marks the executor as
+`fallback`; it must not be treated as an integrated Dev CLI write. Stale Fast
+source hashes still fail closed before either executor can run.
+
 Fast is not the policy or effect authority: Runtime authorizes effects and
 emits execution receipts, while Loop owns retries, slots and convergence.
 
