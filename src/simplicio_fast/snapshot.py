@@ -24,7 +24,9 @@ MAGIC = b"SFAST001"
 LEGACY_VERSION = 1
 VERSION = 2
 ENDIAN_MARKER = 0x0102
-MAX_SNAPSHOT_BYTES = 256 * 1024 * 1024
+# The agent repository's canonical v2 snapshot is about 406 MiB. Keep a hard
+# bound while allowing that supported Windows checkout to publish atomically.
+MAX_SNAPSHOT_BYTES = 512 * 1024 * 1024
 MAX_FILES = 1_000_000
 MAX_SYMBOLS = 5_000_000
 MAX_RELATIONS = 10_000_000
@@ -251,6 +253,20 @@ class SnapshotBuildTimeout(TimeoutError):
     recovery = "retry with a larger timeout or exclude generated/vendor source directories"
 
 
+class SnapshotTooLarge(ValueError):
+    """Raised before allocating or publishing a snapshot over the hard bound."""
+
+    code = "snapshot_too_large"
+
+    def __init__(self, size: int, limit: int) -> None:
+        self.size = size
+        self.limit = limit
+        self.recovery = "exclude generated/vendor source or use a partitioned repository snapshot"
+        super().__init__(
+            f"{self.code} size={size} limit={limit} recovery={self.recovery}"
+        )
+
+
 class SourceFileTooLarge(ValueError):
     """Raised before parsing a source file that exceeds the safety bound."""
 
@@ -406,6 +422,8 @@ def _build_v2(entries: list[tuple[str, bytes, int, list[Symbol]]], relations: li
         section_rows.append(SECTION_RECORD.pack(name.encode("ascii"), offset, len(data), digest))
         offset += len(data)
     total_size = offset
+    if total_size > MAX_SNAPSHOT_BYTES:
+        raise SnapshotTooLarge(total_size, MAX_SNAPSHOT_BYTES)
     source_digest = hashlib.sha256(b"".join(digest for _, digest, _, _ in entries)).digest()
     generation_int = int.from_bytes(source_digest[:8], "little")
     header = HEADER.pack(MAGIC, VERSION, ENDIAN_MARKER, section_count, generation_int, directory_offset, directory_size, total_size, b"\0" * 32)
