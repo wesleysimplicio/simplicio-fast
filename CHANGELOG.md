@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.0.1 - 2026-07-26
+
+Documentation and visual refresh for the Fast 2.x contract.
+
+### Changed
+
+- Clarified Fast's role for agents and LLMs: semantic project memory plus guarded change
+  coordination, not an LLM, scheduler or policy authority.
+- Expanded top-level CLI help and command inventory for tool discovery.
+- Rewrote `AGENTS.md` around Mapper, Dev CLI, Loop and Runtime boundaries, receipts and safe
+  generation handling.
+- Added new hero, shared-memory and verified-flow illustrations under `assets/`.
+
 ## 2.0.0 - 2026-07-26
 
 Simplicio Fast becomes a standalone project processor instead of requiring Mapper or Dev CLI.

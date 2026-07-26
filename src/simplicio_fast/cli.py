@@ -56,8 +56,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="simplicio-fast",
         description=(
-            "Build and query versioned binary semantic snapshots without replacing source files."
+            "Simplicio Fast is semantic project memory and guarded change coordination for AI coding tools.\n\n"
+            "It ingests a repository into an incremental binary/mmap snapshot, returns bounded\n"
+            "hash-verified context, compiles PlanDAGs, and validates changesets without replacing\n"
+            "the source files. Mapper owns canonical extraction; Dev CLI owns mechanical edits;\n"
+            "Loop owns convergence; Runtime owns policy and effects."
         ),
+        epilog=(
+            "Typical flow: build/ingest -> context or understand -> plan -> apply (dry-run first)\n"
+            "-> refresh and validate. Use --help on a subcommand for its JSON contract.\n"
+            "Never read .sfast offsets directly: use versioned Fast or Mapper handles."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     commands = parser.add_subparsers(dest="command", required=True)
