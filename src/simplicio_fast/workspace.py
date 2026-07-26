@@ -13,15 +13,14 @@ import os
 import secrets
 import shutil
 import subprocess
-import threading
 import time
 import uuid
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Iterator
 
-from .adapters import capability_report, language_for_path, parse_path
+from .adapters import capability_report, parse_path
 from .snapshot import ContextSpan, Snapshot, StaleSnapshotError, Symbol, build_snapshot, source_files
 
 MANIFEST_SCHEMA = "simplicio.fast.manifest/v1"

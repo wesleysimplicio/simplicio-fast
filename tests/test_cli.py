@@ -68,6 +68,19 @@ class ContextProvenanceTest(unittest.TestCase):
             self.assertNotEqual(receipt["snapshot_sha256"], changed["provenance"]["snapshot_sha256"])
             self.assertNotEqual(receipt["snapshot_generation"], changed["provenance"]["snapshot_generation"])
 
+    def test_emit_is_safe_for_legacy_windows_console_encoding(self) -> None:
+        from simplicio_fast.cli import emit
+
+        encoded = io.BytesIO()
+        console = io.TextIOWrapper(encoded, encoding="cp1252")
+        with contextlib.redirect_stdout(console):
+            emit({"symbol": "route → local"})
+        console.flush()
+
+        output = encoded.getvalue().decode("cp1252")
+        self.assertIn("\\u2192", output)
+        self.assertEqual({"symbol": "route → local"}, json.loads(output))
+
     def test_non_git_and_stale_source_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

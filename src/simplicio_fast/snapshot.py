@@ -280,14 +280,16 @@ def parse_symbols(path: Path, relative_path: str) -> list[Symbol]:
 
 def source_files(root: Path) -> list[Path]:
     ignored = {".git", ".venv", "__pycache__", ".simplicio-fast", ".simplicio", "node_modules"}
-    return sorted(
-        path
-        for path in root.rglob("*")
-        if path.is_file() and path.suffix.casefold() in {
-            ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".rs", ".cs"
-        }
-        if not any(part in ignored for part in path.relative_to(root).parts)
-    )
+    suffixes = {".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".rs", ".cs"}
+    found: list[Path] = []
+    for directory, directories, filenames in os.walk(root, topdown=True, followlinks=False):
+        directories[:] = sorted(name for name in directories if name not in ignored)
+        found.extend(
+            Path(directory) / name
+            for name in sorted(filenames)
+            if Path(name).suffix.casefold() in suffixes
+        )
+    return sorted(found)
 
 
 def _add_string(strings: bytearray, value: str) -> tuple[int, int]:
