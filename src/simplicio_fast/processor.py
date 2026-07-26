@@ -11,7 +11,7 @@ from typing import Any
 
 from .integrations import run_dev_cli_changeset, run_mapper
 from .snapshot import ContextSpan, Snapshot, build_snapshot
-
+from .snapshot import DEFAULT_MAX_SOURCE_FILE_BYTES
 STOP_WORDS = {
     "a", "an", "and", "as", "at", "build", "change", "create", "do", "for", "from",
     "implement", "in", "into", "of", "on", "or", "the", "to", "update", "with",
@@ -58,7 +58,12 @@ class ProjectProcessor:
         self.root = root.resolve()
         self.snapshot_path = snapshot_path
 
-    def ingest(self) -> dict[str, Any]:
+    def ingest(
+        self,
+        *,
+        timeout_seconds: float | None = None,
+        max_file_bytes: int = DEFAULT_MAX_SOURCE_FILE_BYTES,
+    ) -> dict[str, Any]:
         mapper = run_mapper(self.root)
         return {
             "schema": "simplicio.fast.ingest/v2",
@@ -68,7 +73,14 @@ class ProjectProcessor:
                 "status": "fallback",
                 "reason": "simplicio-mapper is not installed",
             },
-            "metrics": asdict(build_snapshot(self.root, self.snapshot_path)),
+            "metrics": asdict(
+                build_snapshot(
+                    self.root,
+                    self.snapshot_path,
+                    timeout_seconds=timeout_seconds,
+                    max_file_bytes=max_file_bytes,
+                )
+            ),
         }
 
     def understand(

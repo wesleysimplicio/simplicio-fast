@@ -30,6 +30,7 @@ MAX_SYMBOLS = 5_000_000
 MAX_RELATIONS = 10_000_000
 MAX_SECTIONS = 32
 
+DEFAULT_MAX_SOURCE_FILE_BYTES = 8 * 1024 * 1024
 # v1 is deliberately frozen.  Do not change these structs: old snapshots must
 # remain readable after a v2 writer is installed.
 LEGACY_HEADER = struct.Struct("<8s7I")
@@ -250,6 +251,20 @@ class SnapshotBuildTimeout(TimeoutError):
     recovery = "retry with a larger timeout or exclude generated/vendor source directories"
 
 
+class SourceFileTooLarge(ValueError):
+    """Raised before parsing a source file that exceeds the safety bound."""
+
+    code = "source_file_too_large"
+
+    def __init__(self, path: Path, size: int, limit: int) -> None:
+        self.path = path.as_posix()
+        self.size = size
+        self.limit = limit
+        self.recovery = "exclude generated/vendor source or raise --max-file-bytes explicitly"
+        super().__init__(
+            f"{self.code} path={self.path} size={size} limit={limit} recovery={self.recovery}"
+        )
+
 class SourceEncodingError(ValueError):
     code = "source_encoding_unreadable"
 
@@ -433,9 +448,13 @@ def build_snapshot(
     output: Path,
     *,
     timeout_seconds: float | None = None,
+    max_file_bytes: int = DEFAULT_MAX_SOURCE_FILE_BYTES,
 ) -> BuildMetrics:
     wall_start = time.perf_counter()
     cpu_start = time.process_time()
+
+    if max_file_bytes < 1:
+        raise ValueError("max_file_bytes must be positive")
     root = root.resolve()
     repository = _repository_id(root)
     previous: dict[str, tuple[bytes, list[Symbol]]] = {}
@@ -465,6 +484,13 @@ def build_snapshot(
                 f"snapshot build exceeded {timeout_seconds:g}s before publishing; "
                 "the previous snapshot was preserved"
             )
+
+        try:
+            file_size = path.stat().st_size
+        except OSError as error:
+            raise OSError(f"could not stat source file {path}: {error}") from error
+        if file_size > max_file_bytes:
+            raise SourceFileTooLarge(path, file_size, max_file_bytes)
         relative = path.relative_to(root).as_posix()
         contents = path.read_bytes()
         digest = hashlib.sha256(contents).digest()

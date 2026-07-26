@@ -197,6 +197,19 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(before, output.read_bytes())
 
 
+    def test_oversized_source_fails_before_parse_and_preserves_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "sample.py"
+            source.write_text("def original():\n    return True\n")
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            before = output.read_bytes()
+            source.write_text("x" * 32)
+            with self.assertRaisesRegex(ValueError, "source_file_too_large"):
+                build_snapshot(root, output, max_file_bytes=4)
+            self.assertEqual(before, output.read_bytes())
+
 
 if __name__ == "__main__":
     unittest.main()
