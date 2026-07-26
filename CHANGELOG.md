@@ -1,4 +1,14 @@
 # Changelog
+## 2.0.3 - 2026-07-26
+
+### Fixed
+
+- Recovers truncated or corrupt derived snapshots from authoritative source files.
+- Validates rebuilt snapshots before atomic publication and preserves the prior generation on failure or timeout.
+- Adds structured recovery and timeout receipts for Windows execution.
+- Makes concurrent overlay JSON publication resilient to transient Windows locks.
+- Uses physical-byte hashes for guarded apply while preserving CRLF and adapter validation.
+- Adds regression coverage for recovery, timeout, concurrency and consecutive changesets.
 
 ## 2.0.2 - 2026-07-26
 
