@@ -36,6 +36,23 @@ class EngineSelectionTest(unittest.TestCase):
         self.assertEqual("rust_executable_missing", raised.exception.receipt["reason"])
         self.assertEqual("unavailable", raised.exception.receipt["selected"])
 
+    def test_probe_requires_conformance_before_auto_promotion(self) -> None:
+        manifest = {
+            "schema": "simplicio.fast.engine-manifest/v1",
+            "engine": "rust",
+            "status": "available",
+            "conformance": {"passed": False},
+        }
+        with patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"), patch(
+            "simplicio_fast.engine.subprocess.run"
+        ) as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = json.dumps(manifest)
+            run.return_value.stderr = ""
+            selection = select_engine("auto")
+        self.assertEqual("python", selection.selected)
+        self.assertEqual("rust_conformance_missing", selection.reason)
+
     def test_manifest_is_versioned_and_declares_reference_capabilities(self) -> None:
         manifest = python_manifest()
         self.assertEqual("simplicio.fast.engine-manifest/v1", manifest["schema"])

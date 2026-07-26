@@ -9,5 +9,6 @@ __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
+rust/target/
 !data/.gitkeep
 !benchmarks/results/.gitkeep
