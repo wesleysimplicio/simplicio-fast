@@ -134,5 +134,28 @@ class ContextProvenanceTest(unittest.TestCase):
 
         with patch("simplicio_fast.cli.subprocess.run", side_effect=OSError("git unavailable")):
             self.assertEqual((None, "git_unavailable"), source_commit(Path(".")))
+
+    def test_doctor_reports_stable_recovery_and_refresh_repairs_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.py").write_text("def recovered():\n    return True\n")
+            snapshot = root / "project.sfast"
+            snapshot.write_bytes(b"truncated")
+
+            code, doctor = self.invoke("doctor", "--snapshot", str(snapshot))
+            self.assertEqual(1, code)
+            integrity = next(item for item in doctor["checks"] if item["name"] == "snapshot_integrity")
+            self.assertEqual("snapshot_corrupt_rebuild", integrity["detail"]["recovery_code"])
+
+            code, refreshed = self.invoke(
+                "refresh", str(root), "--output", str(snapshot), "--timeout", "30"
+            )
+            self.assertEqual(0, code)
+            self.assertEqual("simplicio.fast.build/v1", refreshed["schema"])
+            code, query = self.invoke("query", "recovered", "--snapshot", str(snapshot))
+            self.assertEqual(0, code)
+            self.assertEqual(1, len(query["matches"]))
+
+
 if __name__ == "__main__":
     unittest.main()
