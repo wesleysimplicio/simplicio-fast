@@ -3,6 +3,7 @@ import unittest
 import hashlib
 import random
 from pathlib import Path
+from unittest.mock import patch
 
 from simplicio_fast.snapshot import (
     LEGACY_FILE_RECORD,
@@ -12,6 +13,7 @@ from simplicio_fast.snapshot import (
     SourceEncodingError,
     Snapshot,
     SnapshotBuildTimeout,
+    SnapshotTooLarge,
     StaleSnapshotError,
     build_snapshot,
     source_files,
@@ -209,6 +211,16 @@ class SnapshotTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "source_file_too_large"):
                 build_snapshot(root, output, max_file_bytes=4)
             self.assertEqual(before, output.read_bytes())
+
+    def test_snapshot_size_bound_fails_before_publication(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.py").write_text("def bounded():\n    return True\n")
+            output = root / "project.sfast"
+            with patch("simplicio_fast.snapshot.MAX_SNAPSHOT_BYTES", 64):
+                with self.assertRaises(SnapshotTooLarge):
+                    build_snapshot(root, output)
+            self.assertFalse(output.exists())
 
 
 if __name__ == "__main__":
