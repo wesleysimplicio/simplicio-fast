@@ -234,6 +234,8 @@ The `build`, `query`, direct-index `search`, bounded `context`, typed `impact`, 
 `doctor` surfaces remain available for the binary format. Mapper remains the canonical public
 context producer; consumers should use its versioned handles rather than reading this binary
 directly. Full cross-repository integration is tracked in the [integration epic](https://github.com/wesleysimplicio/simplicio-fast/issues/1).
+The compatibility matrix and the atomic shadow/canary/rollback receipt contract
+are documented in [`docs/issue-8-v2-validation.md`](docs/issue-8-v2-validation.md).
 
 <p align="center">
   <img src="assets/simplicio-fast-verified-flow.webp" alt="Compact context moving through planning, editing, testing and verification gates" width="920" />
@@ -327,7 +329,8 @@ Planned:
 - leases/pins, conservative GC, atomic receipts and debounced refresh;
 - full Mapper, Dev CLI, Loop and Runtime integration remains an integration concern:
   callers must pass Mapper-owned handles and must not read Fast offsets directly;
-- central daemon, native parser bindings, shadow/canary and rollback remain follow-up work.
+- central daemon and native parser bindings remain follow-up work;
+- shadow/canary/rollback rollout receipts are implemented and versioned.
 
 ## Ecosystem architecture
 

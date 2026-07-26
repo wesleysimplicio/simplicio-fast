@@ -1,12 +1,82 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Any
+
+
+MINIMUM_MAPPER = (0, 24, 2)
+MINIMUM_DEV_CLI = (0, 16, 3)
+
+
+def _version_tuple(value: str | None) -> tuple[int, ...] | None:
+    if not value:
+        return None
+    parts: list[int] = []
+    for part in value.split("."):
+        digits = "".join(character for character in part if character.isdigit())
+        if not digits:
+            break
+        parts.append(int(digits))
+    return tuple(parts) if parts else None
+
+
+def _distribution_version(name: str) -> str | None:
+    try:
+        return importlib.metadata.version(name)
+    except importlib.metadata.PackageNotFoundError:
+        return None
+
+
+def _executable(name: str) -> str | None:
+    found = shutil.which(name)
+    if found:
+        return found
+    sibling = Path(sys.executable).with_name(name)
+    return str(sibling) if sibling.is_file() else None
+
+
+def integration_status() -> dict[str, Any]:
+    """Return the single compatibility decision used by doctor and receipts.
+
+    The status is deliberately fail-closed: package metadata without an
+    executable, or an executable below the tested contract, is not integrated.
+    """
+    mapper_version = _distribution_version("simplicio-mapper")
+    dev_cli_version = _distribution_version("simplicio-cli")
+    mapper_ok = bool(
+        mapper_version
+        and _executable("simplicio-mapper")
+        and (_version_tuple(mapper_version) or ()) >= MINIMUM_MAPPER
+    )
+    dev_cli_ok = bool(
+        dev_cli_version
+        and _executable("simplicio-cli")
+        and (_version_tuple(dev_cli_version) or ()) >= MINIMUM_DEV_CLI
+    )
+    return {
+        "schema": "simplicio.fast.integration-status/v1",
+        "mapper": {
+            "package": "simplicio-mapper",
+            "version": mapper_version,
+            "minimum": ".".join(map(str, MINIMUM_MAPPER)),
+            "executable": _executable("simplicio-mapper"),
+            "compatible": mapper_ok,
+        },
+        "dev_cli": {
+            "package": "simplicio-cli",
+            "version": dev_cli_version,
+            "minimum": ".".join(map(str, MINIMUM_DEV_CLI)),
+            "executable": _executable("simplicio-cli"),
+            "compatible": dev_cli_ok,
+        },
+        "integrated_ready": mapper_ok and dev_cli_ok,
+    }
 
 
 def _contract_hash(value: bytes | str) -> str:

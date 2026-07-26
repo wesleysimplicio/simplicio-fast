@@ -1,14 +1,13 @@
 import argparse
-import importlib.metadata
 import json
 import subprocess
-import shutil
 import sys
 from dataclasses import asdict
 from pathlib import Path
 
 from . import __version__
 from .processor import ProjectProcessor, load_changeset
+from .rollout import RolloutController
 from .snapshot import Snapshot, StaleSnapshotError, build_snapshot
 from .adapters import capability_report
 from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
@@ -173,6 +172,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     snapshot_argument(doctor)
     json_option(doctor)
+
+    rollout = commands.add_parser(
+        "rollout",
+        help="record an atomic shadow/canary/integrated rollout receipt",
+    )
+    rollout.add_argument(
+        "mode",
+        choices=("shadow", "canary", "integrated", "fallback", "rollback"),
+    )
+    rollout.add_argument("--state", default=".simplicio-fast/rollout.json")
+    rollout.add_argument("--generation")
+    rollout.add_argument("--reason")
 
     server = commands.add_parser("serve", help="run the user CRUD proof-of-concept API")
     server.add_argument("--port", type=int, default=3000)
@@ -339,37 +350,11 @@ def main() -> None:
                 emit({"schema": "simplicio.fast.stats/v1", "stats": snapshot.stats()})
         elif args.command == "doctor":
             path = Path(args.snapshot)
-            def distribution(name: str) -> str | None:
-                try:
-                    return importlib.metadata.version(name)
-                except importlib.metadata.PackageNotFoundError:
-                    return None
+            from .integrations import integration_status
 
-            mapper_version = distribution("simplicio-mapper")
-            dev_cli_version = distribution("simplicio-cli")
-            script_dir = Path(sys.executable).parent
-            mapper_executable = shutil.which("simplicio-mapper") or (
-                str(script_dir / "simplicio-mapper")
-                if (script_dir / "simplicio-mapper").is_file()
-                else None
-            )
-            dev_cli_executable = shutil.which("simplicio-cli") or (
-                str(script_dir / "simplicio-cli")
-                if (script_dir / "simplicio-cli").is_file()
-                else None
-            )
+            integration = integration_status()
             checks: list[dict[str, object]] = [
                 {"name": "python", "status": "pass", "detail": sys.version.split()[0]},
-                {
-                    "name": "simplicio_mapper",
-                    "status": "pass" if mapper_version and mapper_executable else "fail",
-                    "detail": mapper_version or "not installed",
-                },
-                {
-                    "name": "simplicio_dev_cli",
-                    "status": "pass" if dev_cli_version and dev_cli_executable else "fail",
-                    "detail": dev_cli_version or "not installed",
-                },
                 {
                     "name": "snapshot_exists",
                     "status": "pass" if path.is_file() else "fail",
@@ -394,10 +379,25 @@ def main() -> None:
                             "detail": {"error": type(error).__name__, "message": str(error)},
                         }
                     )
-            ready = all(check["status"] == "pass" for check in checks)
-            emit({"schema": "simplicio.fast.doctor/v1", "ready": ready, "checks": checks})
-            if not ready:
+            snapshot_ready = all(check["status"] == "pass" for check in checks)
+            integrated_ready = snapshot_ready and bool(integration["integrated_ready"])
+            emit(
+                {
+                    "schema": "simplicio.fast.doctor/v1",
+                    "ready": integrated_ready,
+                    "integrated_ready": integrated_ready,
+                    "integration": integration,
+                    "checks": checks,
+                }
+            )
+            if not integrated_ready:
                 raise SystemExit(1)
+        elif args.command == "rollout":
+            emit(
+                RolloutController(Path(args.state)).transition(
+                    args.mode, generation=args.generation, reason=args.reason
+                )
+            )
         elif args.command == "serve":
             service = UserService(JsonUserRepository(Path("data/users.json")))
             print(f"simplicio-fast listening on http://127.0.0.1:{args.port}")
