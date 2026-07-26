@@ -13,6 +13,7 @@ import ast
 import json
 import math
 import platform
+import py_compile
 import statistics
 import tempfile
 import time
@@ -73,6 +74,71 @@ def ast_context(root: Path, term: str, *, max_lines: int = 8) -> str:
     return "\n".join(snippets)
 
 
+def direct_target(root: Path, term: str) -> Path:
+    for path in sorted(root.glob("*.py")):
+        if term.casefold() in path.read_text(encoding="utf-8").casefold():
+            return path
+    raise LookupError(f"target not found: {term}")
+
+
+def apply_deterministic_change(path: Path) -> None:
+    source = path.read_text(encoding="utf-8")
+    changed = source.replace("return value\n", "return value + 1\n", 1)
+    if changed == source:
+        raise ValueError(f"change marker not found: {path}")
+    path.write_text(changed, encoding="utf-8")
+    py_compile.compile(str(path), doraise=True)
+
+
+def timed_edit(call: Callable[[], str], root: Path, term: str, snapshot: Path | None, repetitions: int, *, refresh: bool) -> dict[str, Any]:
+    durations: list[float] = []
+    contexts: list[str] = []
+    target = direct_target(root, term)
+    original = target.read_text(encoding="utf-8")
+    for _ in range(repetitions):
+        start = time.perf_counter_ns()
+        context = call()
+        durations.append((time.perf_counter_ns() - start) / 1_000_000)
+        contexts.append(context)
+        # Reset is harness setup and deliberately excluded from the measured
+        # alteration interval. Refresh after reset keeps the next repetition
+        # on the same generation and prevents stale-source false positives.
+        target.write_text(original, encoding="utf-8")
+        if refresh and snapshot is not None:
+            build_snapshot(root, snapshot)
+    return {
+        "repetitions": repetitions,
+        "wall_ms": {
+            "median": statistics.median(durations),
+            "p95": sorted(durations)[max(0, math.ceil(repetitions * 0.95) - 1)],
+            "samples": durations,
+        },
+        "estimated_input_tokens": sum(estimate_tokens(context) for context in contexts),
+        "context_bytes": sum(len(context.encode("utf-8")) for context in contexts),
+        "token_measurement": "whitespace-v1-estimate",
+        "operation": "locate+edit+py_compile" + ("+refresh" if refresh else ""),
+    }
+
+
+def direct_edit(root: Path, term: str) -> str:
+    context = direct_context(root, term)
+    apply_deterministic_change(direct_target(root, term))
+    return context
+
+
+def fast_edit(root: Path, snapshot: Path, term: str, *, refresh: bool) -> str:
+    with Snapshot(snapshot) as opened:
+        spans = opened.context(root, term, max_results=1, max_bytes=64_000)
+        if not spans:
+            raise LookupError(f"Fast target not found: {term}")
+        context = spans[0].content
+        target = root / spans[0].file
+    apply_deterministic_change(target)
+    if refresh:
+        build_snapshot(root, snapshot)
+    return context
+
+
 def timed(call: Callable[[], str], repetitions: int) -> dict[str, Any]:
     durations: list[float] = []
     bytes_seen = 0
@@ -117,6 +183,26 @@ def run(*, files: int, functions: int, repetitions: int) -> dict[str, Any]:
                 repetitions,
             )
 
+        alteration_without_fast = timed_edit(
+            lambda: direct_edit(root, term), root, term, None, repetitions, refresh=False
+        )
+        alteration_fast = timed_edit(
+            lambda: fast_edit(root, snapshot, term, refresh=False),
+            root,
+            term,
+            snapshot,
+            repetitions,
+            refresh=False,
+        )
+        alteration_fast_refresh = timed_edit(
+            lambda: fast_edit(root, snapshot, term, refresh=True),
+            root,
+            term,
+            snapshot,
+            repetitions,
+            refresh=True,
+        )
+
         baseline_scan_total = sum(baseline_scan["wall_ms"]["samples"])
         baseline_ast_total = sum(baseline_ast["wall_ms"]["samples"])
         fast_total = build_wall_ms + sum(fast["wall_ms"]["samples"])
@@ -132,6 +218,9 @@ def run(*, files: int, functions: int, repetitions: int) -> dict[str, Any]:
                 "without_fast_scan": baseline_scan,
                 "without_fast_ast_reparse": baseline_ast,
                 "fast_python": fast,
+                "without_fast_alteration": alteration_without_fast,
+                "fast_python_alteration": alteration_fast,
+                "fast_python_alteration_refresh": alteration_fast_refresh,
             },
             "totals": {
                 "without_fast_scan_wall_ms": baseline_scan_total,
@@ -147,6 +236,23 @@ def run(*, files: int, functions: int, repetitions: int) -> dict[str, Any]:
                     if baseline_ast["estimated_input_tokens"]
                     else None
                 ),
+                "without_fast_alteration_wall_ms": sum(alteration_without_fast["wall_ms"]["samples"]),
+                "fast_python_alteration_wall_ms": sum(alteration_fast["wall_ms"]["samples"]),
+                "fast_python_alteration_refresh_wall_ms": sum(alteration_fast_refresh["wall_ms"]["samples"]),
+                "alteration_speedup_hot": (
+                    sum(alteration_without_fast["wall_ms"]["samples"])
+                    / sum(alteration_fast["wall_ms"]["samples"])
+                    if sum(alteration_fast["wall_ms"]["samples"])
+                    else None
+                ),
+                "alteration_speedup_with_refresh": (
+                    sum(alteration_without_fast["wall_ms"]["samples"])
+                    / sum(alteration_fast_refresh["wall_ms"]["samples"])
+                    if sum(alteration_fast_refresh["wall_ms"]["samples"])
+                    else None
+                ),
+                "alteration_estimated_tokens_without_fast": alteration_without_fast["estimated_input_tokens"],
+                "alteration_estimated_tokens_fast": alteration_fast["estimated_input_tokens"],
             },
             "limitations": [
                 "Fast Python is measured; Rust and Full/Loop ecosystem cells remain pending until their engines/integrations exist.",
@@ -172,9 +278,17 @@ def markdown_report(result: dict[str, Any]) -> str:
             f"- Estimated input tokens without Fast: {totals['estimated_tokens_without_fast']}",
             f"- Estimated input tokens with Fast: {totals['estimated_tokens_fast']}",
             f"- Estimated tokens saved: {totals['estimated_tokens_saved']} ({totals['estimated_token_savings_percent']:.2f}%)",
+            f"- Baseline alteration total wall time: {totals['without_fast_alteration_wall_ms']:.3f} ms",
+            f"- Fast hot alteration total wall time: {totals['fast_python_alteration_wall_ms']:.3f} ms",
+            f"- Fast alteration + refresh total wall time: {totals['fast_python_alteration_refresh_wall_ms']:.3f} ms",
+            f"- Alteration speedup (hot): {totals['alteration_speedup_hot']:.3f}x",
+            f"- Alteration speedup (with refresh): {totals['alteration_speedup_with_refresh']:.3f}x",
+            f"- Alteration estimated tokens without Fast: {totals['alteration_estimated_tokens_without_fast']}",
+            f"- Alteration estimated tokens with Fast: {totals['alteration_estimated_tokens_fast']}",
             "",
             "Token values use `whitespace-v1-estimate`; they are not provider billing telemetry.",
             "Rust and Full/Loop cells remain pending until those engines/integrations are implemented.",
+            "Alteration is a deterministic local fixture (locate + edit + py_compile), not an LLM/provider delivery run.",
             "",
         ]
     )
