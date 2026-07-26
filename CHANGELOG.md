@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.0.2 - 2026-07-26
+
+Safe native-hash fallback for guarded `apply` on Windows.
+
+### Fixed
+
+- Native Dev CLI refusals now produce a machine-readable
+  `simplicio.fast.apply-receipt/v2` instead of an unversioned error.
+- `apply` proves no-write or rolls back partial native mutations before using
+  the explicit internal atomic fallback.
+- Apply receipts include raw before/after SHA-256 values, outcome, reason code,
+  write status and rollback evidence.
+- Stale source hashes remain fail-closed, including immediately before each
+  fallback replacement.
+
 ## 2.0.1 - 2026-07-26
 
 Documentation and visual refresh for the Fast 2.x contract.
