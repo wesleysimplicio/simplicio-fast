@@ -217,6 +217,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Check Python, snapshot structure and query readiness; emits JSON.",
     )
     snapshot_argument(doctor)
+    doctor.add_argument("--installation", action="store_true", help="report local Python/Rust artifacts without downloading")
     json_option(doctor)
 
     rollout = commands.add_parser(
@@ -438,6 +439,11 @@ def main() -> None:
             with Snapshot(Path(args.snapshot)) as snapshot:
                 emit({"schema": "simplicio.fast.stats/v1", "stats": snapshot.stats()})
         elif args.command == "doctor":
+            if args.installation:
+                from .installation import report
+
+                emit(report())
+                return
             path = Path(args.snapshot)
             from .integrations import integration_status
 
