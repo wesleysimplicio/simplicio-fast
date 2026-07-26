@@ -15,6 +15,7 @@ import math
 import platform
 import py_compile
 import statistics
+import subprocess
 import tempfile
 import time
 from dataclasses import asdict
@@ -87,7 +88,13 @@ def apply_deterministic_change(path: Path) -> None:
     if changed == source:
         raise ValueError(f"change marker not found: {path}")
     path.write_text(changed, encoding="utf-8")
-    py_compile.compile(str(path), doraise=True)
+    # A stable __pycache__ target is prone to WinError 5 when repeated edits
+    # overlap with antivirus/indexer handles. Use a sibling artifact per edit.
+    compiled = path.with_name(f".{path.name}.{time.perf_counter_ns()}.pyc")
+    try:
+        py_compile.compile(str(path), cfile=str(compiled), doraise=True)
+    finally:
+        compiled.unlink(missing_ok=True)
 
 
 def timed_edit(call: Callable[[], str], root: Path, term: str, snapshot: Path | None, repetitions: int, *, refresh: bool) -> dict[str, Any]:
@@ -139,6 +146,31 @@ def fast_edit(root: Path, snapshot: Path, term: str, *, refresh: bool) -> str:
     return context
 
 
+def rust_context(root: Path, snapshot: Path, term: str, executable: Path) -> str:
+    completed = subprocess.run(
+        [
+            str(executable),
+            "--context",
+            str(snapshot),
+            str(root),
+            term,
+            "--limit",
+            "10",
+            "--max-bytes",
+            "64_000",
+            "--json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise RuntimeError(f"Rust context failed ({completed.returncode}): {detail}")
+    payload = json.loads(completed.stdout)
+    return "\n".join(span["content"] for span in payload.get("spans", []))
+
+
 def timed(call: Callable[[], str], repetitions: int) -> dict[str, Any]:
     durations: list[float] = []
     bytes_seen = 0
@@ -162,10 +194,11 @@ def timed(call: Callable[[], str], repetitions: int) -> dict[str, Any]:
     }
 
 
-def run(*, files: int, functions: int, repetitions: int) -> dict[str, Any]:
+def run(*, files: int, functions: int, repetitions: int, rust_executable: Path | None = None) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="simplicio-fast-bench-") as directory:
         root = Path(directory)
-        term = make_workload(root, files=files, functions=functions)
+        make_workload(root, files=files, functions=functions)
+        term = f"task_{min(7, functions - 1)}"
         source_bytes = sum(path.stat().st_size for path in root.glob("*.py"))
         baseline_scan = timed(lambda: direct_context(root, term), repetitions)
         baseline_ast = timed(lambda: ast_context(root, term), repetitions)
@@ -202,6 +235,29 @@ def run(*, files: int, functions: int, repetitions: int) -> dict[str, Any]:
             repetitions,
             refresh=True,
         )
+        if rust_executable is not None and rust_executable.is_file():
+            rust_standalone = timed(
+                lambda: rust_context(root, snapshot, term, rust_executable), repetitions
+            )
+            rust_standalone["status"] = "complete"
+            rust_standalone["operation"] = "rust-standalone-subprocess-context"
+        else:
+            rust_standalone = {
+                "status": "blocked",
+                "reason": "rust_executable_missing",
+                "repetitions": repetitions,
+                "operation": "rust-standalone-subprocess-context",
+            }
+        full_standalone = {
+            "status": "blocked",
+            "reason": "cross_repo_runtime_integration_missing",
+            "operation": "full-runtime-delivery",
+        }
+        loop_standalone = {
+            "status": "blocked",
+            "reason": "cross_repo_runtime_integration_missing",
+            "operation": "simplicio-loop-delivery",
+        }
 
         baseline_scan_total = sum(baseline_scan["wall_ms"]["samples"])
         baseline_ast_total = sum(baseline_ast["wall_ms"]["samples"])
@@ -221,6 +277,9 @@ def run(*, files: int, functions: int, repetitions: int) -> dict[str, Any]:
                 "without_fast_alteration": alteration_without_fast,
                 "fast_python_alteration": alteration_fast,
                 "fast_python_alteration_refresh": alteration_fast_refresh,
+                "fast_rust_standalone": rust_standalone,
+                "full_standalone": full_standalone,
+                "loop_standalone": loop_standalone,
             },
             "totals": {
                 "without_fast_scan_wall_ms": baseline_scan_total,
@@ -253,9 +312,21 @@ def run(*, files: int, functions: int, repetitions: int) -> dict[str, Any]:
                 ),
                 "alteration_estimated_tokens_without_fast": alteration_without_fast["estimated_input_tokens"],
                 "alteration_estimated_tokens_fast": alteration_fast["estimated_input_tokens"],
+                "rust_standalone_wall_ms": (
+                    sum(rust_standalone["wall_ms"]["samples"])
+                    if rust_standalone.get("status") == "complete"
+                    else None
+                ),
+                "rust_standalone_speedup_vs_python": (
+                    fast_total / sum(rust_standalone["wall_ms"]["samples"])
+                    if rust_standalone.get("status") == "complete"
+                    and sum(rust_standalone["wall_ms"]["samples"])
+                    else None
+                ),
             },
             "limitations": [
-                "Fast Python is measured; Rust and Full/Loop ecosystem cells remain pending until their engines/integrations exist.",
+                "Rust standalone measures the real subprocess/IPC context path over a Python-built snapshot; it does not measure Rust snapshot construction.",
+                "Full/Loop ecosystem cells are explicitly blocked until their cross-repository runtime integrations exist.",
                 "Token counts use whitespace-v1 estimates, not provider billing telemetry.",
             ],
         }
@@ -285,9 +356,15 @@ def markdown_report(result: dict[str, Any]) -> str:
             f"- Alteration speedup (with refresh): {totals['alteration_speedup_with_refresh']:.3f}x",
             f"- Alteration estimated tokens without Fast: {totals['alteration_estimated_tokens_without_fast']}",
             f"- Alteration estimated tokens with Fast: {totals['alteration_estimated_tokens_fast']}",
+            f"- Rust standalone status: {result['scenarios']['fast_rust_standalone']['status']}",
+            f"- Rust standalone total wall time: {totals['rust_standalone_wall_ms'] if totals['rust_standalone_wall_ms'] is not None else 'n/a'} ms",
+            f"- Rust standalone speedup versus Python Fast: {totals['rust_standalone_speedup_vs_python'] if totals['rust_standalone_speedup_vs_python'] is not None else 'n/a'}x",
+            f"- Full standalone status: {result['scenarios']['full_standalone']['status']} ({result['scenarios']['full_standalone']['reason']})",
+            f"- Loop standalone status: {result['scenarios']['loop_standalone']['status']} ({result['scenarios']['loop_standalone']['reason']})",
             "",
             "Token values use `whitespace-v1-estimate`; they are not provider billing telemetry.",
-            "Rust and Full/Loop cells remain pending until those engines/integrations are implemented.",
+            "Rust standalone is a real subprocess/IPC read over a Python-built snapshot; it is not an end-to-end Rust build measurement.",
+            "Full/Loop cells are blocked with an explicit integration reason, not inferred as measured.",
             "Alteration is a deterministic local fixture (locate + edit + py_compile), not an LLM/provider delivery run.",
             "",
         ]
@@ -301,10 +378,16 @@ def main() -> None:
     parser.add_argument("--repetitions", type=int, default=10)
     parser.add_argument("--json-out")
     parser.add_argument("--markdown-out")
+    parser.add_argument("--rust-executable", type=Path)
     args = parser.parse_args()
     if min(args.files, args.functions, args.repetitions) < 1:
         parser.error("files, functions and repetitions must be positive")
-    result = run(files=args.files, functions=args.functions, repetitions=args.repetitions)
+    result = run(
+        files=args.files,
+        functions=args.functions,
+        repetitions=args.repetitions,
+        rust_executable=args.rust_executable,
+    )
     payload = json.dumps(result, indent=2, sort_keys=True)
     if args.json_out:
         Path(args.json_out).write_text(payload + "\n", encoding="utf-8")
