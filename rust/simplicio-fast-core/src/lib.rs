@@ -66,6 +66,19 @@ pub struct RustSymbol {
     pub signature: String,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct RustContextSpan {
+    pub symbol: String,
+    pub kind: String,
+    pub file: String,
+    pub start_line: u32,
+    pub end_line: u32,
+    pub source_sha256: String,
+    pub content: String,
+    pub symbol_id: String,
+    pub tokens: usize,
+}
+
 #[derive(Debug, Clone)]
 struct Section {
     offset: usize,
@@ -263,29 +276,135 @@ impl SnapshotReader {
 
     pub fn query(&self, term: &str, limit: usize) -> Result<Vec<RustSymbol>, SnapshotError> {
         let needle = term.to_lowercase();
-        Ok(self
+        let mut matches: Vec<RustSymbol> = self
             .symbols()?
             .into_iter()
             .filter(|symbol| {
                 symbol.name.to_lowercase().contains(&needle)
                     || symbol.qualified_name.to_lowercase().contains(&needle)
             })
-            .take(limit)
-            .collect())
+            .collect();
+        matches.sort_by(|left, right| {
+            left.name
+                .to_lowercase()
+                .cmp(&right.name.to_lowercase())
+                .then(left.qualified_name.cmp(&right.qualified_name))
+                .then(left.file.cmp(&right.file))
+                .then(left.line.cmp(&right.line))
+        });
+        matches.truncate(limit);
+        Ok(matches)
+    }
+
+    pub fn context(
+        &self,
+        root: &Path,
+        term: &str,
+        max_results: usize,
+        max_lines: u32,
+        max_bytes: usize,
+        max_tokens: usize,
+    ) -> Result<Vec<RustContextSpan>, SnapshotError> {
+        let root = root
+            .canonicalize()
+            .map_err(|_| SnapshotError::Invalid("repository root is unavailable".into()))?;
+        let files = self.file_info()?;
+        let mut result = Vec::new();
+        let mut consumed_bytes = 0;
+        let mut consumed_tokens = 0;
+        for symbol in self.query(term, max_results)? {
+            let Some((_, expected_digest)) = files.iter().find(|(path, _)| path == &symbol.file)
+            else {
+                return Err(SnapshotError::Invalid(
+                    "symbol references unknown file".into(),
+                ));
+            };
+            let path = root
+                .join(&symbol.file)
+                .canonicalize()
+                .map_err(|_| SnapshotError::Invalid(format!("source missing: {}", symbol.file)))?;
+            if path.strip_prefix(&root).is_err() {
+                return Err(SnapshotError::Invalid("snapshot path escapes root".into()));
+            }
+            let bytes = fs::read(&path)?;
+            let actual_digest = Sha256::digest(&bytes);
+            if actual_digest.as_slice() != expected_digest {
+                return Err(SnapshotError::Invalid(format!(
+                    "stale source: {}",
+                    symbol.file
+                )));
+            }
+            let text = String::from_utf8(bytes)
+                .map_err(|_| SnapshotError::Invalid("source is not UTF-8".into()))?;
+            let lines: Vec<&str> = text.lines().collect();
+            let start = symbol.line.max(1) as usize;
+            let end = std::cmp::min(
+                symbol.end_line,
+                symbol.line.saturating_add(max_lines).saturating_sub(1),
+            ) as usize;
+            if start > lines.len() || end < start {
+                return Err(SnapshotError::Invalid(
+                    "symbol line bounds out of range".into(),
+                ));
+            }
+            let mut content = lines[start - 1..end].join("\n");
+            if consumed_bytes + content.len() > max_bytes {
+                let remaining = max_bytes.saturating_sub(consumed_bytes);
+                if remaining == 0 {
+                    break;
+                }
+                content = truncate_utf8(&content, remaining);
+            }
+            let mut tokens = std::cmp::max(1, (content.len() + 3) / 4);
+            if consumed_tokens + tokens > max_tokens {
+                let remaining = max_tokens.saturating_sub(consumed_tokens);
+                if remaining == 0 {
+                    break;
+                }
+                content = truncate_utf8(&content, remaining * 4);
+                tokens = std::cmp::max(1, (content.len() + 3) / 4);
+            }
+            consumed_bytes += content.len();
+            consumed_tokens += tokens;
+            result.push(RustContextSpan {
+                symbol: symbol.qualified_name,
+                kind: symbol.kind,
+                file: symbol.file,
+                start_line: symbol.line,
+                end_line: end as u32,
+                source_sha256: hex_bytes(&actual_digest),
+                content,
+                symbol_id: symbol.symbol_id,
+                tokens,
+            });
+        }
+        Ok(result)
     }
 
     fn file_paths(&self) -> Result<Vec<String>, SnapshotError> {
+        Ok(self
+            .file_info()?
+            .into_iter()
+            .map(|(path, _)| path)
+            .collect())
+    }
+
+    fn file_info(&self) -> Result<Vec<(String, [u8; 32])>, SnapshotError> {
         let files = &self.sections["files"];
         let strings = &self.sections["strings"];
         let mut paths = Vec::with_capacity(files.length / FILE_RECORD_SIZE);
         for index in 0..files.length / FILE_RECORD_SIZE {
             let base = files.offset + index * FILE_RECORD_SIZE;
-            paths.push(read_text(
+            let path = read_text(
                 &self.bytes,
                 strings,
                 u32_at(&self.bytes, base)? as usize,
                 u32_at(&self.bytes, base + 4)? as usize,
-            )?);
+            )?;
+            let digest: [u8; 32] = self.bytes[base + 16..base + 48]
+                .try_into()
+                .map_err(|_| SnapshotError::Invalid("file digest bounds".into()))?;
+            paths.push((path, digest));
         }
         Ok(paths)
     }
@@ -324,6 +443,10 @@ fn read_text(
     }
     String::from_utf8(bytes[strings.offset + offset..strings.offset + offset + length].to_vec())
         .map_err(|_| SnapshotError::Invalid("invalid UTF-8 string".into()))
+}
+
+fn truncate_utf8(value: &str, max_bytes: usize) -> String {
+    String::from_utf8_lossy(&value.as_bytes()[..max_bytes.min(value.len())]).into_owned()
 }
 
 fn kind_name(kind: u32) -> Result<String, SnapshotError> {

@@ -91,6 +91,49 @@ def _rust_query(rust: Path, snapshot: Path, term: str) -> list[dict[str, Any]]:
     return matches
 
 
+def _python_context(snapshot: Path, root: Path, term: str) -> list[dict[str, Any]]:
+    payload = _json_command([
+        sys.executable,
+        "-m",
+        "simplicio_fast.cli",
+        "context",
+        term,
+        "--root",
+        str(root),
+        "--snapshot",
+        str(snapshot),
+        "--max-results",
+        "3",
+        "--max-bytes",
+        "24_000",
+        "--fast-engine",
+        "python",
+    ])
+    spans = payload.get("spans")
+    if not isinstance(spans, list):
+        raise RuntimeError("python_context_missing")
+    return spans
+
+
+def _rust_context(rust: Path, snapshot: Path, root: Path, term: str) -> list[dict[str, Any]]:
+    payload = _json_command([
+        str(rust),
+        "--context",
+        str(snapshot),
+        str(root),
+        term,
+        "--limit",
+        "3",
+        "--max-bytes",
+        "24000",
+        "--json",
+    ])
+    spans = payload.get("spans")
+    if not isinstance(spans, list):
+        raise RuntimeError("rust_context_missing")
+    return spans
+
+
 def normalize(stats: dict[str, Any]) -> dict[str, Any]:
     return {
         "format_version": stats.get("format_version", stats.get("version")),
@@ -108,7 +151,12 @@ def normalize_symbols(symbols: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [{field: symbol.get(field) for field in fields} for symbol in symbols]
 
 
-def run(snapshot: Path, rust: Path, term: str | None = None) -> dict[str, Any]:
+def normalize_spans(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    fields = ("symbol", "kind", "file", "start_line", "end_line", "source_sha256", "content", "symbol_id", "tokens")
+    return [{field: span.get(field) for field in fields} for span in spans]
+
+
+def run(snapshot: Path, rust: Path, term: str | None = None, root: Path | None = None, context_term: str | None = None) -> dict[str, Any]:
     snapshot_digest = hashlib.sha256(snapshot.read_bytes()).hexdigest()
     python = _python_stats(snapshot)
     rust_stats = _rust_stats(rust, snapshot)
@@ -130,15 +178,30 @@ def run(snapshot: Path, rust: Path, term: str | None = None) -> dict[str, Any]:
             "match": python_symbols == rust_symbols,
         }
     query_mismatch = bool(queries and not queries["match"])
+    contexts: dict[str, Any] = {}
+    if context_term:
+        if root is None:
+            raise RuntimeError("context_root_required")
+        python_spans = normalize_spans(_python_context(snapshot, root, context_term))
+        rust_spans = normalize_spans(_rust_context(rust, snapshot, root, context_term))
+        contexts = {
+            "term": context_term,
+            "python": python_spans,
+            "rust": rust_spans,
+            "match": python_spans == rust_spans,
+        }
+    context_mismatch = bool(contexts and not contexts["match"])
     return {
         "schema": SCHEMA,
-        "status": "pass" if not mismatches and not query_mismatch else "fail",
+        "status": "pass" if not mismatches and not query_mismatch and not context_mismatch else "fail",
         "snapshot": str(snapshot.resolve()),
         "snapshot_sha256": snapshot_digest,
         "engines": {"python": python_normalized, "rust": rust_normalized},
         "mismatches": mismatches,
         "queries": queries,
         "query_mismatch": query_mismatch,
+        "contexts": contexts,
+        "context_mismatch": context_mismatch,
     }
 
 
@@ -148,9 +211,11 @@ def main() -> int:
     parser.add_argument("--rust", type=Path, required=True)
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--term", help="also compare a public symbol query")
+    parser.add_argument("--context-term", help="also compare bounded source context")
+    parser.add_argument("--root", type=Path, help="source repository root for context comparison")
     args = parser.parse_args()
     try:
-        receipt = run(args.snapshot, args.rust, args.term)
+        receipt = run(args.snapshot, args.rust, args.term, args.root, args.context_term)
     except (OSError, RuntimeError) as error:
         receipt = {
             "schema": SCHEMA,
@@ -163,7 +228,7 @@ def main() -> int:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
         args.json_out.write_text(output + "\n", encoding="utf-8")
     print(output)
-    return 0 if receipt["status"] == "pass" and not receipt.get("query_mismatch") else 2
+    return 0 if receipt["status"] == "pass" else 2
 
 
 if __name__ == "__main__":
