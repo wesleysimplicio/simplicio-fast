@@ -1,6 +1,5 @@
 import ast
 import json
-import resource
 import statistics
 import sys
 import tempfile
@@ -11,6 +10,45 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from simplicio_fast.snapshot import Snapshot, build_snapshot, source_files
+
+
+def peak_rss_kib() -> int | None:
+    """Return peak resident memory in KiB without adding a runtime dependency."""
+    if sys.platform != "win32":
+        import resource
+
+        return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+
+    import ctypes
+    from ctypes import wintypes
+
+    class ProcessMemoryCounters(ctypes.Structure):
+        _fields_ = [
+            ("cb", wintypes.DWORD),
+            ("PageFaultCount", wintypes.DWORD),
+            ("PeakWorkingSetSize", ctypes.c_size_t),
+            ("WorkingSetSize", ctypes.c_size_t),
+            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+            ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+            ("PagefileUsage", ctypes.c_size_t),
+            ("PeakPagefileUsage", ctypes.c_size_t),
+        ]
+
+    counters = ProcessMemoryCounters()
+    counters.cb = ctypes.sizeof(counters)
+    process = ctypes.windll.kernel32.GetCurrentProcess()
+    get_memory_info = ctypes.windll.psapi.GetProcessMemoryInfo
+    get_memory_info.argtypes = [
+        wintypes.HANDLE,
+        ctypes.POINTER(ProcessMemoryCounters),
+        wintypes.DWORD,
+    ]
+    get_memory_info.restype = wintypes.BOOL
+    if not get_memory_info(process, ctypes.byref(counters), counters.cb):
+        return None
+    return int(counters.PeakWorkingSetSize // 1024)
 
 
 def generate_project(root: Path, files: int = 500) -> None:
@@ -83,7 +121,7 @@ def main() -> None:
             "environment": {
                 "python": sys.version.split()[0],
                 "generated_files": 500,
-                "peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                "peak_rss_kib": peak_rss_kib(),
             },
             "baseline_ast_query": baseline,
             "snapshot_cold_build": asdict(cold),
