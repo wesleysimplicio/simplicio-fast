@@ -1,3 +1,5 @@
+import concurrent.futures
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -104,6 +106,29 @@ class WorkspaceGenerationTest(unittest.TestCase):
             self.assertEqual({"import", "interface", "function"}, {item.kind for item in symbols})
             self.assertEqual("fallback", negotiate("typescript").status)
             self.assertEqual("unavailable", negotiate("kotlin").status)
+
+
+    def test_concurrent_overlay_publication_is_collision_safe(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "main.py").write_text("def main():\n    return True\n")
+            store = WorkspaceStore(root)
+            base = store.build_base()
+
+            def publish(index: int):
+                return store.create_overlay(f"slot-{index}", base.generation_id)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=20) as executor:
+                overlays = list(executor.map(publish, range(20)))
+            self.assertEqual(20, len(overlays))
+            for overlay in overlays:
+                path = (
+                    root / ".simplicio-fast" / "overlays" / overlay.worktree_id
+                    / f"{overlay.overlay_generation}.json"
+                )
+                self.assertEqual(overlay.overlay_generation, json.loads(path.read_text())["overlay_generation"])
+            self.assertEqual([], list((root / ".simplicio-fast").rglob("*.tmp")))
+
 
 
 if __name__ == "__main__":
