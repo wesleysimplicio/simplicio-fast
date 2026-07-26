@@ -8,7 +8,7 @@ from pathlib import Path
 from . import __version__
 from .processor import ProjectProcessor, load_changeset
 from .rollout import RolloutController
-from .snapshot import Snapshot, StaleSnapshotError, build_snapshot
+from .snapshot import Snapshot, SnapshotBuildTimeout, StaleSnapshotError, build_snapshot
 from .adapters import capability_report
 from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
 from .users.http import serve
@@ -95,6 +95,12 @@ def build_parser() -> argparse.ArgumentParser:
             "--output",
             default=DEFAULT_SNAPSHOT,
             help=f"output snapshot path (default: {DEFAULT_SNAPSHOT})",
+        )
+        command.add_argument(
+            "--timeout",
+            type=float,
+            default=120.0,
+            help="maximum build time in seconds before failing without publishing (default: 120)",
         )
         json_option(command)
 
@@ -261,7 +267,13 @@ def main() -> None:
                     "schema": "simplicio.fast.build/v1",
                     "version": __version__,
                     "snapshot": str(Path(args.output)),
-                    "metrics": asdict(build_snapshot(Path(args.root), Path(args.output))),
+                    "metrics": asdict(
+                        build_snapshot(
+                            Path(args.root),
+                            Path(args.output),
+                            timeout_seconds=args.timeout,
+                        )
+                    ),
                 }
             )
         elif args.command == "query":
@@ -389,7 +401,16 @@ def main() -> None:
                         {
                             "name": "snapshot_integrity",
                             "status": "fail",
-                            "detail": {"error": type(error).__name__, "message": str(error)},
+                            "detail": {
+                                "error": type(error).__name__,
+                                "message": str(error),
+                                "recovery_code": "snapshot_corrupt_rebuild",
+                                "remediation": (
+                                    "run simplicio-fast refresh . --json; source files remain "
+                                    "authoritative and the replacement is validated before publication"
+                                ),
+                                "snapshot": str(path),
+                            },
                         }
                     )
             snapshot_ready = all(check["status"] == "pass" for check in checks)
