@@ -196,7 +196,7 @@ def build_parser() -> argparse.ArgumentParser:
     merge.add_argument("--overlay-generation")
     merge.add_argument("--max-results", type=int, default=50)
 
-    capabilities = commands.add_parser("capabilities", help="report parser capability negotiation")
+    commands.add_parser("capabilities", help="report parser capability negotiation")
 
     pin = commands.add_parser("pin", help="acquire a lease protecting a generation from GC")
     pin.add_argument("generation")
