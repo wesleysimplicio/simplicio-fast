@@ -1,5 +1,6 @@
 .simplicio-fast/
 .simplicio/
+.mapper-handoff.json
 coverage/
 .coverage
 data/*.json
