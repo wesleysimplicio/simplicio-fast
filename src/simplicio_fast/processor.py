@@ -225,12 +225,20 @@ class ProjectProcessor:
                 delegated = {**delegated, "result": result}
             if self._native_succeeded(result, write=write):
                 after = self._file_records(prepared)
-                if not write and any(
-                    item["after_sha256"] != item["before_sha256"] for item in after
-                ):
+                expected_key = "result_sha256" if write else "before_sha256"
+                if any(item["after_sha256"] != item[expected_key] for item in after):
                     self._restore_prepared(prepared)
-                    raise ValueError("simplicio-dev-cli wrote during a dry-run")
-                return self._receipt(
+                    result = {
+                        "status": "refused",
+                        "code": "native_output_hash_mismatch",
+                        "message": (
+                            "native adapter bytes differ from the canonical Fast result; "
+                            "newline and encoding normalization must be byte-exact"
+                        ),
+                    }
+                    delegated = {**delegated, "result": result}
+                else:
+                    return self._receipt(
                     mode="write" if write else "dry-run",
                     executor=delegated,
                     files=after,
@@ -304,7 +312,9 @@ class ProjectProcessor:
                 raise ValueError(f"stale source hash for {relative}")
             if not isinstance(replacements, list) or not replacements:
                 raise ValueError(f"change requires replacements: {relative}")
-            lines = original.decode("utf-8").splitlines(keepends=True)
+            decoded = original.decode("utf-8")
+            newline = "\r\n" if b"\r\n" in original else "\n"
+            lines = decoded.splitlines(keepends=True)
             normalized: list[tuple[int, int, str]] = []
             for replacement in replacements:
                 start = replacement.get("start_line")
@@ -324,8 +334,10 @@ class ProjectProcessor:
             for index, (start, end, content) in enumerate(normalized):
                 if index and end >= normalized[index - 1][0]:
                     raise ValueError(f"overlapping replacements for {relative}")
-                suffix = "\n" if content and not content.endswith("\n") else ""
-                lines[start - 1 : end] = [content + suffix]
+                canonical_content = content.replace("\r\n", "\n").replace("\r", "\n")
+                canonical_content = canonical_content.replace("\n", newline)
+                suffix = newline if canonical_content and not canonical_content.endswith(newline) else ""
+                lines[start - 1 : end] = [canonical_content + suffix]
             updated = "".join(lines)
             prepared.append(
                 PreparedChange(
@@ -369,6 +381,8 @@ class ProjectProcessor:
                     "before_sha256": hashlib.sha256(item.original).hexdigest(),
                     "after_sha256": hashlib.sha256(current).hexdigest(),
                     "result_sha256": hashlib.sha256(item.updated).hexdigest(),
+                    "byte_representation": "raw-file-bytes",
+                    "newline": "crlf" if b"\r\n" in item.updated else "lf",
                 }
             )
         return records
