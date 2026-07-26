@@ -1,4 +1,12 @@
 # Changelog
+
+## 2.0.5 - 2026-07-26
+
+### Fixed
+
+- Fails closed before parsing oversized source files on Windows with a structured error receipt.
+- Propagates timeout and source-size bounds through the ingest path used by Loop.
+
 ## 2.0.4 - 2026-07-26
 
 ### Fixed
