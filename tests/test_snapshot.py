@@ -1,8 +1,19 @@
 import tempfile
 import unittest
+import hashlib
+import random
+import struct
 from pathlib import Path
 
-from simplicio_fast.snapshot import Snapshot, StaleSnapshotError, build_snapshot
+from simplicio_fast.snapshot import (
+    LEGACY_FILE_RECORD,
+    LEGACY_HEADER,
+    LEGACY_SYMBOL_RECORD,
+    MAGIC,
+    Snapshot,
+    StaleSnapshotError,
+    build_snapshot,
+)
 
 
 class SnapshotTest(unittest.TestCase):
@@ -37,6 +48,95 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(1, changed.parsed_files)
             with Snapshot(output) as snapshot:
                 self.assertEqual(1, len(snapshot.find("deactivate")))
+
+    def test_v2_indexes_relations_and_context_budgets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "import helpers\n\nclass Service:\n    def run(self):\n        return helpers.go()\n"
+            )
+            output = root / "project.sfast"
+            metrics = build_snapshot(root, output)
+            self.assertEqual(2, metrics.format_version)
+            with Snapshot(output) as snapshot:
+                self.assertEqual("SFAST001/v2", snapshot.stats()["format"])
+                self.assertEqual("Service.run", snapshot.find_exact("Service.run")[0].qualified_name)
+                self.assertTrue(any(item.kind == "call" for item in snapshot.impact("go")))
+                spans = snapshot.context(root, "run", max_bytes=6, max_tokens=2)
+                self.assertLessEqual(sum(len(item.content.encode()) for item in spans), 6)
+                self.assertLessEqual(sum(item.tokens for item in spans), 2)
+
+    def test_async_imports_and_repository_derived_ids(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / ".git").mkdir()
+            (root / ".git" / "config").write_text('[remote "origin"]\n    url = https://example.invalid/repo.git\n')
+            (root / "module.py").write_text(
+                "from package import helper\nfrom .local import value\n\nasync def load(item):\n    return helper(item)\n"
+            )
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            with Snapshot(output) as snapshot:
+                loaded = snapshot.find_exact("load")[0]
+                self.assertEqual("async_function", loaded.kind)
+                self.assertTrue(loaded.signature)
+                self.assertEqual(64, len(loaded.symbol_id))
+                self.assertTrue(any(item.kind == "import" for item in snapshot.relations()))
+
+    def test_corruption_and_truncation_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.py").write_text("def hello():\n    return True\n")
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            original = output.read_bytes()
+            output.write_bytes(original[:-1])
+            with self.assertRaises(ValueError):
+                Snapshot(output)
+
+            rng = random.Random(2)
+            for _ in range(20):
+                mutated = bytearray(original)
+                mutated[rng.randrange(len(mutated))] ^= 1 << rng.randrange(8)
+                output.write_bytes(mutated)
+                with self.assertRaises(ValueError):
+                    Snapshot(output)
+            output.write_bytes(original)
+            corrupted = bytearray(original)
+            corrupted[-1] ^= 0xFF
+            output.write_bytes(corrupted)
+            with self.assertRaises(ValueError):
+                Snapshot(output)
+
+    def test_reads_frozen_v1_fixture(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            strings = b"sample.pyA"
+            files_offset = LEGACY_HEADER.size
+            symbols_offset = files_offset + LEGACY_FILE_RECORD.size
+            strings_offset = symbols_offset + LEGACY_SYMBOL_RECORD.size
+            total_size = strings_offset + len(strings)
+            payload = bytearray(total_size)
+            LEGACY_HEADER.pack_into(
+                payload,
+                0,
+                MAGIC,
+                1,
+                1,
+                1,
+                files_offset,
+                symbols_offset,
+                strings_offset,
+                total_size,
+            )
+            LEGACY_FILE_RECORD.pack_into(payload, files_offset, 0, 9, 1, 0, hashlib.sha256(b"x").digest())
+            LEGACY_SYMBOL_RECORD.pack_into(payload, symbols_offset, 9, 1, 0, 1, 1, 2)
+            payload[strings_offset:] = strings
+            output = root / "legacy.sfast"
+            output.write_bytes(payload)
+            with Snapshot(output) as snapshot:
+                self.assertEqual(1, snapshot.format_version)
+                self.assertEqual("A", snapshot.find_exact("A")[0].name)
 
 
 if __name__ == "__main__":
