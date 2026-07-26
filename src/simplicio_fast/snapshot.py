@@ -9,7 +9,6 @@ their hashes remain authoritative.
 from __future__ import annotations
 
 import ast
-import bisect
 import hashlib
 import json
 import mmap
@@ -18,7 +17,6 @@ import struct
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
 
 MAGIC = b"SFAST001"
 LEGACY_VERSION = 1

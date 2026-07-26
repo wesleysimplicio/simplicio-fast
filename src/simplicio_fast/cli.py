@@ -23,24 +23,25 @@ def emit(value: object) -> None:
     print(json.dumps(value, indent=2, ensure_ascii=False, sort_keys=True))
 
 
-def json_option(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--json", action="store_true", help="emit deterministic JSON (the default)")
-
-
 def source_commit(root: Path) -> tuple[str | None, str | None]:
-    """Return the checkout commit, or an explicit reason when unavailable."""
+    """Return the checked-out commit, or a reason when root is outside Git."""
     try:
         result = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            ["git", "-C", str(root), "rev-parse", "--verify", "HEAD^{commit}"],
             capture_output=True,
             text=True,
             check=False,
         )
     except OSError:
         return None, "git_unavailable"
-    if result.returncode or not result.stdout.strip():
+    commit = result.stdout.strip()
+    if result.returncode or not commit:
         return None, "not_a_git_checkout"
-    return result.stdout.strip(), None
+    return commit, None
+
+
+def json_option(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--json", action="store_true", help="emit deterministic JSON (the default)")
 
 
 def snapshot_argument(parser: argparse.ArgumentParser) -> None:
@@ -277,11 +278,17 @@ def main() -> None:
                 )
             )
         elif args.command == "context":
-            root = Path(args.root).resolve()
-            snapshot_path = Path(args.snapshot).resolve()
             if min(args.max_results, args.max_lines, args.max_bytes, args.max_tokens) < 1:
                 parser.error("context limits must be positive")
-            with Snapshot(Path(args.snapshot)) as snapshot:
+            root = Path(args.root).resolve()
+            snapshot_path = Path(args.snapshot).resolve()
+            limits = {
+                "max_results": args.max_results,
+                "max_lines": args.max_lines,
+                "max_bytes": args.max_bytes,
+                "max_tokens": args.max_tokens,
+            }
+            with Snapshot(snapshot_path) as snapshot:
                 spans = snapshot.context(
                     root,
                     args.term,
@@ -295,12 +302,7 @@ def main() -> None:
                     {
                         "schema": "simplicio.fast.context/v1",
                         "snapshot_version": snapshot.format_version,
-                        "limits": {
-                            "max_results": args.max_results,
-                            "max_lines": args.max_lines,
-                            "max_bytes": args.max_bytes,
-                            "max_tokens": args.max_tokens,
-                        },
+                        "limits": limits,
                         "provenance": {
                             "schema": "simplicio.fast.provenance/v1",
                             "repository_root": str(root),

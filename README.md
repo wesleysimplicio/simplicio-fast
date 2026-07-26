@@ -145,11 +145,21 @@ PYTHONPATH=src python -m simplicio_fast.cli build .
 PYTHONPATH=src python -m simplicio_fast.cli query UserService
 ```
 
-The bounded `context --json` response includes a versioned `provenance` receipt with the
-normalized repository root, source commit (or an explicit non-Git reason), snapshot digest,
-stable snapshot generation and effective limits. Consumers can pin that generation and verify
-the source hashes on every returned span; they must continue to obtain semantic context through
-Mapper rather than reading `.sfast` internals.
+`context --json` emits a versioned `provenance` receipt alongside bounded spans. The receipt
+contains the normalized repository root, the Git commit (or `null` plus an explicit reason outside
+Git), the absolute snapshot path, the SHA-256 digest of the bytes opened by mmap, the stable
+`SFAST001:<digest>` generation, span count and effective limits. Loop and Runtime consumers may pin
+that generation and verify each span's `source_sha256`; they must request semantic context through
+Mapper and must not read `.sfast` offsets directly.
+
+```bash
+PYTHONPATH=src python -m simplicio_fast.cli context UserService \
+  --root . --snapshot .simplicio-fast/project.sfast --max-results 10 --max-lines 120 \
+  --max-bytes 32000 --max-tokens 8000 --json
+```
+
+The command fails closed with `simplicio.fast.error/v1` when the snapshot is corrupt or a source
+file no longer matches its recorded hash; refresh the derived snapshot before retrying.
 
 ## Canonical generations and worktree overlays
 
