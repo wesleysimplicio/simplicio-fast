@@ -1,6 +1,6 @@
 """Simplicio Fast proof of concept."""
 
-__version__ = "2.0.5"
+__version__ = "2.0.6"
 
 from .workspace import GenerationId, Manifest, WorkspaceStore
 
