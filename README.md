@@ -121,6 +121,11 @@ The integrated install includes `simplicio-mapper` and `simplicio-cli`.
 simplicio-fast --help
 simplicio-fast build --help
 simplicio-fast query --help
+simplicio-fast search --help
+simplicio-fast context --help
+simplicio-fast impact --help
+simplicio-fast stats --help
+simplicio-fast doctor --help
 simplicio-fast serve --help
 ```
 
@@ -215,6 +220,10 @@ An LLM should not read the `.sfast` binary directly. A deterministic adapter que
 Version 2.0.0 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
 `query` and the CRUD proof. Internal mapping/editing remain bootstrap fallbacks when integrations
 are absent; `doctor` identifies whether the complete integrated path is ready.
+The `build`, `query`, direct-index `search`, bounded `context`, typed `impact`, `stats` and
+`doctor` surfaces remain available for the binary format. Mapper remains the canonical public
+context producer; consumers should use its versioned handles rather than reading this binary
+directly. Full cross-repository integration is tracked in the [integration epic](https://github.com/wesleysimplicio/simplicio-fast/issues/1).
 
 <p align="center">
   <img src="assets/simplicio-fast-verified-flow.webp" alt="Compact context moving through planning, editing, testing and verification gates" width="920" />
@@ -222,14 +231,28 @@ are absent; `doctor` identifies whether the complete integrated path is ready.
 
 <p align="center"><em>Compact context enters; verified normal source code leaves.</em></p>
 
-## Binary contract 1.0
+## Binary contract 2.0
+
+New snapshots are `SFAST001/v2`, little-endian and immutable after publication. The header points to
+an aligned section directory; every section and the complete payload have SHA-256 checksums. The
+fixed-size file and symbol records are validated before mmap access, while direct exact/name-prefix,
+path and kind indexes resolve records without walking the complete symbol table. Stable symbol IDs
+are SHA-256 values derived from repository, relative file, language, qualified symbol and signature.
+
+The `relations` section stores deterministic `import`, `reference`, `call`, `definition` and `test`
+edges with origin, destination and confidence. `context` enforces result, line, byte and token budgets
+and includes the source SHA-256 for every span. `doctor` reports the pinned generation and section
+checksums, and rejects truncation, overlap, unknown versions, bad offsets and tampering without a
+process crash.
 
 | Section | Purpose |
 |---|---|
-| Header | `SFAST001`, schema version, counts, offsets and total size |
-| File records | path reference, source size and SHA-256 |
-| Symbol records | qualified name, file ID, line range and kind |
-| String table | compact UTF-8 paths and qualified names |
+| Header/directory | `SFAST001`, schema version, endian marker, generation, aligned sections and whole-file SHA-256 |
+| File records | path reference, source size, SHA-256 and stable file ID |
+| Symbol records | name/qualified/signature references, file ID, line range, kind and stable ID |
+| Direct indexes | exact qualified name, name prefix, path and kind lookup tables |
+| Relations | typed imports, references, calls and confidence |
+| String table | compact UTF-8 paths, names, qualified names and signatures |
 
 Safety properties:
 
@@ -240,11 +263,21 @@ Safety properties:
 - source hashes for incremental reuse;
 - safe full rebuild because snapshots are derived.
 
+### Migration from SFAST001/v1
+
+Readers accept both the frozen v1 table and v2 section snapshots. A v1 snapshot is read-only during
+the migration window and has no persisted relation/index sections; queries use its validated legacy
+records. Run `simplicio-fast refresh . -o .simplicio-fast/project.sfast` (or `build`) to publish a
+v2 snapshot atomically. Never patch a `.sfast` file in place: if `doctor` reports an incompatible,
+truncated or checksum-failing file, discard the derived cache and rebuild from source. A failed
+refresh leaves the previous complete snapshot untouched.
+
 ## Test
 
 ```bash
 PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests benchmarks
+python benchmarks/run.py
 ```
 
 Version 2.0.0 covers:
@@ -254,6 +287,13 @@ Version 2.0.0 covers:
 - binary build and symbol query;
 - unchanged-file reuse;
 - one-file invalidation and new-symbol visibility.
+- v2 corruption/truncation rejection, direct indexes, typed impact relations and bounded context;
+- frozen SFAST001/v1 read compatibility.
+
+The benchmark defaults to ten repetitions at 1,000, 10,000 and 100,000 symbols and records wall
+time, CPU time, peak RSS and page-fault counters where the host exposes them. Use identical source,
+query, Python, hardware and cache conditions when comparing baseline and Fast; unavailable counters
+are emitted as `null`, never estimated.
 
 ## Current scope
 
