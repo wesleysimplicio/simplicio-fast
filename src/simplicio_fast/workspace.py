@@ -13,6 +13,7 @@ import os
 import secrets
 import shutil
 import subprocess
+import tempfile
 import time
 import uuid
 from contextlib import contextmanager
@@ -107,10 +108,37 @@ def _hash_source(path: Path) -> str:
 
 
 def _atomic_json(path: Path, value: object) -> None:
+    """Publish JSON atomically, including under concurrent Windows writers."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(4)}.tmp")
-    temporary.write_bytes(_canonical_json(value))
-    temporary.replace(path)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.{os.getpid()}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_name = temporary.name
+            temporary.write(_canonical_json(value))
+            temporary.flush()
+            os.fsync(temporary.fileno())
+
+        temporary_path = Path(temporary_name)
+        # Windows can transiently deny replacement while virus scanners or
+        # another reader close a handle. Retry only that recoverable condition.
+        for attempt in range(8):
+            try:
+                os.replace(temporary_path, path)
+                temporary_name = None
+                return
+            except PermissionError:
+                if attempt == 7:
+                    raise
+                time.sleep(0.01 * (2 ** attempt))
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
 
 
 def _commit(root: Path) -> str:

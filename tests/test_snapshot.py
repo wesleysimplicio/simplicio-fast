@@ -11,6 +11,7 @@ from simplicio_fast.snapshot import (
     MAGIC,
     SourceEncodingError,
     Snapshot,
+    SnapshotBuildTimeout,
     StaleSnapshotError,
     build_snapshot,
     source_files,
@@ -168,6 +169,32 @@ class SnapshotTest(unittest.TestCase):
                 build_snapshot(root, output)
             self.assertEqual("source_encoding_unreadable", raised.exception.code)
             self.assertIn("invalid.py", str(raised.exception))
+
+
+
+    def test_build_recovers_from_truncated_snapshot_atomically(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.py").write_text("def recovered():\n    return True\n")
+            output = root / "project.sfast"
+            output.write_bytes(b"truncated")
+            build_snapshot(root, output)
+            with Snapshot(output) as snapshot:
+                self.assertEqual(1, len(snapshot.find("recovered")))
+            self.assertEqual([], list(root.glob("*.tmp")))
+
+    def test_bounded_build_preserves_previous_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "sample.py"
+            source.write_text("def original():\n    return True\n")
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            before = output.read_bytes()
+            source.write_text("def changed():\n    return True\n")
+            with self.assertRaises(SnapshotBuildTimeout):
+                build_snapshot(root, output, timeout_seconds=0)
+            self.assertEqual(before, output.read_bytes())
 
 
 
