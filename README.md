@@ -179,7 +179,7 @@ Mapper and must not read `.sfast` offsets directly.
 
 ```bash
 PYTHONPATH=src python -m simplicio_fast.cli context UserService \
-  --root . --snapshot .simplicio-fast/project.sfast --max-results 10 --max-lines 120 \
+  --root . --snapshot .simplicio/fast/project.sfast --max-results 10 --max-lines 120 \
   --max-bytes 32000 --max-tokens 8000 --json
 ```
 
@@ -305,7 +305,7 @@ Safety properties:
 
 Readers accept both the frozen v1 table and v2 section snapshots. A v1 snapshot is read-only during
 the migration window and has no persisted relation/index sections; queries use its validated legacy
-records. Run `simplicio-fast refresh . -o .simplicio-fast/project.sfast` (or `build`) to publish a
+records. Run `simplicio-fast refresh . -o .simplicio/fast/project.sfast` (or `build`) to publish a
 v2 snapshot atomically. Never patch a `.sfast` file in place: if `doctor` reports an incompatible,
 truncated or checksum-failing file, discard the derived cache and rebuild from source. A failed
 refresh leaves the previous complete snapshot untouched.

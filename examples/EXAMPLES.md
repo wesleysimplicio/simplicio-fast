@@ -4,9 +4,9 @@
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m simplicio_fast.cli build . -o .simplicio-fast/project.sfast
+python -m simplicio_fast.cli build . -o .simplicio/fast/project.sfast
 python -m simplicio_fast.cli context ProjectProcessor --root . `
-  -s .simplicio-fast/project.sfast --max-results 2 --max-bytes 4000
+  -s .simplicio/fast/project.sfast --max-results 2 --max-bytes 4000
 ```
 
 The JSON response contains a versioned provenance receipt, source commit,

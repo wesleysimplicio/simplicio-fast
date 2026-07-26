@@ -9,6 +9,12 @@ from simplicio_fast.workspace import GenerationId, WorkspaceStore
 
 
 class WorkspaceGenerationTest(unittest.TestCase):
+    def test_default_storage_is_inside_simplicio_state_root(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            store = WorkspaceStore(root)
+            self.assertEqual((root / ".simplicio" / "fast").resolve(), store.storage)
+
     def test_generation_and_worktree_ids_fail_closed(self) -> None:
         with self.assertRaises(ValueError):
             GenerationId("not-a-digest")
@@ -50,7 +56,7 @@ class WorkspaceGenerationTest(unittest.TestCase):
                 self.assertEqual([], second_view.find("one"))
                 self.assertEqual(1, len(second_view.find("two")))
 
-            receipt_files = list((root / ".simplicio-fast" / "receipts").glob("*.json"))
+            receipt_files = list((root / ".simplicio" / "fast" / "receipts").glob("*.json"))
             self.assertGreaterEqual(len(receipt_files), 3)
 
     def test_lease_protects_generation_from_gc(self) -> None:
@@ -67,7 +73,7 @@ class WorkspaceGenerationTest(unittest.TestCase):
             report = store.gc()
             self.assertIn(base.generation_id, report["candidates"])
             store.gc(apply=True)
-            self.assertFalse((root / ".simplicio-fast" / "base" / base.generation_id).exists())
+            self.assertFalse((root / ".simplicio" / "fast" / "base" / base.generation_id).exists())
 
     def test_pinned_context_releases_and_expired_leases_are_collected(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -76,12 +82,12 @@ class WorkspaceGenerationTest(unittest.TestCase):
             store = WorkspaceStore(root)
             base = store.build_base()
             with store.pinned(base.generation_id, "context") as lease:
-                self.assertTrue((root / ".simplicio-fast" / "leases" / f"{lease.lease_id}.json").exists())
-            self.assertFalse((root / ".simplicio-fast" / "leases" / f"{lease.lease_id}.json").exists())
+                self.assertTrue((root / ".simplicio" / "fast" / "leases" / f"{lease.lease_id}.json").exists())
+            self.assertFalse((root / ".simplicio" / "fast" / "leases" / f"{lease.lease_id}.json").exists())
             expired = store.pin(base.generation_id, "expired", ttl_seconds=-1)
             report = store.gc(apply=True)
             self.assertNotIn(base.generation_id, report["protected"])
-            self.assertFalse((root / ".simplicio-fast" / "leases" / f"{expired.lease_id}.json").exists())
+            self.assertFalse((root / ".simplicio" / "fast" / "leases" / f"{expired.lease_id}.json").exists())
 
     def test_watch_refresh_is_debounced_and_writes_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -94,7 +100,7 @@ class WorkspaceGenerationTest(unittest.TestCase):
             self.assertIsNotNone(first)
             second, _ = store.watch_once("slot", base.generation_id, state)
             self.assertIsNone(second)
-            temporary_files = list((root / ".simplicio-fast").rglob("*.tmp"))
+            temporary_files = list((root / ".simplicio" / "fast").rglob("*.tmp"))
             self.assertEqual([], temporary_files)
 
     def test_adapters_preserve_language_symbols_and_explicit_fallback(self) -> None:
@@ -123,11 +129,11 @@ class WorkspaceGenerationTest(unittest.TestCase):
             self.assertEqual(20, len(overlays))
             for overlay in overlays:
                 path = (
-                    root / ".simplicio-fast" / "overlays" / overlay.worktree_id
+                root / ".simplicio" / "fast" / "overlays" / overlay.worktree_id
                     / f"{overlay.overlay_generation}.json"
                 )
                 self.assertEqual(overlay.overlay_generation, json.loads(path.read_text())["overlay_generation"])
-            self.assertEqual([], list((root / ".simplicio-fast").rglob("*.tmp")))
+            self.assertEqual([], list((root / ".simplicio" / "fast").rglob("*.tmp")))
 
 
 
