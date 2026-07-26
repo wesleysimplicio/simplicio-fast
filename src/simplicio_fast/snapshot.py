@@ -14,7 +14,10 @@ VERSION = 1
 HEADER = struct.Struct("<8s7I")
 FILE_RECORD = struct.Struct("<4I32s")
 SYMBOL_RECORD = struct.Struct("<6I")
-KIND_TO_ID = {"class": 1, "function": 2, "async_function": 3}
+KIND_TO_ID = {
+    "class": 1, "function": 2, "async_function": 3, "import": 4,
+    "namespace": 5, "interface": 6, "struct": 7, "trait": 8, "enum": 9,
+}
 ID_TO_KIND = {value: key for key, value in KIND_TO_ID.items()}
 
 
@@ -26,6 +29,8 @@ class Symbol:
     file: str
     line: int
     end_line: int
+    base_generation: str | None = None
+    overlay_generation: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +53,8 @@ class ContextSpan:
     end_line: int
     source_sha256: str
     content: str
+    base_generation: str | None = None
+    overlay_generation: str | None = None
 
 
 class StaleSnapshotError(RuntimeError):
@@ -84,6 +91,10 @@ class _Collector(ast.NodeVisitor):
 
 
 def parse_symbols(path: Path, relative_path: str) -> list[Symbol]:
+    if path.suffix.casefold() not in {".py", ".pyi"}:
+        from .adapters import parse_path
+
+        return parse_path(path, relative_path)
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=relative_path)
     collector = _Collector(relative_path)
     collector.visit(tree)
@@ -94,7 +105,10 @@ def source_files(root: Path) -> list[Path]:
     ignored = {".git", ".venv", "__pycache__", ".simplicio-fast", "node_modules"}
     return sorted(
         path
-        for path in root.rglob("*.py")
+        for path in root.rglob("*")
+        if path.is_file() and path.suffix.casefold() in {
+            ".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".rs", ".cs"
+        }
         if not any(part in ignored for part in path.relative_to(root).parts)
     )
 
