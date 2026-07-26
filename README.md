@@ -1,5 +1,7 @@
 # Simplicio Fast
 
+> Stable POC release: **1.0.0**
+
 POC de uma memória semântica binária e incremental para agentes de código. Os
 arquivos de desenvolvimento continuam normais; o índice `.sfast` é derivado,
 versionado e consultado diretamente com `mmap`.
@@ -17,6 +19,19 @@ Em vez de reler e reinterpretar todo o projeto para cada tarefa:
 ## Executar
 
 Não há dependências de runtime.
+
+```bash
+git clone https://github.com/wesleysimplicio/simplicio-fast
+cd simplicio-fast
+python -m pip install -e .
+
+simplicio-fast --help
+simplicio-fast build .
+simplicio-fast query UserService
+simplicio-fast serve --port 3000
+```
+
+Também é possível executar sem instalar:
 
 ```bash
 PYTHONPATH=src python -m simplicio_fast.cli build .
