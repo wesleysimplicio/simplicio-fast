@@ -1,0 +1,10 @@
+.simplicio-fast/
+coverage/
+data/*.json
+benchmarks/results/*.json
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+!data/.gitkeep
+!benchmarks/results/.gitkeep
