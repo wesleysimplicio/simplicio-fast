@@ -193,8 +193,8 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--timeout",
             type=float,
-            default=120.0,
-            help="maximum build time in seconds before failing without publishing (default: 120)",
+            default=180.0,
+            help="maximum build time in seconds before failing without publishing (default: 180)",
         )
 
         command.add_argument(
