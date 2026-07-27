@@ -174,7 +174,8 @@ def probe_rust() -> tuple[dict[str, Any] | None, str | None]:
     if manifest.get("engine") != "rust" or manifest.get("status") != "available":
         return None, "rust_manifest_not_healthy"
     conformance = manifest.get("conformance")
-    if not isinstance(conformance, dict) or conformance.get("passed") is not True:
+    digest = conformance.get("digest") if isinstance(conformance, dict) else None
+    if not isinstance(conformance, dict) or conformance.get("passed") is not True or not isinstance(digest, str) or not digest.strip():
         return None, "rust_conformance_missing"
     return manifest, None
 
