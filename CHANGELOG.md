@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.14 - 2026-07-27
+
+- Publish the current master line with accelerated incremental refresh and the
+  Loop-validated integrated-ready contract.
+
 ## 2.0.9 - 2026-07-27
 
 - Publish the canonical .simplicio/fast snapshot defaults and V3 integration updates.
