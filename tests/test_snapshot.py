@@ -222,6 +222,29 @@ class SnapshotTest(unittest.TestCase):
                     build_snapshot(root, output)
             self.assertFalse(output.exists())
 
+    def test_bounded_reverse_invalidation_closure_is_deterministic(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "target.py").write_text("def target():\n    return True\n")
+            (root / "caller.py").write_text("from target import target\n\ndef caller():\n    return target()\n")
+            (root / "top.py").write_text("from caller import caller\n\ndef top():\n    return caller()\n")
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            with Snapshot(output) as snapshot:
+                first = snapshot.invalidation_closure(["target.py"])
+                second = snapshot.invalidation_closure(["target.py"])
+                bounded = snapshot.invalidation_closure(["target.py"], max_symbols=2, max_files=1)
+                missing = snapshot.invalidation_closure(["missing.py"])
+            self.assertEqual(first, second)
+            self.assertEqual("invalidated", first["status"])
+            self.assertEqual(["caller.py", "target.py", "top.py"], first["affected_files"])
+            self.assertIn("top", first["affected_symbols"])
+            self.assertEqual("truncated", bounded["status"])
+            self.assertTrue(bounded["truncated"])
+            self.assertLessEqual(len(bounded["affected_symbol_ids"]), 2)
+            self.assertEqual("no_op", missing["status"])
+            self.assertEqual("no_changed_symbols", missing["reason_code"])
+
 
 if __name__ == "__main__":
     unittest.main()

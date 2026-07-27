@@ -19,6 +19,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 MAGIC = b"SFAST001"
 LEGACY_VERSION = 1
@@ -780,6 +781,66 @@ class Snapshot:
         if self.format_version == LEGACY_VERSION:
             return []
         return [Relation(**value) for value in json.loads(self._section_bytes("relations"))]
+
+    def invalidation_closure(
+        self,
+        changed_paths: Iterable[str],
+        *,
+        max_symbols: int = 10_000,
+        max_files: int = 1_000,
+    ) -> dict[str, object]:
+        """Return a deterministic, bounded reverse dependency closure."""
+        if max_symbols < 1 or max_files < 1:
+            raise ValueError("max_symbols and max_files must be positive")
+        paths = tuple(sorted({str(path).replace("\\", "/").strip("/") for path in changed_paths if str(path).strip()}))
+        symbols = self.symbols()
+        by_id = {symbol.symbol_id: symbol for symbol in symbols}
+        name_to_ids: dict[str, set[str]] = {}
+        for symbol in symbols:
+            for name in (symbol.name, symbol.qualified_name):
+                name_to_ids.setdefault(name.casefold(), set()).add(symbol.symbol_id)
+
+        reverse: dict[str, set[str]] = {}
+        edge_count = 0
+        for relation in self.relations():
+            origins = {relation.origin_id} if relation.origin_id else name_to_ids.get(relation.origin.casefold(), set())
+            origins = {origin for origin in origins if origin in by_id}
+            if not origins:
+                continue
+            destinations = {relation.destination.casefold()}
+            if relation.destination_id:
+                destinations.add(relation.destination_id.casefold())
+            for destination in destinations:
+                reverse.setdefault(destination, set()).update(origins)
+            edge_count += len(origins)
+
+        frontier = sorted(symbol.symbol_id for symbol in symbols if symbol.file in paths)
+        affected: set[str] = set()
+        while frontier and len(affected) < max_symbols:
+            current = frontier.pop(0)
+            if current in affected or current not in by_id:
+                continue
+            affected.add(current)
+            symbol = by_id[current]
+            keys = {current.casefold(), symbol.name.casefold(), symbol.qualified_name.casefold()}
+            frontier.extend(sorted({origin for key in keys for origin in reverse.get(key, set()) if origin not in affected}))
+
+        selected = sorted((by_id[symbol_id] for symbol_id in affected), key=lambda item: (item.file, item.line, item.qualified_name))
+        files = sorted({symbol.file for symbol in selected})
+        files_truncated = len(files) > max_files
+        truncated = bool(frontier) or files_truncated
+        status = "no_op" if not selected else "truncated" if truncated else "invalidated"
+        return {
+            "schema": "simplicio.fast.invalidation-closure/v1",
+            "status": status,
+            "reason_code": "no_changed_symbols" if not selected else "closure_bounded" if truncated else "dependency_changed",
+            "changed_paths": paths,
+            "affected_symbol_ids": [symbol.symbol_id for symbol in selected],
+            "affected_symbols": [symbol.qualified_name for symbol in selected],
+            "affected_files": files[:max_files],
+            "edge_count": edge_count,
+            "truncated": truncated,
+        }
 
     def impact(self, query: str) -> list[Relation]:
         needle = query.casefold()
