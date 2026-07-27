@@ -32,6 +32,23 @@ class DeliveryEngineTest(unittest.TestCase):
             self.assertEqual("hit", second["cache"]["L0_attempt"])
             self.assertFalse(first["ownership"]["mutation_applied"])
 
+    def test_cache_stats_reports_disposable_cache_size(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def ping():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            engine = DeliveryEngine(root, snapshot)
+            self.assertEqual(
+                {"schema": "simplicio.fast.delivery-cache/v1", "entries": 0, "bytes": 0},
+                engine.cache_stats(),
+            )
+            engine.prepare("validate ping", profile="loop-standalone", engine_receipt=select_engine("python").receipt())
+            stats = engine.cache_stats()
+            self.assertEqual("simplicio.fast.delivery-cache/v1", stats["schema"])
+            self.assertEqual(1, stats["entries"])
+            self.assertGreater(stats["bytes"], 0)
+
     def test_full_profile_records_runtime_authority_without_mutating(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
