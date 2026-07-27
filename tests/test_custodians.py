@@ -7,12 +7,14 @@ from dataclasses import FrozenInstanceError
 from simplicio_fast.custodians import (
     ADDRESS_SCHEMA,
     CATALOG_SCHEMA,
+    RESOLUTION_SCHEMA,
     CUSTODIAN_CATALOG,
     CUSTODIAN_ROLES,
     CUSTODIANS,
     VIRTUAL_POINTER_KIND,
     CustodianAddressV1,
     catalog_json,
+    resolve_custodian,
 )
 
 
@@ -58,6 +60,27 @@ class CustodianContractTest(unittest.TestCase):
         self.assertEqual(first, json.dumps(json.loads(first), sort_keys=True, separators=(",", ":")))
         for address in CUSTODIAN_CATALOG:
             self.assertEqual(address.to_json(), json.dumps(address.to_dict(), sort_keys=True, separators=(",", ":")))
+
+    def test_resolution_is_canonical_and_never_dispatches(self) -> None:
+        receipt = resolve_custodian("CacheIntegritySentinel")
+        self.assertEqual(RESOLUTION_SCHEMA, receipt["schema"])
+        self.assertEqual("available", receipt["status"])
+        self.assertEqual("catalog_match", receipt["reason_code"])
+        self.assertEqual("CacheIntegritySentinel", receipt["role"])
+        self.assertFalse(receipt["dispatch"]["allowed"])
+        self.assertEqual("virtual_pointer_only", receipt["dispatch"]["reason_code"])
+        self.assertEqual(CUSTODIANS["CacheIntegritySentinel"].to_dict(), receipt["address"])
+
+    def test_resolution_rejects_invalid_and_unknown_roles_fail_closed(self) -> None:
+        invalid = resolve_custodian("  ")
+        self.assertEqual("rejected", invalid["status"])
+        self.assertEqual("invalid_role", invalid["reason_code"])
+        self.assertIsNone(invalid["address"])
+        unknown = resolve_custodian("UnknownRole")
+        self.assertEqual("unavailable", unknown["status"])
+        self.assertEqual("unknown_role", unknown["reason_code"])
+        self.assertIsNone(unknown["address"])
+        self.assertFalse(unknown["dispatch"]["allowed"])
 
     def test_invalid_contract_values_are_rejected(self) -> None:
         valid = CUSTODIAN_CATALOG[0]
