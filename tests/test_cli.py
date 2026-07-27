@@ -9,7 +9,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from simplicio_fast.cli import DEFAULT_SNAPSHOT, build_parser, main, source_commit
+from simplicio_fast.cli import DEFAULT_BUILD_TIMEOUT_SECONDS, DEFAULT_SNAPSHOT, build_parser, main, source_commit
 from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
@@ -18,6 +18,12 @@ class ContextProvenanceTest(unittest.TestCase):
         args = build_parser().parse_args(["build"])
         self.assertEqual(".simplicio/fast/project.sfast", DEFAULT_SNAPSHOT)
         self.assertEqual(DEFAULT_SNAPSHOT, args.output)
+
+    def test_large_repository_timeout_default_is_explicit_and_safe(self) -> None:
+        for command in ("build", "refresh", "ingest"):
+            args = build_parser().parse_args([command])
+            self.assertEqual(DEFAULT_BUILD_TIMEOUT_SECONDS, args.timeout)
+        self.assertEqual(180.0, DEFAULT_BUILD_TIMEOUT_SECONDS)
 
     def invoke(self, *args: str) -> tuple[int, dict[str, object]]:
         output = io.StringIO()
