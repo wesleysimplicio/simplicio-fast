@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from simplicio_fast.cli import DEFAULT_SNAPSHOT, build_parser, main, source_commit
-from simplicio_fast.snapshot import build_snapshot
+from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
 class ContextProvenanceTest(unittest.TestCase):
@@ -103,6 +103,34 @@ class ContextProvenanceTest(unittest.TestCase):
             self.assertEqual(2, code)
             self.assertEqual("simplicio.fast.error/v1", payload["schema"])
             self.assertEqual("StaleSnapshotError", payload["error"])
+
+    def test_navigate_cli_exposes_bounded_next_executable_hop(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.py").write_text(
+                "def target():\n    return True\n\ndef caller():\n    return target()\n",
+                encoding="utf-8",
+            )
+            snapshot = root / "snapshot.sfast"
+            build_snapshot(root, snapshot)
+            with Snapshot(snapshot) as opened:
+                caller = opened.find_exact("caller")[0]
+            code, payload = self.invoke(
+                "navigate",
+                caller.symbol_id,
+                "next_executable_hop",
+                "outgoing",
+                "--snapshot",
+                str(snapshot),
+                "--fast-engine",
+                "python",
+                "--max-nodes",
+                "1",
+            )
+            self.assertEqual(0, code)
+            self.assertEqual("simplicio.fast-navigation/v1", payload["schema"])
+            self.assertEqual(["target"], [item["qualified_name"] for item in payload["items"]])
+            self.assertEqual(caller.symbol_id, payload["provenance"]["handle"])
 
     def test_corrupt_snapshot_fails_closed_without_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

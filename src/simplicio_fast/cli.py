@@ -15,6 +15,7 @@ from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
 from .engine import EngineSelection, EngineSelectionError, select_engine
 from .delivery import DeliveryEngine
 from .query_planner import plan_query
+from .navigation import DIRECTIONS, RELATIONS, NavigationBudget, NavigationIndex
 from .users.http import serve
 from .users.repository import JsonUserRepository
 from .users.service import UserService
@@ -241,6 +242,22 @@ def build_parser() -> argparse.ArgumentParser:
     context.add_argument("--max-bytes", type=int, default=32_000)
     context.add_argument("--max-tokens", type=int, default=8_000)
     json_option(context)
+
+    navigate_command = commands.add_parser(
+        "navigate",
+        help="navigate one bounded structural hop from a canonical symbol handle",
+        description="Python reference-engine navigation; use --fast-engine python until Rust parity exists.",
+    )
+    navigate_command.add_argument("handle", help="canonical snapshot symbol ID")
+    navigate_command.add_argument("relation", choices=sorted(RELATIONS))
+    navigate_command.add_argument("direction", choices=sorted(DIRECTIONS))
+    snapshot_argument(navigate_command)
+    navigate_command.add_argument("--max-nodes", type=int, default=20)
+    navigate_command.add_argument("--max-bytes", type=int, default=8192)
+    navigate_command.add_argument("--max-depth", type=int, default=1)
+    navigate_command.add_argument("--cursor")
+    navigate_command.add_argument("--generation")
+    json_option(navigate_command)
 
     impact = commands.add_parser(
         "impact",
@@ -543,6 +560,22 @@ def main() -> None:
                         "spans": [asdict(item) for item in spans],
                     }
                 )
+        elif args.command == "navigate":
+            if args.fast_engine != "python":
+                raise RuntimeError("navigate_requires_explicit_python_engine")
+            budget = NavigationBudget(
+                max_nodes=args.max_nodes, max_bytes=args.max_bytes, max_depth=args.max_depth
+            )
+            with Snapshot(Path(args.snapshot)) as snapshot:
+                page = NavigationIndex(snapshot).navigate(
+                    args.handle,
+                    args.relation,
+                    args.direction,
+                    budget,
+                    cursor=args.cursor,
+                    generation=args.generation,
+                )
+                emit(page.to_dict())
         elif args.command == "impact":
             if args.limit < 1:
                 parser.error("--limit must be positive")
