@@ -98,6 +98,22 @@ def evaluate(
     minimum_repetitions: int = 10,
     max_regression_ratio: float = 0.10,
 ) -> dict[str, Any]:
+    baseline_environment = baseline.get("environment")
+    candidate_environment = candidate.get("environment")
+    if (
+        not isinstance(baseline_environment, dict)
+        or not baseline_environment
+        or not isinstance(candidate_environment, dict)
+        or not candidate_environment
+        or baseline_environment != candidate_environment
+    ):
+        return {
+            "schema": GATE_SCHEMA,
+            "status": "inconclusive",
+            "reason": "environment_mismatch",
+            "baseline": baseline_environment,
+            "candidate": candidate_environment,
+        }
     if baseline.get("workload") != candidate.get("workload"):
         return {
             "schema": GATE_SCHEMA,
