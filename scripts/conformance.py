@@ -37,6 +37,24 @@ def _json_command(command: list[str]) -> dict[str, Any]:
     return value
 
 
+def _require_envelope(
+    payload: dict[str, Any], *, schema: str, engine: str | None = None
+) -> dict[str, Any]:
+    actual_schema = payload.get("schema")
+    if actual_schema != schema:
+        raise RuntimeError(
+            f"engine_schema_mismatch: expected={schema} actual={actual_schema!r}"
+        )
+    actual_engine = payload.get("engine")
+    if engine is not None and actual_engine != engine:
+        raise RuntimeError(
+            f"engine_identity_mismatch: expected={engine} actual={actual_engine!r}"
+        )
+    if engine is None and actual_engine == "rust":
+        raise RuntimeError("python_engine_identity_mismatch")
+    return payload
+
+
 def _python_stats(snapshot: Path) -> dict[str, Any]:
     command = [
         sys.executable,
@@ -48,7 +66,9 @@ def _python_stats(snapshot: Path) -> dict[str, Any]:
         "--fast-engine",
         "python",
     ]
-    payload = _json_command(command)
+    payload = _require_envelope(
+        _json_command(command), schema="simplicio.fast.stats/v1"
+    )
     stats = payload.get("stats")
     if not isinstance(stats, dict):
         raise RuntimeError("python_stats_missing")
@@ -56,7 +76,11 @@ def _python_stats(snapshot: Path) -> dict[str, Any]:
 
 
 def _rust_stats(rust: Path, snapshot: Path) -> dict[str, Any]:
-    payload = _json_command([str(rust), "--stats", str(snapshot), "--json"])
+    payload = _require_envelope(
+        _json_command([str(rust), "--stats", str(snapshot), "--json"]),
+        schema="simplicio.fast.stats/v1",
+        engine="rust",
+    )
     stats = payload.get("stats")
     if not isinstance(stats, dict):
         raise RuntimeError("rust_stats_missing")
@@ -64,19 +88,24 @@ def _rust_stats(rust: Path, snapshot: Path) -> dict[str, Any]:
 
 
 def _python_query(snapshot: Path, term: str) -> list[dict[str, Any]]:
-    payload = _json_command([
-        sys.executable,
-        "-m",
-        "simplicio_fast.cli",
-        "query",
-        term,
-        "--snapshot",
-        str(snapshot),
-        "--limit",
-        "50",
-        "--fast-engine",
-        "python",
-    ])
+    payload = _require_envelope(
+        _json_command(
+            [
+                sys.executable,
+                "-m",
+                "simplicio_fast.cli",
+                "query",
+                term,
+                "--snapshot",
+                str(snapshot),
+                "--limit",
+                "50",
+                "--fast-engine",
+                "python",
+            ]
+        ),
+        schema="simplicio.fast.query/v1",
+    )
     matches = payload.get("matches")
     if not isinstance(matches, list):
         raise RuntimeError("python_query_missing")
@@ -84,7 +113,13 @@ def _python_query(snapshot: Path, term: str) -> list[dict[str, Any]]:
 
 
 def _rust_query(rust: Path, snapshot: Path, term: str) -> list[dict[str, Any]]:
-    payload = _json_command([str(rust), "--query", str(snapshot), term, "--limit", "50", "--json"])
+    payload = _require_envelope(
+        _json_command(
+            [str(rust), "--query", str(snapshot), term, "--limit", "50", "--json"]
+        ),
+        schema="simplicio.fast.query/v1",
+        engine="rust",
+    )
     matches = payload.get("matches")
     if not isinstance(matches, list):
         raise RuntimeError("rust_query_missing")
@@ -92,42 +127,55 @@ def _rust_query(rust: Path, snapshot: Path, term: str) -> list[dict[str, Any]]:
 
 
 def _python_context(snapshot: Path, root: Path, term: str) -> list[dict[str, Any]]:
-    payload = _json_command([
-        sys.executable,
-        "-m",
-        "simplicio_fast.cli",
-        "context",
-        term,
-        "--root",
-        str(root),
-        "--snapshot",
-        str(snapshot),
-        "--max-results",
-        "3",
-        "--max-bytes",
-        "24_000",
-        "--fast-engine",
-        "python",
-    ])
+    payload = _require_envelope(
+        _json_command(
+            [
+                sys.executable,
+                "-m",
+                "simplicio_fast.cli",
+                "context",
+                term,
+                "--root",
+                str(root),
+                "--snapshot",
+                str(snapshot),
+                "--max-results",
+                "3",
+                "--max-bytes",
+                "24_000",
+                "--fast-engine",
+                "python",
+            ]
+        ),
+        schema="simplicio.fast.context/v1",
+    )
     spans = payload.get("spans")
     if not isinstance(spans, list):
         raise RuntimeError("python_context_missing")
     return spans
 
 
-def _rust_context(rust: Path, snapshot: Path, root: Path, term: str) -> list[dict[str, Any]]:
-    payload = _json_command([
-        str(rust),
-        "--context",
-        str(snapshot),
-        str(root),
-        term,
-        "--limit",
-        "3",
-        "--max-bytes",
-        "24000",
-        "--json",
-    ])
+def _rust_context(
+    rust: Path, snapshot: Path, root: Path, term: str
+) -> list[dict[str, Any]]:
+    payload = _require_envelope(
+        _json_command(
+            [
+                str(rust),
+                "--context",
+                str(snapshot),
+                str(root),
+                term,
+                "--limit",
+                "3",
+                "--max-bytes",
+                "24000",
+                "--json",
+            ]
+        ),
+        schema="simplicio.fast.context/v1",
+        engine="rust",
+    )
     spans = payload.get("spans")
     if not isinstance(spans, list):
         raise RuntimeError("rust_context_missing")
@@ -147,16 +195,41 @@ def normalize(stats: dict[str, Any]) -> dict[str, Any]:
 
 
 def normalize_symbols(symbols: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    fields = ("name", "qualified_name", "kind", "file", "line", "end_line", "symbol_id", "signature")
+    fields = (
+        "name",
+        "qualified_name",
+        "kind",
+        "file",
+        "line",
+        "end_line",
+        "symbol_id",
+        "signature",
+    )
     return [{field: symbol.get(field) for field in fields} for symbol in symbols]
 
 
 def normalize_spans(spans: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    fields = ("symbol", "kind", "file", "start_line", "end_line", "source_sha256", "content", "symbol_id", "tokens")
+    fields = (
+        "symbol",
+        "kind",
+        "file",
+        "start_line",
+        "end_line",
+        "source_sha256",
+        "content",
+        "symbol_id",
+        "tokens",
+    )
     return [{field: span.get(field) for field in fields} for span in spans]
 
 
-def run(snapshot: Path, rust: Path, term: str | None = None, root: Path | None = None, context_term: str | None = None) -> dict[str, Any]:
+def run(
+    snapshot: Path,
+    rust: Path,
+    term: str | None = None,
+    root: Path | None = None,
+    context_term: str | None = None,
+) -> dict[str, Any]:
     snapshot_digest = hashlib.sha256(snapshot.read_bytes()).hexdigest()
     python = _python_stats(snapshot)
     rust_stats = _rust_stats(rust, snapshot)
@@ -193,7 +266,9 @@ def run(snapshot: Path, rust: Path, term: str | None = None, root: Path | None =
     context_mismatch = bool(contexts and not contexts["match"])
     return {
         "schema": SCHEMA,
-        "status": "pass" if not mismatches and not query_mismatch and not context_mismatch else "fail",
+        "status": "pass"
+        if not mismatches and not query_mismatch and not context_mismatch
+        else "fail",
         "snapshot": str(snapshot.resolve()),
         "snapshot_sha256": snapshot_digest,
         "engines": {"python": python_normalized, "rust": rust_normalized},
@@ -212,7 +287,9 @@ def main() -> int:
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--term", help="also compare a public symbol query")
     parser.add_argument("--context-term", help="also compare bounded source context")
-    parser.add_argument("--root", type=Path, help="source repository root for context comparison")
+    parser.add_argument(
+        "--root", type=Path, help="source repository root for context comparison"
+    )
     args = parser.parse_args()
     try:
         receipt = run(args.snapshot, args.rust, args.term, args.root, args.context_term)
