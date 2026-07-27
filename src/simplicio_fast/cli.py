@@ -14,6 +14,7 @@ from .adapters import capability_report
 from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
 from .engine import EngineSelection, EngineSelectionError, select_engine
 from .delivery import DeliveryEngine
+from .query_planner import plan_query
 from .users.http import serve
 from .users.repository import JsonUserRepository
 from .users.service import UserService
@@ -253,6 +254,22 @@ def build_parser() -> argparse.ArgumentParser:
     stats = commands.add_parser("stats", help="show snapshot generation and section statistics")
     snapshot_argument(stats)
     json_option(stats)
+
+    query_plan = commands.add_parser(
+        "query-plan",
+        help="explain the deterministic index and budget plan for a query",
+        description="Return QueryIR-style planning evidence without materializing source spans.",
+    )
+    query_plan.add_argument("term")
+    snapshot_argument(query_plan)
+    query_plan.add_argument("--operation", choices=("query", "search", "context", "impact"), default="query")
+    query_plan.add_argument("--prefix", action="store_true")
+    query_plan.add_argument("--path")
+    query_plan.add_argument("--kind", choices=("class", "function", "async_function"))
+    query_plan.add_argument("--max-results", type=int, default=50)
+    query_plan.add_argument("--max-bytes", type=int, default=32_000)
+    query_plan.add_argument("--max-tokens", type=int, default=8_000)
+    json_option(query_plan)
 
     segments = commands.add_parser(
         "segments",
@@ -540,6 +557,21 @@ def main() -> None:
         elif args.command == "stats":
             with Snapshot(Path(args.snapshot)) as snapshot:
                 emit({"schema": "simplicio.fast.stats/v1", "stats": snapshot.stats()})
+        elif args.command == "query-plan":
+            with Snapshot(Path(args.snapshot)) as snapshot:
+                emit(
+                    plan_query(
+                        snapshot,
+                        args.term,
+                        operation=args.operation,
+                        prefix=args.prefix,
+                        path=args.path,
+                        kind=args.kind,
+                        max_results=args.max_results,
+                        max_bytes=args.max_bytes,
+                        max_tokens=args.max_tokens,
+                    ).to_dict()
+                )
         elif args.command == "segments":
             from .segments import SegmentStore
 
