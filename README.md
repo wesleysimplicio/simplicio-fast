@@ -394,6 +394,19 @@ The planner uses index statistics and record sizes; it does not claim provider t
 materialize source spans, and keeps causal prefetch disabled until a bounded neighbor policy is
 available. Plan output is explainable and comparable across identical generations.
 
+### Append-only change journal
+
+`simplicio_fast.journal.ChangeJournal` provides the bounded reference contract for incremental
+consumers. It stores `simplicio.fast.change-journal/v1` records with canonical create, update,
+rename, delete, config and schema events, source generation, optional before/after SHA-256 values,
+and a SHA-256 chain. Every append fsyncs the record; reads fail closed on schema, path, chain,
+hash or JSON corruption. A final incomplete record can be recovered explicitly with
+`journal.recover()`, which truncates only that tail and returns a versioned recovery receipt.
+
+The journal is an evidence log, not a replacement for source files or the published snapshot:
+dependency closure, cross-language adapters, proportional parser reuse and end-to-end daemon
+integration remain separate gates for issue #77.
+
 ### Migration from SFAST001/v1
 
 Readers accept both the frozen v1 table and v2 section snapshots. A v1 snapshot is read-only during
