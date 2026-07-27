@@ -83,3 +83,21 @@ Observed medians from 100 complete cycles:
 These operations have different boundaries. Do not present semantic-context latency as an HTTP
 speedup ratio. This benchmark does not estimate LLM tokens, provider cost or complete
 software-delivery savings.
+
+
+## Incremental refresh benchmark
+
+Issue #188's benchmark compares full byte/hash validation with the metadata-bound validation cache
+on identical Rust corpora. The default workload has 2,400 files, changes exactly one file per
+repetition, retains raw samples and reports discovery/validation/parsing/publication phase timings.
+
+```bash
+python benchmarks/incremental_refresh.py --files 2400 --repetitions 5 \
+  --json-out benchmarks/reports/incremental-refresh-20260727.json
+```
+
+Recorded evidence: [Markdown report](reports/incremental-refresh-20260727.md) and [raw JSON](reports/incremental-refresh-20260727.json).
+
+The metadata route is fail-closed: missing, corrupt, stale or snapshot-mismatched sidecars fall
+back to reading and hashing normal source files. Results are local CPU/cache measurements and do
+not claim LLM token savings.
