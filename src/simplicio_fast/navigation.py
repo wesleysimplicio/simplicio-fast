@@ -24,6 +24,7 @@ RELATIONS = frozenset(
         "tests",
         "history",
         "next_executable_hop",
+        "previous_executable_hop",
     }
 )
 DIRECTIONS = frozenset({"incoming", "outgoing"})
@@ -252,14 +253,22 @@ class NavigationIndex:
     ) -> tuple[list[tuple[Symbol, float, str]], str | None]:
         if relation == "definition":
             return [(symbol, 1.0, "definition")], None
-        if relation == "next_executable_hop":
-            if direction != "outgoing":
-                return [], "next_executable_hop_requires_outgoing"
+        if relation in {"next_executable_hop", "previous_executable_hop"}:
+            required_direction = "outgoing" if relation == "next_executable_hop" else "incoming"
+            if direction != required_direction:
+                return [], f"{relation}_requires_{required_direction}"
             candidates: list[tuple[Symbol, float, str]] = []
             for edge in self._relations:
-                if edge.kind != "call" or edge.origin_id != symbol.symbol_id:
+                if edge.kind != "call":
                     continue
-                target = self._resolve(edge.destination_id, edge.destination)
+                if relation == "next_executable_hop" and edge.origin_id == symbol.symbol_id:
+                    target = self._resolve(edge.destination_id, edge.destination)
+                elif relation == "previous_executable_hop" and (
+                    edge.destination_id == symbol.symbol_id or self._name_matches(symbol, edge.destination)
+                ):
+                    target = self._by_id.get(edge.origin_id)
+                else:
+                    continue
                 if target is not None and target.symbol_id != symbol.symbol_id:
                     candidates.append((target, edge.confidence, "call"))
             candidates.sort(key=lambda row: (-row[1], row[0].qualified_name.casefold(), row[0].file, row[0].line, row[0].symbol_id))
