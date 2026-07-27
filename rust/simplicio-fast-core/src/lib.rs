@@ -592,12 +592,12 @@ pub fn manifest() -> serde_json::Value {
         "formats": ["SFAST001/v2"]
         ,"conformance": {
             "passed": true,
-            "digest": "sha256:fefbb07ddb86373a059707be4e7d47d3cb287de1ff534353ad79c85ddd36831c",
+            "digest": "sha256:1318d1ccc7f7cfe6622fd49855fe4f5dfd48771bd1d2d3403545f8d9ec1863cf",
             "corpus_sha256": "15d0f17f2bd3f897f823e75fd08e1a1e4866e8c48f395c41a00688eb8b7d6cbc",
-            "source_commit": "8174daf02fa982cac148a09b655cb589e5673381",
+            "source_commit": "54bc8cdea36c1f228e5612d98e5f2773175ab85a",
             "engine_sha256": {
-                "python": "3c458ec48c4f96071d1d7acc2227f3e1a86ca7a719ee4d587d6e5726f8a595fb",
-                "rust": "00f12ad09334479d7a5b09c676ad98a7ad219bf5e4e2867dca131daecde5a122"
+                "python": "e8d0e2cc786e718a98a3a09d1887b222ea9bec59d4efae8aeae050feb28e1965",
+                "rust": "9258cc600bc4bda434f3e2e61ed750e665b4b4bd0d3c41db664538df1733a695"
             }
         }
     })
