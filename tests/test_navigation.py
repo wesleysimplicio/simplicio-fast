@@ -75,6 +75,17 @@ class NavigationContractTest(unittest.TestCase):
         self.assertFalse(incoming.complete)
         self.assertEqual("next_executable_hop_requires_outgoing", incoming.residual)
 
+
+    def test_previous_executable_hop_selects_incoming_caller(self) -> None:
+        target = self.snapshot.find_exact("target")[0]
+        page = self.index.navigate(target.symbol_id, "previous_executable_hop", "incoming", {"max_nodes": 1})
+        self.assertEqual(("caller",), tuple(item.qualified_name for item in page.items))
+        self.assertEqual(("call",), tuple(item.provenance["relation_kind"] for item in page.items))
+        self.assertEqual(0.8, page.items[0].confidence)
+        outgoing = self.index.navigate(target.symbol_id, "previous_executable_hop", "outgoing", {"max_nodes": 1})
+        self.assertFalse(outgoing.complete)
+        self.assertEqual("previous_executable_hop_requires_incoming", outgoing.residual)
+
     def test_unmaterialized_relations_are_explicit_and_navigation_does_not_write(self) -> None:
         target = self.snapshot.find_exact("target")[0]
         before = hashlib.sha256(self.snapshot_path.read_bytes()).hexdigest()
