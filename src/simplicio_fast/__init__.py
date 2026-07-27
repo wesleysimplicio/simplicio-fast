@@ -3,6 +3,7 @@
 __version__ = "2.0.8"
 
 from .engine_selection import EngineSelection, EngineSelectionError, select_engine
+from .pager import RequestKey, SingleFlightCoordinator, SingleFlightError, make_request_key
 from .workspace import GenerationId, Manifest, WorkspaceStore
 from .navigation import (
     NavigationBudget,
@@ -14,6 +15,10 @@ from .navigation import (
 )
 
 __all__ = [
+    "RequestKey",
+    "SingleFlightCoordinator",
+    "SingleFlightError",
+    "make_request_key",
     "EngineSelection",
     "EngineSelectionError",
     "GenerationId",
