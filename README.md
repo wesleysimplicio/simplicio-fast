@@ -273,6 +273,15 @@ tombstoned or corrupted handles. The catalog never exposes `.sfast` offsets. Rus
 integration, context-packet handle transport and golden Python/Rust fixtures remain
 explicit follow-up gates for issue #59.
 
+### Bitemporal overlay reference
+
+`simplicio_fast.temporal.BitemporalOverlay` records append-only semantic versions with
+logical source/world sequences and observed/system sequences. `as_of` reconstructs a
+generation-scoped view; update, rename and delete create predecessor/successor links or
+tombstones instead of erasing prior evidence. The Python reference does not claim Rust
+storage, compaction, Runtime authorization or cross-repository E2E integration; those are
+the remaining gates for issue #60.
+
 <p align="center">
   <img src="assets/simplicio-fast-verified-flow-v3.png" alt="Compact context moving through planning, editing, testing and verification gates" width="920" />
 </p>
