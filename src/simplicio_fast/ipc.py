@@ -123,4 +123,59 @@ def decode_frame(
     )
 
 
-__all__ = ["IpcFrame", "IpcFrameError", "MAGIC", "MAX_FRAME_BYTES", "MAX_HEADER_BYTES", "MAX_PAYLOAD_BYTES", "SCHEMA", "decode_frame"]
+class IpcFrameDecoder:
+    """Incrementally decode bounded frames from a stream transport."""
+
+    def __init__(
+        self,
+        *,
+        max_header_bytes: int = MAX_HEADER_BYTES,
+        max_payload_bytes: int = MAX_PAYLOAD_BYTES,
+        max_frame_bytes: int = MAX_FRAME_BYTES,
+    ) -> None:
+        _positive_limits(max_header_bytes, max_payload_bytes, max_frame_bytes)
+        self.max_header_bytes = max_header_bytes
+        self.max_payload_bytes = max_payload_bytes
+        self.max_frame_bytes = max_frame_bytes
+        self._buffer = bytearray()
+
+    @property
+    def buffered_bytes(self) -> int:
+        return len(self._buffer)
+
+    def feed(self, data: bytes) -> tuple[IpcFrame, ...]:
+        if not isinstance(data, bytes):
+            raise IpcFrameError("invalid_frame", "frame chunk must be bytes")
+        self._buffer.extend(data)
+        frames: list[IpcFrame] = []
+        while len(self._buffer) >= HEADER.size:
+            magic, header_length, payload_length = HEADER.unpack_from(self._buffer)
+            if magic != MAGIC:
+                raise IpcFrameError("invalid_magic", "frame magic is not supported")
+            if header_length > self.max_header_bytes:
+                raise IpcFrameError("header_too_large", "metadata exceeds configured bound")
+            if payload_length > self.max_payload_bytes:
+                raise IpcFrameError("payload_too_large", "payload exceeds configured bound")
+            expected = HEADER.size + header_length + payload_length
+            if expected > self.max_frame_bytes:
+                raise IpcFrameError("frame_too_large", "frame exceeds configured bound")
+            if len(self._buffer) < expected:
+                break
+            encoded = bytes(self._buffer[:expected])
+            del self._buffer[:expected]
+            frames.append(
+                decode_frame(
+                    encoded,
+                    max_header_bytes=self.max_header_bytes,
+                    max_payload_bytes=self.max_payload_bytes,
+                    max_frame_bytes=self.max_frame_bytes,
+                )
+            )
+        return tuple(frames)
+
+    def finish(self) -> None:
+        if self._buffer:
+            raise IpcFrameError("truncated_frame", "stream ended with an incomplete frame")
+
+
+__all__ = ["IpcFrame", "IpcFrameDecoder", "IpcFrameError", "MAGIC", "MAX_FRAME_BYTES", "MAX_HEADER_BYTES", "MAX_PAYLOAD_BYTES", "SCHEMA", "decode_frame"]
