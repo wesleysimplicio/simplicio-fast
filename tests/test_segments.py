@@ -81,11 +81,28 @@ class SegmentStoreTest(unittest.TestCase):
             build_snapshot(root, snapshot)
             store = SegmentStore(root / "segments")
             first = store.publish(snapshot)
+            self.assertEqual(len(first["segments"]), first["segments_written"])
+            self.assertEqual(0, first["segments_reused"])
             source.write_text("def run():\n    return False\n", encoding="utf-8")
             build_snapshot(root, snapshot)
             second = store.publish(snapshot)
             self.assertNotEqual(first["generation"], second["generation"])
             self.assertEqual("valid", store.validate()["status"])
+            self.assertGreaterEqual(second["segments_reused"], 1)
+
+    def test_existing_content_addressed_segment_corruption_fails_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            store.publish(snapshot)
+            entry = store.read_manifest()["segments"][0]
+            path = store.directory / entry["file"]
+            path.write_bytes(b"corrupt")
+            with self.assertRaisesRegex(SegmentStoreError, "existing_checksum_mismatch"):
+                store.publish(snapshot)
 
     def test_recover_previous_restores_last_manifest_after_pointer_corruption(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
