@@ -363,6 +363,22 @@ Safety properties:
 - source hashes for incremental reuse;
 - safe full rebuild because snapshots are derived.
 
+### Segmented storage and bounded page-in
+
+The Python reference can publish immutable SFAST sections as content-addressed segments:
+
+```bash
+simplicio-fast segments publish --directory .simplicio/fast/segments --snapshot .simplicio/fast/project.sfast
+simplicio-fast segments validate --directory .simplicio/fast/segments
+simplicio-fast segments map --directory .simplicio/fast/segments --name symbols
+```
+
+`segments map` validates the selected segment's size and SHA-256, then opens only that segment
+through read-only `mmap`; it never exposes offsets from the monolithic snapshot. Publication
+swaps the manifest atomically and retains content-addressed segments for unchanged generations.
+This is the local segmented-storage/page-in reference; Rust segmented writing, demand-driven
+semantic indexes and large-RSS/page-fault benchmarks remain open gates for issues #43 and #61.
+
 ### Migration from SFAST001/v1
 
 Readers accept both the frozen v1 table and v2 section snapshots. A v1 snapshot is read-only during
