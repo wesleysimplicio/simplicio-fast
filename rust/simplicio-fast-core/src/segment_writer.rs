@@ -9,10 +9,13 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
-    fs::{self, File, OpenOptions},
+    fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
 };
+
+#[cfg(unix)]
+use std::fs::File;
 
 pub const MANIFEST_SCHEMA: &str = "simplicio.fast.segments/v1";
 const MANIFEST_NAME: &str = "manifest.json";
@@ -180,19 +183,58 @@ fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), SnapshotError> {
 }
 
 fn sync_file(path: &Path) -> Result<(), SnapshotError> {
-    File::open(path)?.sync_all()?;
+    OpenOptions::new().read(true).write(true).open(path)?.sync_all()?;
     Ok(())
 }
 
+#[cfg(windows)]
 fn replace_file(source: &Path, destination: &Path) -> Result<(), SnapshotError> {
-    #[cfg(windows)]
-    if destination.exists() {
-        fs::remove_file(destination)?;
+    let mut last_error = None;
+    for attempt in 0..4 {
+        if destination.exists() {
+            match fs::remove_file(destination) {
+                Ok(()) => {}
+                Err(error) if attempt < 3 => {
+                    last_error = Some(error);
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                    continue;
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+        match fs::rename(source, destination) {
+            Ok(()) => return Ok(()),
+            Err(error) if attempt < 3 => {
+                last_error = Some(error);
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            Err(error) => {
+                fs::copy(source, destination).map_err(|copy_error| {
+                    SnapshotError::Io(std::io::Error::new(
+                        copy_error.kind(),
+                        format!("replace copy fallback after {error}: {copy_error}"),
+                    ))
+                })?;
+                fs::remove_file(source).map_err(|copy_error| {
+                    SnapshotError::Io(std::io::Error::new(
+                        copy_error.kind(),
+                        format!("replace cleanup after {error}: {copy_error}"),
+                    ))
+                })?;
+                return Ok(());
+            }
+        }
     }
+    Err(last_error
+        .unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "atomic replace failed"))
+        .into())
+}
+
+#[cfg(not(windows))]
+fn replace_file(source: &Path, destination: &Path) -> Result<(), SnapshotError> {
     fs::rename(source, destination)?;
     Ok(())
 }
-
 #[cfg(unix)]
 fn sync_directory(directory: &Path) -> Result<(), SnapshotError> {
     File::open(directory)?.sync_all()?;
