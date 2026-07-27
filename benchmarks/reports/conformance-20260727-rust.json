@@ -1,0 +1,147 @@
+{
+  "context_mismatch": false,
+  "contexts": {
+    "match": true,
+    "python": [
+      {
+        "content": "    def resolve(self, value):\n        return value",
+        "end_line": 3,
+        "file": "service.py",
+        "kind": "function",
+        "source_sha256": "0031ce71edb8397274210cd33c6e1ebe73ca53fef85f8ba0ffa5a44c3fbbbdb2",
+        "start_line": 2,
+        "symbol": "Service.resolve",
+        "symbol_id": "20d992a470b0fc27f40348f97cd832d8724c89ea21f121d0d89edeba4f26cb0f",
+        "tokens": 13
+      }
+    ],
+    "rust": [
+      {
+        "content": "    def resolve(self, value):\n        return value",
+        "end_line": 3,
+        "file": "service.py",
+        "kind": "function",
+        "source_sha256": "0031ce71edb8397274210cd33c6e1ebe73ca53fef85f8ba0ffa5a44c3fbbbdb2",
+        "start_line": 2,
+        "symbol": "Service.resolve",
+        "symbol_id": "20d992a470b0fc27f40348f97cd832d8724c89ea21f121d0d89edeba4f26cb0f",
+        "tokens": 13
+      }
+    ],
+    "term": "resolve"
+  },
+  "corpus": "fixtures/conformance/v1",
+  "corpus_sha256": "15d0f17f2bd3f897f823e75fd08e1a1e4866e8c48f395c41a00688eb8b7d6cbc",
+  "engine_raw": {
+    "python": {
+      "bytes": 1892,
+      "files": 1,
+      "format": "SFAST001/v2",
+      "generation": "SFAST001:8ff20c33229acacfc5c92ad24c956edb693a7fcb5aad1a1e7c7ccb8fcc0553b3",
+      "relations": 5,
+      "sections": [
+        "files",
+        "indexes",
+        "relations",
+        "strings",
+        "symbols"
+      ],
+      "symbols": 3,
+      "version": 2
+    },
+    "rust": {
+      "bytes": 1892,
+      "files": 1,
+      "format_version": 2,
+      "generation": "SFAST001:8ff20c33229acacfc5c92ad24c956edb693a7fcb5aad1a1e7c7ccb8fcc0553b3",
+      "relations": 5,
+      "schema": "simplicio.fast.rust-stats/v1",
+      "sections": [
+        "files",
+        "indexes",
+        "relations",
+        "strings",
+        "symbols"
+      ],
+      "symbols": 3
+    }
+  },
+  "engine_sha256": {
+    "python": "3c458ec48c4f96071d1d7acc2227f3e1a86ca7a719ee4d587d6e5726f8a595fb",
+    "rust": "00f12ad09334479d7a5b09c676ad98a7ad219bf5e4e2867dca131daecde5a122"
+  },
+  "engines": {
+    "python": {
+      "budgets": null,
+      "bytes": 1892,
+      "files": 1,
+      "format_version": 2,
+      "generation": "SFAST001:8ff20c33229acacfc5c92ad24c956edb693a7fcb5aad1a1e7c7ccb8fcc0553b3",
+      "reason_codes": null,
+      "relations": 5,
+      "sections": [
+        "files",
+        "indexes",
+        "relations",
+        "strings",
+        "symbols"
+      ],
+      "source_hashes": null,
+      "symbols": 3,
+      "truncations": null
+    },
+    "rust": {
+      "budgets": null,
+      "bytes": 1892,
+      "files": 1,
+      "format_version": 2,
+      "generation": "SFAST001:8ff20c33229acacfc5c92ad24c956edb693a7fcb5aad1a1e7c7ccb8fcc0553b3",
+      "reason_codes": null,
+      "relations": 5,
+      "sections": [
+        "files",
+        "indexes",
+        "relations",
+        "strings",
+        "symbols"
+      ],
+      "source_hashes": null,
+      "symbols": 3,
+      "truncations": null
+    }
+  },
+  "mismatches": {},
+  "queries": {
+    "match": true,
+    "python": [
+      {
+        "end_line": 3,
+        "file": "service.py",
+        "kind": "function",
+        "line": 2,
+        "name": "resolve",
+        "qualified_name": "Service.resolve",
+        "signature": "self, value",
+        "symbol_id": "20d992a470b0fc27f40348f97cd832d8724c89ea21f121d0d89edeba4f26cb0f"
+      }
+    ],
+    "rust": [
+      {
+        "end_line": 3,
+        "file": "service.py",
+        "kind": "function",
+        "line": 2,
+        "name": "resolve",
+        "qualified_name": "Service.resolve",
+        "signature": "self, value",
+        "symbol_id": "20d992a470b0fc27f40348f97cd832d8724c89ea21f121d0d89edeba4f26cb0f"
+      }
+    ],
+    "term": "resolve"
+  },
+  "query_mismatch": false,
+  "schema": "simplicio.fast.conformance/v1",
+  "snapshot": "project.sfast",
+  "snapshot_sha256": "8ff20c33229acacfc5c92ad24c956edb693a7fcb5aad1a1e7c7ccb8fcc0553b3",
+  "status": "pass"
+}
