@@ -1,8 +1,26 @@
 use simplicio_fast_core::{manifest, SegmentReader, SegmentWriter, SnapshotReader};
 use std::{env, process::ExitCode};
 
+fn print_help() {
+    println!("simplicio-fast-rs — Rust snapshot and segment engine");
+    println!();
+    println!("Usage:");
+    println!("  simplicio-fast-rs --version [--json]");
+    println!("  simplicio-fast-rs --stats <snapshot.sfast>");
+    println!("  simplicio-fast-rs --query <snapshot.sfast> <term> [--limit <positive>]");
+    println!("  simplicio-fast-rs --context <snapshot.sfast> <repo> <term> [--limit <positive>] [--max-lines <positive>] [--max-bytes <positive>] [--max-tokens <positive>]");
+    println!("  simplicio-fast-rs --publish-segments <snapshot.sfast> <directory>");
+    println!("  simplicio-fast-rs --segment <directory> <name>");
+    println!();
+    println!("Use --help or -h to show this message.");
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = env::args().collect();
+    if args.iter().any(|arg| arg == "--help" || arg == "-h") {
+        print_help();
+        return ExitCode::SUCCESS;
+    }
     if args.iter().any(|arg| arg == "--version") {
         println!("{}", manifest());
         return ExitCode::SUCCESS;
