@@ -3,8 +3,8 @@ import struct
 import unittest
 
 from simplicio_fast.ipc import (
-    HEADER, IpcFrame, IpcFrameError, MAGIC, MAX_FRAME_BYTES, MAX_HEADER_BYTES,
-    MAX_PAYLOAD_BYTES, SCHEMA, decode_frame,
+    HEADER, IpcFrame, IpcFrameDecoder, IpcFrameError, MAGIC, MAX_FRAME_BYTES,
+    MAX_HEADER_BYTES, MAX_PAYLOAD_BYTES, SCHEMA, decode_frame,
 )
 
 
@@ -16,6 +16,25 @@ class BoundedIpcFrameTest(unittest.TestCase):
         encoded = self.frame.encode()
         self.assertEqual(encoded, self.frame.encode())
         self.assertEqual(self.frame, decode_frame(encoded))
+
+    def test_decoder_handles_fragmented_and_consecutive_frames(self) -> None:
+        second = IpcFrame("req-2", "context", "g", b"second")
+        decoder = IpcFrameDecoder()
+        self.assertEqual((), decoder.feed(self.frame.encode()[:3]))
+        decoded = decoder.feed(self.frame.encode()[3:] + second.encode())
+        self.assertEqual((self.frame, second), decoded)
+        self.assertEqual(0, decoder.buffered_bytes)
+        decoder.finish()
+
+    def test_decoder_fails_closed_on_bounds_and_truncated_finish(self) -> None:
+        with self.assertRaises(IpcFrameError) as error:
+            IpcFrameDecoder(max_frame_bytes=HEADER.size + 1).feed(self.frame.encode())
+        self.assertEqual("frame_too_large", error.exception.reason_code)
+        decoder = IpcFrameDecoder()
+        decoder.feed(self.frame.encode()[:-1])
+        with self.assertRaises(IpcFrameError) as error:
+            decoder.finish()
+        self.assertEqual("truncated_frame", error.exception.reason_code)
 
     def test_limits_reject_payload_header_and_total_frame(self) -> None:
         with self.assertRaises(IpcFrameError) as error:
