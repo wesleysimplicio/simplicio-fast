@@ -18,6 +18,20 @@ class StreamingBlockStoreTest(unittest.TestCase):
             self.assertEqual(hashlib.sha256(payload).hexdigest(), receipt["source_sha256"])
             self.assertEqual(payload, store.read_all("g1"))
 
+
+    def test_build_file_streams_source_and_reports_missing_source(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            source = Path(root, "source.bin")
+            payload = bytes(range(251)) * 17
+            source.write_bytes(payload)
+            store = StreamingBlockStore(Path(root, "store"))
+            receipt = store.build_file(source, generation="g-file", block_bytes=64)
+            self.assertEqual(len(payload), receipt["input_bytes"])
+            self.assertEqual(payload, store.read_all("g-file"))
+            with self.assertRaises(StreamingStoreError) as error:
+                store.build_file(Path(root, "missing.bin"), generation="missing")
+            self.assertEqual("source_unavailable", error.exception.reason_code)
+
     def test_resume_uses_valid_checkpoint_and_rejects_source_drift(self) -> None:
         with tempfile.TemporaryDirectory() as root:
             store = StreamingBlockStore(root)
