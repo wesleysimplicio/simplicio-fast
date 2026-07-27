@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from simplicio_fast.query_planner import plan_query
+from simplicio_fast.query_planner import QueryPlanCache, plan_query
 from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
@@ -28,6 +28,7 @@ class QueryPlannerTest(unittest.TestCase):
             self.assertEqual("exact", plan.selected_index)
             self.assertEqual(1, plan.candidate_records)
             self.assertEqual(72, plan.estimated_bytes)
+            self.assertEqual(64, len(plan.request_digest))
             self.assertEqual("SFAST001:" + snapshot.sha256, plan.generation)
         finally:
             snapshot.close()
@@ -51,6 +52,35 @@ class QueryPlannerTest(unittest.TestCase):
             self.assertEqual("relation-scan", plan.selected_index)
             self.assertEqual(snapshot.relation_count, plan.candidate_records)
             self.assertEqual("impact_requires_typed_relation_filter", plan.reason)
+        finally:
+            snapshot.close()
+            holder.cleanup()
+
+    def test_cache_is_generation_and_request_scoped(self) -> None:
+        holder, snapshot = self.snapshot()
+        try:
+            cache = QueryPlanCache(max_entries=2)
+            first = plan_query(snapshot, "Service.run", cache=cache)
+            second = plan_query(snapshot, "Service.run", cache=cache)
+            different_request = plan_query(snapshot, "Service", cache=cache)
+            self.assertIs(first, second)
+            self.assertNotEqual(first.request_digest, different_request.request_digest)
+            self.assertEqual(1, cache.stats()["hits"])
+            self.assertEqual(2, cache.stats()["misses"])
+            self.assertEqual(2, cache.invalidate_generation(snapshot.generation))
+            self.assertIsNone(cache.get(snapshot.generation, first.request_digest))
+        finally:
+            snapshot.close()
+            holder.cleanup()
+
+    def test_cache_eviction_is_bounded_and_deterministic(self) -> None:
+        holder, snapshot = self.snapshot()
+        try:
+            cache = QueryPlanCache(max_entries=1)
+            first = plan_query(snapshot, "Service.run", cache=cache)
+            plan_query(snapshot, "Service", cache=cache)
+            self.assertEqual(1, cache.stats()["size"])
+            self.assertIsNone(cache.get(snapshot.generation, first.request_digest))
         finally:
             snapshot.close()
             holder.cleanup()
