@@ -12,10 +12,12 @@ import argparse
 import ast
 import json
 import math
+import os
 import platform
 import py_compile
 import statistics
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import asdict
@@ -26,10 +28,25 @@ from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
 SCHEMA = "simplicio.fast.e2e-benchmark/v1"
+ENVIRONMENT_SCHEMA = "simplicio.fast.environment/v1"
+
+
+def environment_receipt() -> dict[str, Any]:
+    return {
+        "schema": ENVIRONMENT_SCHEMA,
+        "python": platform.python_version(),
+        "python_implementation": platform.python_implementation(),
+        "platform": platform.platform(),
+        "machine": platform.machine() or None,
+        "processor": platform.processor() or None,
+        "executable": sys.executable,
+        "cpu_count": os.cpu_count(),
+    }
 
 
 def estimate_tokens(text: str) -> int:
     return max(1, len(text.split())) if text else 0
+
 
 
 def make_workload(root: Path, *, files: int, functions: int) -> str:
@@ -269,7 +286,7 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
             "schema": SCHEMA,
             "status": "complete",
             "workload": {"files": files, "functions_per_file": functions, "term": term},
-            "environment": {"python": platform.python_version(), "platform": platform.platform()},
+            "environment": environment_receipt(),
             "source_bytes": source_bytes,
             "build": {"wall_ms": build_wall_ms, "metrics": asdict(build)},
             "scenarios": {

@@ -9,6 +9,31 @@ from typing import Any
 
 
 RECEIPT_SCHEMA = "simplicio.fast.e2e-benchmark/v1"
+ENVIRONMENT_SCHEMA = "simplicio.fast.environment/v1"
+ENVIRONMENT_FIELDS = (
+    "python",
+    "python_implementation",
+    "platform",
+    "machine",
+    "processor",
+    "executable",
+    "cpu_count",
+)
+
+
+def _valid_environment(value: Any) -> bool:
+    if not isinstance(value, dict) or value.get("schema") != ENVIRONMENT_SCHEMA:
+        return False
+    if any(field not in value for field in ENVIRONMENT_FIELDS):
+        return False
+    if any(not isinstance(value[field], (str, type(None))) for field in ENVIRONMENT_FIELDS[:-1]):
+        return False
+    return value["cpu_count"] is None or (
+        isinstance(value["cpu_count"], int)
+        and not isinstance(value["cpu_count"], bool)
+        and value["cpu_count"] > 0
+    )
+
 GATE_SCHEMA = "simplicio.fast.perf-gate/v1"
 
 
@@ -143,13 +168,15 @@ def evaluate(
 ) -> dict[str, Any]:
     baseline_environment = baseline.get("environment")
     candidate_environment = candidate.get("environment")
-    if (
-        not isinstance(baseline_environment, dict)
-        or not baseline_environment
-        or not isinstance(candidate_environment, dict)
-        or not candidate_environment
-        or baseline_environment != candidate_environment
-    ):
+    if not _valid_environment(baseline_environment) or not _valid_environment(candidate_environment):
+        return {
+            "schema": GATE_SCHEMA,
+            "status": "inconclusive",
+            "reason": "environment_invalid",
+            "baseline": baseline_environment,
+            "candidate": candidate_environment,
+        }
+    if baseline_environment != candidate_environment:
         return {
             "schema": GATE_SCHEMA,
             "status": "inconclusive",

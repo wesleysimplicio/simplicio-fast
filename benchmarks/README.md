@@ -27,6 +27,7 @@ Page-fault fields are `null` when the host does not expose them.
 Each wall-time receipt includes p50 (`median`), p95 and p99 values alongside the raw samples;
 percentiles are computed deterministically from the recorded repetition set.
 
+Every comparison receipt also carries `simplicio.fast.environment/v1` raw identity fields (Python implementation/version, platform, machine, processor, executable and CPU count). The gate rejects missing or schema-drifted environment fields before comparing metrics; unavailable hardware fields remain explicit `null`.
 The latest Fast-vs-baseline receipt is recorded in
 [`reports/fast-vs-baseline.md`](reports/fast-vs-baseline.md), with raw JSON in
 [`reports/fast-vs-baseline-20260727.json`](reports/fast-vs-baseline-20260727.json). It is a
