@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import struct
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 from collections.abc import Iterable
 
@@ -14,6 +17,9 @@ SCHEMA = "simplicio.fast.bitemporal-fact/v1"
 AS_OF_SCHEMA = "simplicio.fast.as-of-query/v1"
 STATES = {"active", "superseded", "tombstoned", "held"}
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+PERSISTENCE_SCHEMA = "simplicio.fast.bitemporal-overlay/v1"
+PERSISTENCE_MAGIC = b"SFASTBT1"
+MAX_PERSISTENCE_BYTES = 64 * 1024 * 1024
 
 
 class TemporalInvariantError(ValueError):
@@ -327,3 +333,129 @@ class BitemporalOverlay:
             "facts": [fact.as_record() for fact in self.as_of(sequence, include_tombstones=True)],
             "verification": self.verify(),
         }
+
+    def to_bytes(self) -> bytes:
+        facts = []
+        for canonical_id in sorted(self._facts):
+            for fact in self._facts[canonical_id]:
+                facts.append({**fact.as_record(), "successor": fact.successor})
+        payload = json.dumps(
+            {
+                "schema": PERSISTENCE_SCHEMA,
+                "repository": self.repository,
+                "base_generation": self.base_generation,
+                "overlay_generation": self.overlay_generation,
+                "world_sequence": self._world_sequence,
+                "observed_sequence": self._observed_sequence,
+                "facts": facts,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        if len(payload) > MAX_PERSISTENCE_BYTES:
+            raise TemporalInvariantError("persistence_too_large", "overlay persistence exceeds the bounded limit")
+        digest = hashlib.sha256(payload).digest()
+        return PERSISTENCE_MAGIC + struct.pack(">I", len(payload)) + digest + payload
+
+    @classmethod
+    def from_bytes(
+        cls,
+        data: bytes,
+        *,
+        repository: str | None = None,
+        base_generation: str | None = None,
+        overlay_generation: str | None | object = None,
+    ) -> "BitemporalOverlay":
+        header_size = len(PERSISTENCE_MAGIC) + 4 + hashlib.sha256().digest_size
+        if not isinstance(data, bytes) or len(data) > MAX_PERSISTENCE_BYTES + header_size:
+            raise TemporalInvariantError("persistence_too_large", "overlay persistence exceeds the bounded limit")
+        if len(data) < header_size or data[: len(PERSISTENCE_MAGIC)] != PERSISTENCE_MAGIC:
+            raise TemporalInvariantError("persistence_format", "overlay persistence header is invalid")
+        payload_size = struct.unpack(">I", data[len(PERSISTENCE_MAGIC) : len(PERSISTENCE_MAGIC) + 4])[0]
+        stored_digest = data[len(PERSISTENCE_MAGIC) + 4 : header_size]
+        payload = data[header_size:]
+        if payload_size != len(payload):
+            raise TemporalInvariantError("persistence_truncated", "overlay persistence length is invalid")
+        if hashlib.sha256(payload).digest() != stored_digest:
+            raise TemporalInvariantError("persistence_checksum", "overlay persistence checksum is invalid")
+        try:
+            value = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise TemporalInvariantError("persistence_json", "overlay persistence payload is invalid") from error
+        if not isinstance(value, dict) or value.get("schema") != PERSISTENCE_SCHEMA:
+            raise TemporalInvariantError("persistence_schema", "overlay persistence schema is invalid")
+        stored_repository = value.get("repository")
+        stored_base = value.get("base_generation")
+        stored_overlay = value.get("overlay_generation")
+        if repository is not None and repository != stored_repository:
+            raise TemporalInvariantError("persistence_scope", "repository scope does not match persisted overlay")
+        if base_generation is not None and base_generation != stored_base:
+            raise TemporalInvariantError("persistence_scope", "base generation does not match persisted overlay")
+        if overlay_generation is not None and overlay_generation != stored_overlay:
+            raise TemporalInvariantError("persistence_scope", "overlay generation does not match persisted overlay")
+        if not isinstance(stored_repository, str) or not isinstance(stored_base, str):
+            raise TemporalInvariantError("persistence_scope", "persisted overlay scope is invalid")
+        overlay = cls(stored_repository, base_generation=stored_base, overlay_generation=stored_overlay)
+        facts = value.get("facts")
+        if not isinstance(facts, list):
+            raise TemporalInvariantError("persistence_facts", "persisted overlay facts are invalid")
+        for raw in facts:
+            if not isinstance(raw, dict) or raw.get("schema") != SCHEMA:
+                raise TemporalInvariantError("persistence_fact", "persisted fact schema is invalid")
+            try:
+                fact = BitemporalFact(
+                    canonical_id=str(raw["canonical_id"]),
+                    repository=str(raw["repository"]),
+                    base_generation=str(raw["base_generation"]),
+                    overlay_generation=raw.get("overlay_generation"),
+                    source_commit=str(raw["source_commit"]),
+                    source_sha256=str(raw["source_sha256"]),
+                    artifact_digest=str(raw["artifact_digest"]),
+                    valid_from=int(raw["valid_from"]),
+                    valid_to=None if raw.get("valid_to") is None else int(raw["valid_to"]),
+                    observed_at=int(raw["observed_at"]),
+                    invalidated_at=None if raw.get("invalidated_at") is None else int(raw["invalidated_at"]),
+                    state=str(raw["state"]),
+                    reason_code=raw.get("reason_code"),
+                    predecessor=raw.get("predecessor"),
+                    successor=raw.get("successor"),
+                    dependencies=tuple(str(item) for item in raw.get("dependencies", [])),
+                    provenance=dict(raw.get("provenance", {})),
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                raise TemporalInvariantError("persistence_fact", "persisted fact fields are invalid") from error
+            if fact.digest != raw.get("digest"):
+                raise TemporalInvariantError("persistence_digest", "persisted fact digest is invalid")
+            if fact.repository != overlay.repository or fact.base_generation != overlay.base_generation or fact.overlay_generation != overlay.overlay_generation:
+                raise TemporalInvariantError("persistence_scope", "persisted fact scope differs from overlay")
+            overlay._facts.setdefault(fact.canonical_id, []).append(fact)
+        world_sequence = value.get("world_sequence")
+        observed_sequence = value.get("observed_sequence")
+        if not isinstance(world_sequence, int) or not isinstance(observed_sequence, int) or world_sequence < 0 or observed_sequence < 0:
+            raise TemporalInvariantError("persistence_sequence", "persisted sequences are invalid")
+        overlay._world_sequence = world_sequence
+        overlay._observed_sequence = observed_sequence
+        if overlay.verify()["status"] != "valid":
+            raise TemporalInvariantError("persistence_invariant", "persisted overlay invariants are invalid")
+        return overlay
+
+    def save(self, path: str | Path) -> dict[str, Any]:
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
+        data = self.to_bytes()
+        temporary.write_bytes(data)
+        os.replace(temporary, target)
+        return {
+            "schema": PERSISTENCE_SCHEMA,
+            "status": "valid",
+            "path": str(target.resolve()),
+            "bytes": len(data),
+            "sha256": hashlib.sha256(data).hexdigest(),
+            "verification": self.verify(),
+        }
+
+    @classmethod
+    def load(cls, path: str | Path, **scope: object) -> "BitemporalOverlay":
+        return cls.from_bytes(Path(path).read_bytes(), **scope)
