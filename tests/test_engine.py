@@ -10,8 +10,10 @@ from unittest.mock import patch
 from simplicio_fast.engine import (
     EngineSelection,
     EngineSelectionError,
+    PythonManifestError,
     python_manifest,
     select_engine,
+    validate_python_manifest,
 )
 from simplicio_fast.cli import main
 
@@ -63,6 +65,25 @@ class EngineSelectionTest(unittest.TestCase):
         self.assertEqual(["python"], manifest["source_languages"])
         self.assertEqual("3.11", manifest["minimum_python"])
         self.assertEqual(512 * 1024 * 1024, manifest["limits"]["max_snapshot_bytes"])
+
+    def test_python_manifest_validation_rejects_missing_capability_with_stable_code(self) -> None:
+        manifest = python_manifest()
+        manifest["capabilities"].remove("query")
+        with self.assertRaises(PythonManifestError) as raised:
+            validate_python_manifest(manifest)
+        self.assertEqual("capability_missing", raised.exception.reason_code)
+
+    def test_python_manifest_validation_rejects_identity_and_format_drift(self) -> None:
+        manifest = python_manifest()
+        manifest["engine"] = "rust"
+        with self.assertRaises(PythonManifestError) as raised:
+            validate_python_manifest(manifest)
+        self.assertEqual("manifest_field_invalid", raised.exception.reason_code)
+        manifest = python_manifest()
+        manifest["formats"] = ["SFAST001/v1"]
+        with self.assertRaises(PythonManifestError) as raised:
+            validate_python_manifest(manifest)
+        self.assertEqual("formats_missing", raised.exception.reason_code)
 
     def test_cli_accepts_engine_selector_after_command(self) -> None:
         output = io.StringIO()
