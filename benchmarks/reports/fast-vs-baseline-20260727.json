@@ -1,22 +1,85 @@
 {
   "build": {
     "metrics": {
-      "cpu_ms": 62.5,
+      "changed_paths": [],
+      "cpu_ms": 93.75,
       "files": 50,
       "format_version": 2,
-      "generation": "e4cabcb4b8deff5f45478229f52a95abed22fe393e21d9f00c14b8d0ffefec89",
+      "generation": "d001a8a538246d1b67c930a620d0b5f693ca89c0caf87e60d0298cb96812ad98",
       "parsed_files": 50,
+      "parsed_paths": [
+        "service_0.py",
+        "service_1.py",
+        "service_10.py",
+        "service_11.py",
+        "service_12.py",
+        "service_13.py",
+        "service_14.py",
+        "service_15.py",
+        "service_16.py",
+        "service_17.py",
+        "service_18.py",
+        "service_19.py",
+        "service_2.py",
+        "service_20.py",
+        "service_21.py",
+        "service_22.py",
+        "service_23.py",
+        "service_24.py",
+        "service_25.py",
+        "service_26.py",
+        "service_27.py",
+        "service_28.py",
+        "service_29.py",
+        "service_3.py",
+        "service_30.py",
+        "service_31.py",
+        "service_32.py",
+        "service_33.py",
+        "service_34.py",
+        "service_35.py",
+        "service_36.py",
+        "service_37.py",
+        "service_38.py",
+        "service_39.py",
+        "service_4.py",
+        "service_40.py",
+        "service_41.py",
+        "service_42.py",
+        "service_43.py",
+        "service_44.py",
+        "service_45.py",
+        "service_46.py",
+        "service_47.py",
+        "service_48.py",
+        "service_49.py",
+        "service_5.py",
+        "service_6.py",
+        "service_7.py",
+        "service_8.py",
+        "service_9.py"
+      ],
+      "reason_codes": [
+        "cold_build"
+      ],
       "relations": 2050,
       "reused_files": 0,
+      "reused_paths": [],
       "snapshot_bytes": 547776,
       "symbols": 1050,
-      "wall_ms": 89.65680000255816
+      "wall_ms": 116.05929999495856
     },
-    "wall_ms": 89.8551
+    "wall_ms": 116.2834
   },
   "environment": {
+    "cpu_count": 16,
+    "executable": "C:\\Users\\Z0059V7A\\AppData\\Local\\Python\\pythoncore-3.14-64\\python.exe",
+    "machine": "AMD64",
     "platform": "Windows-11-10.0.26100-SP0",
-    "python": "3.14.5"
+    "processor": "Intel64 Family 6 Model 197 Stepping 2, GenuineIntel",
+    "python": "3.14.5",
+    "python_implementation": "CPython",
+    "schema": "simplicio.fast.environment/v1"
   },
   "limitations": [
     "Rust standalone measures the real subprocess/IPC context path over a Python-built snapshot; it does not measure Rust snapshot construction.",
@@ -30,19 +93,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 24.236150000000002,
-        "p95": 26.377,
+        "median": 37.9206,
+        "p95": 57.5731,
+        "p99": 57.5731,
         "samples": [
-          23.8467,
-          24.6045,
-          23.887,
-          22.9573,
-          25.8201,
-          23.2849,
-          24.5338,
-          23.9385,
-          26.377,
-          25.3809
+          57.5731,
+          55.894,
+          34.5638,
+          47.1597,
+          41.9709,
+          39.201,
+          36.6018,
+          36.6402,
+          32.1372,
+          34.0195
         ]
       }
     },
@@ -53,19 +117,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 14.541599999999999,
-        "p95": 15.5939,
+        "median": 20.60615,
+        "p95": 23.2193,
+        "p99": 23.2193,
         "samples": [
-          13.2142,
-          14.5608,
-          15.0337,
-          14.8263,
-          14.6029,
-          14.5224,
-          13.3366,
-          13.3808,
-          13.9328,
-          15.5939
+          18.9896,
+          18.5567,
+          21.9955,
+          21.813,
+          23.2193,
+          20.4081,
+          20.8042,
+          19.7298,
+          22.2485,
+          20.2483
         ]
       }
     },
@@ -76,45 +141,28 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 71.88875,
-        "p95": 140.0539,
+        "median": 102.25489999999999,
+        "p95": 114.6693,
+        "p99": 114.6693,
         "samples": [
-          70.9066,
-          70.3333,
-          70.1219,
-          72.8709,
-          64.513,
-          66.4301,
-          124.2806,
-          116.5917,
-          80.2854,
-          140.0539
+          105.3797,
+          105.3537,
+          107.779,
+          114.6693,
+          101.5067,
+          98.5785,
+          92.1237,
+          93.5053,
+          101.6995,
+          102.8103
         ]
       }
     },
     "fast_rust_standalone": {
-      "context_bytes": 4990,
-      "estimated_input_tokens": 500,
       "operation": "rust-standalone-subprocess-context",
+      "reason": "rust_executable_missing",
       "repetitions": 10,
-      "status": "complete",
-      "token_measurement": "whitespace-v1-estimate",
-      "wall_ms": {
-        "median": 54.033,
-        "p95": 953.829,
-        "samples": [
-          953.829,
-          54.0003,
-          54.0657,
-          52.1165,
-          54.4691,
-          53.1442,
-          51.8976,
-          57.0966,
-          51.051,
-          54.9833
-        ]
-      }
+      "status": "blocked"
     },
     "full_standalone": {
       "operation": "full-runtime-delivery",
@@ -133,19 +181,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 20.8705,
-        "p95": 31.8178,
+        "median": 27.1141,
+        "p95": 47.1243,
+        "p99": 47.1243,
         "samples": [
-          31.8178,
-          30.9072,
-          20.3902,
-          20.8305,
-          19.8541,
-          20.9105,
-          19.8577,
-          19.5681,
-          21.0474,
-          21.357
+          47.1243,
+          28.4205,
+          26.402,
+          23.8878,
+          26.7045,
+          26.8547,
+          27.3735,
+          34.134,
+          26.8104,
+          27.636
         ]
       }
     },
@@ -155,19 +204,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 27.11885,
-        "p95": 30.1933,
+        "median": 37.98675,
+        "p95": 42.7104,
+        "p99": 42.7104,
         "samples": [
-          26.5516,
-          25.8572,
-          25.7199,
-          25.1418,
-          28.6158,
-          28.8228,
-          26.769,
-          27.4687,
-          28.3211,
-          30.1933
+          37.7163,
+          36.2552,
+          36.2067,
+          33.9832,
+          39.6647,
+          38.1762,
+          42.7104,
+          41.4074,
+          37.7973,
+          38.6267
         ]
       }
     },
@@ -177,19 +227,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 12.897549999999999,
-        "p95": 529.8122,
+        "median": 16.61855,
+        "p95": 1192.6916,
+        "p99": 1192.6916,
         "samples": [
-          529.8122,
-          13.2307,
-          8.1633,
-          20.13,
-          13.6489,
-          12.1596,
-          12.1037,
-          11.3488,
-          13.2947,
-          12.5644
+          1192.6916,
+          14.3185,
+          13.5457,
+          12.6305,
+          16.8924,
+          18.1278,
+          15.4407,
+          16.3447,
+          18.1707,
+          17.2002
         ]
       }
     }
@@ -200,22 +251,22 @@
   "totals": {
     "alteration_estimated_tokens_fast": 50,
     "alteration_estimated_tokens_without_fast": 11000,
-    "alteration_speedup_hot": 1.5841505576052206,
-    "alteration_speedup_with_refresh": 0.2584935611808203,
+    "alteration_speedup_hot": 1.419852124626826,
+    "alteration_speedup_with_refresh": 0.2885929793042974,
     "estimated_token_savings_percent": 77.27272727272727,
     "estimated_tokens_fast": 2500,
     "estimated_tokens_saved": 8500,
     "estimated_tokens_without_fast": 11000,
-    "fast_python_alteration_refresh_wall_ms": 876.3874,
-    "fast_python_alteration_wall_ms": 143.0044,
-    "fast_python_wall_ms": 334.4858,
-    "rust_standalone_speedup_vs_python": 0.23282290863077404,
-    "rust_standalone_wall_ms": 1436.6533,
-    "speedup_vs_ast_reparse": 0.8175569785025255,
-    "speedup_vs_scan": 1.9326868285589403,
-    "without_fast_alteration_wall_ms": 226.5405,
-    "without_fast_ast_reparse_wall_ms": 273.4612,
-    "without_fast_scan_wall_ms": 646.4562999999999
+    "fast_python_alteration_refresh_wall_ms": 1023.4057,
+    "fast_python_alteration_wall_ms": 208.013,
+    "fast_python_wall_ms": 532.0446,
+    "rust_standalone_speedup_vs_python": null,
+    "rust_standalone_wall_ms": null,
+    "speedup_vs_ast_reparse": 0.7190075794397689,
+    "speedup_vs_scan": 2.5098700372111664,
+    "without_fast_alteration_wall_ms": 295.3477,
+    "without_fast_ast_reparse_wall_ms": 382.5441,
+    "without_fast_scan_wall_ms": 1335.3628
   },
   "workload": {
     "files": 50,
