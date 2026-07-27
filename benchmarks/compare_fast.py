@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
+import random
 import json
 import math
 import os
@@ -42,6 +44,36 @@ def environment_receipt() -> dict[str, Any]:
         "executable": sys.executable,
         "cpu_count": os.cpu_count(),
     }
+
+
+def corpus_sha256(root: Path) -> str:
+    digest = hashlib.sha256()
+    for path in sorted(root.glob("*.py")):
+        relative = path.name.encode("utf-8")
+        content = path.read_bytes()
+        digest.update(len(relative).to_bytes(4, "big"))
+        digest.update(relative)
+        digest.update(len(content).to_bytes(8, "big"))
+        digest.update(content)
+    return digest.hexdigest()
+
+
+def source_commit_receipt() -> tuple[str | None, str | None]:
+    repository = Path(__file__).resolve().parents[1]
+    try:
+        completed = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "--verify", "HEAD^{commit}"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None, "git_unavailable"
+    commit = completed.stdout.strip()
+    if completed.returncode != 0 or not commit:
+        return None, "not_a_git_checkout"
+    return commit, None
 
 
 def estimate_tokens(text: str) -> int:
@@ -218,6 +250,10 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
         root = Path(directory)
         make_workload(root, files=files, functions=functions)
         term = f"task_{min(7, functions - 1)}"
+        corpus_digest = corpus_sha256(root)
+        source_commit, source_commit_reason = source_commit_receipt()
+        repetition_order = list(range(1, repetitions + 1))
+        random.Random(163).shuffle(repetition_order)
         source_bytes = sum(path.stat().st_size for path in root.glob("*.py"))
         baseline_scan = timed(lambda: direct_context(root, term), repetitions)
         baseline_ast = timed(lambda: ast_context(root, term), repetitions)
@@ -284,9 +320,16 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
         token_saved = baseline_ast["estimated_input_tokens"] - fast["estimated_input_tokens"]
         return {
             "schema": SCHEMA,
-            "status": "complete",
+            "status": "partial" if any(item.get("status") == "blocked" for item in (rust_standalone, full_standalone, loop_standalone)) else "complete",
             "workload": {"files": files, "functions_per_file": functions, "term": term},
             "environment": environment_receipt(),
+            "provenance": {
+                "source_commit": source_commit,
+                "source_commit_reason": source_commit_reason,
+                "corpus_sha256": corpus_digest,
+                "repetition_order": repetition_order,
+                "warmup_repetitions": 0,
+            },
             "source_bytes": source_bytes,
             "build": {"wall_ms": build_wall_ms, "metrics": asdict(build)},
             "scenarios": {

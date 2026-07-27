@@ -5,6 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from benchmarks.compare_fast import environment_receipt, timed
+from benchmarks.compare_fast import run
 
 from benchmarks.run import (
     SHARED_BASE_OVERLAY_SLOTS,
@@ -54,6 +55,16 @@ class BenchmarkResourceTest(unittest.TestCase):
 
     def test_shared_base_overlay_slot_matrix_is_stable(self) -> None:
         self.assertEqual((1, 20, 100), SHARED_BASE_OVERLAY_SLOTS)
+
+    def test_python_benchmark_reports_identity_and_blocked_status(self) -> None:
+        receipt = run(files=2, functions=2, repetitions=10)
+        self.assertEqual("partial", receipt["status"])
+        provenance = receipt["provenance"]
+        self.assertEqual(64, len(provenance["corpus_sha256"]))
+        self.assertEqual(10, len(provenance["repetition_order"]))
+        self.assertEqual(list(range(1, 11)), sorted(provenance["repetition_order"]))
+        self.assertEqual(0, provenance["warmup_repetitions"])
+        self.assertEqual("blocked", receipt["scenarios"]["full_standalone"]["status"])
 
     def test_environment_receipt_has_frozen_raw_identity_fields(self) -> None:
         receipt = environment_receipt()
