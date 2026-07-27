@@ -151,7 +151,10 @@ class NavigationIndex:
             self._item(symbol, target, relation, direction, confidence, raw_kind)
             for target, confidence, raw_kind in candidates
         ]
-        items.sort(key=lambda item: (item.qualified_name.casefold(), item.file, item.line, item.id))
+        if relation == "next_executable_hop":
+            items.sort(key=lambda item: (-item.confidence, item.qualified_name.casefold(), item.file, item.line, item.id))
+        else:
+            items.sort(key=lambda item: (item.qualified_name.casefold(), item.file, item.line, item.id))
         items = self._deduplicate(items)
 
         selected: list[NavigationItem] = []
@@ -249,6 +252,18 @@ class NavigationIndex:
     ) -> tuple[list[tuple[Symbol, float, str]], str | None]:
         if relation == "definition":
             return [(symbol, 1.0, "definition")], None
+        if relation == "next_executable_hop":
+            if direction != "outgoing":
+                return [], "next_executable_hop_requires_outgoing"
+            candidates: list[tuple[Symbol, float, str]] = []
+            for edge in self._relations:
+                if edge.kind != "call" or edge.origin_id != symbol.symbol_id:
+                    continue
+                target = self._resolve(edge.destination_id, edge.destination)
+                if target is not None and target.symbol_id != symbol.symbol_id:
+                    candidates.append((target, edge.confidence, "call"))
+            candidates.sort(key=lambda row: (-row[1], row[0].qualified_name.casefold(), row[0].file, row[0].line, row[0].symbol_id))
+            return candidates[:1], None
         raw_kind = {
             "references": "reference",
             "callers": "call",

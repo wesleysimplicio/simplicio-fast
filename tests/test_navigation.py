@@ -64,6 +64,17 @@ class NavigationContractTest(unittest.TestCase):
             self.index.navigate(target.symbol_id, "definition", "outgoing", 1, cursor="not-a-cursor")
         self.assertEqual("invalid_cursor", invalid_cursor.exception.reason_code)
 
+    def test_next_executable_hop_selects_highest_confidence_callee(self) -> None:
+        caller = self.snapshot.find_exact("caller")[0]
+        page = self.index.navigate(caller.symbol_id, "next_executable_hop", "outgoing", {"max_nodes": 1})
+        self.assertEqual("simplicio.fast-navigation/v1", page.schema)
+        self.assertEqual(("target",), tuple(item.qualified_name for item in page.items))
+        self.assertEqual(("call",), tuple(item.provenance["relation_kind"] for item in page.items))
+        self.assertFalse(page.truncated)
+        incoming = self.index.navigate(caller.symbol_id, "next_executable_hop", "incoming", {"max_nodes": 1})
+        self.assertFalse(incoming.complete)
+        self.assertEqual("next_executable_hop_requires_outgoing", incoming.residual)
+
     def test_unmaterialized_relations_are_explicit_and_navigation_does_not_write(self) -> None:
         target = self.snapshot.find_exact("target")[0]
         before = hashlib.sha256(self.snapshot_path.read_bytes()).hexdigest()
