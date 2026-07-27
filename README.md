@@ -417,6 +417,10 @@ retries. The source tree remains authoritative; snapshots are derived state.
   Agent and Code are optional.
 - **Engines:** Python remains the reference/fallback; Rust is selected by \`auto\` only after
   health, schema and conformance gates pass. A healthy Rust fast path does not load Python.
+- **Rust bridge:** when Rust is selected, \`stats\`, \`query\` and bounded \`context\` are
+  delegated through the versioned JSON CLI contract (\`--stats\`, \`--query\`, \`--context\`).
+  Build, refresh and mutation commands remain on the Python/Dev CLI path until their native
+  contracts are implemented; malformed, timed-out or schema-mismatched Rust output fails closed.
 
 See [ADR-0001](docs/ADR-0001-fast-v3-ownership.md) and the
 [contract matrix](docs/fast-v3-contract-matrix.md). The executable delivery-engine work is

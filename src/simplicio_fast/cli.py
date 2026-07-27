@@ -11,7 +11,7 @@ from .rollout import RolloutController
 from .snapshot import Snapshot, SnapshotBuildTimeout, StaleSnapshotError, build_snapshot
 from .adapters import capability_report
 from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
-from .engine import EngineSelectionError, select_engine
+from .engine import EngineSelection, EngineSelectionError, select_engine
 from .delivery import DeliveryEngine
 from .users.http import serve
 from .users.repository import JsonUserRepository
@@ -43,6 +43,87 @@ def source_commit(root: Path) -> tuple[str | None, str | None]:
     if result.returncode or not commit:
         return None, "not_a_git_checkout"
     return commit, None
+
+
+def _rust_bridge(selection: EngineSelection, args: argparse.Namespace) -> dict[str, object] | None:
+    """Dispatch read-only snapshot commands to a proven Rust executable.
+
+    Rust is deliberately limited to operations it owns today.  Snapshot
+    construction and mutations stay on the Python/Dev CLI paths until their
+    contracts are implemented by the native engine.
+    """
+    if selection.selected != "rust" or args.command not in {"stats", "query", "context"}:
+        return None
+    executable = selection.executable
+    if not executable:
+        raise EngineSelectionError(
+            {
+                "schema": "simplicio.fast.engine-selection/v1",
+                "requested": selection.requested,
+                "selected": "unavailable",
+                "reason": "rust_executable_missing_for_bridge",
+                "executable": None,
+                "manifest": selection.manifest,
+            }
+        )
+    if args.command == "stats":
+        command = [executable, "--stats", str(Path(args.snapshot)), "--json"]
+        expected_schema = "simplicio.fast.stats/v1"
+    elif args.command == "query":
+        if args.limit < 1:
+            raise ValueError("--limit must be positive")
+        command = [
+            executable,
+            "--query",
+            str(Path(args.snapshot)),
+            args.term,
+            "--limit",
+            str(args.limit),
+            "--json",
+        ]
+        expected_schema = "simplicio.fast.query/v1"
+    else:
+        if min(args.max_results, args.max_lines, args.max_bytes, args.max_tokens) < 1:
+            raise ValueError("context limits must be positive")
+        command = [
+            executable,
+            "--context",
+            str(Path(args.snapshot)),
+            str(Path(args.root).resolve()),
+            args.term,
+            "--limit",
+            str(args.max_results),
+            "--max-lines",
+            str(args.max_lines),
+            "--max-bytes",
+            str(args.max_bytes),
+            "--max-tokens",
+            str(args.max_tokens),
+            "--json",
+        ]
+        expected_schema = "simplicio.fast.context/v1"
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise RuntimeError(f"rust_bridge_failed: {type(error).__name__}") from error
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(f"rust_bridge_invalid_json: {error}") from error
+    if not isinstance(payload, dict):
+        raise RuntimeError("rust_bridge_output_not_object")
+    if payload.get("schema") != expected_schema:
+        reason = payload.get("reason", "schema_mismatch")
+        raise RuntimeError(f"rust_bridge_contract_error: {reason}")
+    if completed.returncode != 0:
+        raise RuntimeError("rust_bridge_command_failed")
+    return payload
 
 
 def json_option(parser: argparse.ArgumentParser) -> None:
@@ -299,17 +380,10 @@ def main() -> None:
     args = parser.parse_args()
     try:
         selection = select_engine(args.fast_engine)
-        if selection.selected == "rust":
-            raise EngineSelectionError(
-                {
-                    "schema": "simplicio.fast.engine-selection/v1",
-                    "requested": args.fast_engine,
-                    "selected": "unavailable",
-                    "reason": "rust_engine_probe_passed_but_cli_bridge_is_not_implemented",
-                    "executable": selection.executable,
-                    "manifest": selection.manifest,
-                }
-            )
+        bridged = _rust_bridge(selection, args)
+        if bridged is not None:
+            emit(bridged)
+            return
         if args.command in {"build", "refresh", "ingest"}:
             processor = ProjectProcessor(Path(args.root), Path(args.output))
             if args.command == "ingest":
