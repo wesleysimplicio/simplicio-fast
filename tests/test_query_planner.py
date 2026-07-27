@@ -36,6 +36,17 @@ class QueryPlannerTest(unittest.TestCase):
             snapshot.close()
             holder.cleanup()
 
+    def test_query_and_search_plans_expose_bounded_prefetch(self) -> None:
+        holder, snapshot = self.snapshot()
+        try:
+            query = plan_query(snapshot, "Service.run", operation="query", max_results=1)
+            search = plan_query(snapshot, "Service.run", operation="search", max_results=1)
+            self.assertEqual(("helper",), query.prefetch)
+            self.assertEqual(("helper",), search.prefetch)
+        finally:
+            snapshot.close()
+            holder.cleanup()
+
     def test_filters_are_composed_without_source_materialization(self) -> None:
         holder, snapshot = self.snapshot()
         try:
@@ -43,7 +54,7 @@ class QueryPlannerTest(unittest.TestCase):
             self.assertEqual("name-substring+path+kind", plan.selected_index)
             self.assertEqual(1, plan.candidate_records)
             self.assertEqual("bounded_name_indexes", plan.reason)
-            self.assertEqual((), plan.prefetch)
+            self.assertEqual(("helper",), plan.prefetch)
         finally:
             snapshot.close()
             holder.cleanup()

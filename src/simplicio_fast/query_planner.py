@@ -227,7 +227,7 @@ def plan_query(
         max_results=max_results,
         max_bytes=max_bytes,
         max_tokens=max_tokens,
-        prefetch=_causal_prefetch(snapshot, candidate_indices, min(max_results, 8)) if operation == "context" else (),
+        prefetch=_causal_prefetch(snapshot, candidate_indices, min(max_results, 8)) if operation in {"query", "search", "context"} else (),
         reason=reason,
         request_digest=request_digest,
     )
