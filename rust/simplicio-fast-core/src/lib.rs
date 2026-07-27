@@ -603,7 +603,14 @@ fn read_text(
 }
 
 fn truncate_utf8(value: &str, max_bytes: usize) -> String {
-    String::from_utf8_lossy(&value.as_bytes()[..max_bytes.min(value.len())]).into_owned()
+    let end = value
+        .char_indices()
+        .take_while(|(offset, _)| *offset <= max_bytes)
+        .map(|(offset, character)| offset + character.len_utf8())
+        .take_while(|end| *end <= max_bytes)
+        .last()
+        .unwrap_or(0);
+    value[..end].to_owned()
 }
 
 fn kind_name(kind: u32) -> Result<String, SnapshotError> {
@@ -670,6 +677,15 @@ mod tests {
         assert!(
             matches!(result, Err(SnapshotError::Invalid(reason)) if reason == "truncated header")
         );
+    }
+
+    #[test]
+    fn truncate_utf8_stays_on_character_boundaries() {
+        let truncated = truncate_utf8("café", 4);
+        assert_eq!(truncated, "caf");
+        assert!(truncated.len() <= 4);
+        assert_eq!(truncate_utf8("café", 0), "");
+        assert_eq!(truncate_utf8("abcdef", 3), "abc");
     }
 
     #[test]
