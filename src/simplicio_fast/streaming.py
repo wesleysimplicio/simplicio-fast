@@ -12,6 +12,7 @@ from typing import Any, Iterable
 SCHEMA = "simplicio.fast.streaming-store/v1"
 DEFAULT_BLOCK_BYTES = 1024 * 1024
 MAX_BLOCK_BYTES = 16 * 1024 * 1024
+MAX_RANGE_BYTES = 64 * 1024 * 1024
 
 
 class StreamingStoreError(ValueError):
@@ -149,6 +150,72 @@ class StreamingBlockStore:
         self._atomic_json(self.root / "current.json", manifest)
         checkpoint_path.unlink(missing_ok=True)
         return {**manifest, "status": "published", "appended_blocks": appended}
+
+    def read_range(self, generation: str, start: int, length: int) -> bytes:
+        if (
+            isinstance(start, bool)
+            or isinstance(length, bool)
+            or not isinstance(start, int)
+            or not isinstance(length, int)
+            or start < 0
+            or length < 0
+            or length > MAX_RANGE_BYTES
+        ):
+            raise StreamingStoreError("invalid_range", "range must be non-negative integers within the bounded limit")
+        work = self.root / generation
+        try:
+            manifest = json.loads((work / "manifest.json").read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError) as error:
+            raise StreamingStoreError("missing_manifest", "published generation is unavailable") from error
+        if not isinstance(manifest, dict) or manifest.get("schema") != SCHEMA:
+            raise StreamingStoreError("invalid_manifest", "published manifest schema is invalid")
+        total = manifest.get("input_bytes")
+        blocks = manifest.get("blocks")
+        segment_name = manifest.get("segment")
+        if (
+            isinstance(total, bool)
+            or not isinstance(total, int)
+            or total < 0
+            or not isinstance(blocks, list)
+            or not isinstance(segment_name, str)
+            or Path(segment_name).name != segment_name
+            or start + length > total
+        ):
+            raise StreamingStoreError("invalid_range", "range is outside the published generation")
+        if length == 0:
+            return b""
+        result = bytearray()
+        cursor = 0
+        try:
+            with (work / segment_name).open("rb") as segment:
+                for block in blocks:
+                    if not isinstance(block, dict):
+                        raise StreamingStoreError("invalid_manifest", "manifest block is invalid")
+                    try:
+                        block_length = int(block["length"])
+                    except (KeyError, TypeError, ValueError) as error:
+                        raise StreamingStoreError("invalid_manifest", "manifest block length is invalid") from error
+                    block_end = cursor + block_length
+                    if block_length < 1 or block_end > total:
+                        raise StreamingStoreError("invalid_manifest", "manifest block bounds are invalid")
+                    if cursor < start + length and block_end > start:
+                        segment.seek(cursor)
+                        payload = segment.read(block_length)
+                        if len(payload) != block_length:
+                            raise StreamingStoreError("segment_bounds", "segment block is truncated")
+                        if hashlib.sha256(payload).hexdigest() != block.get("sha256"):
+                            raise StreamingStoreError("block_digest", "stream block digest is invalid")
+                        left = max(start, cursor) - cursor
+                        right = min(start + length, block_end) - cursor
+                        result.extend(payload[left:right])
+                    cursor = block_end
+                    if cursor >= start + length:
+                        break
+        except FileNotFoundError as error:
+            raise StreamingStoreError("missing_segment", "published segment is unavailable") from error
+        if cursor < start + length or len(result) != length:
+            raise StreamingStoreError("segment_bounds", "range is outside the published segment")
+        return bytes(result)
 
     def read_all(self, generation: str) -> bytes:
         work = self.root / generation
