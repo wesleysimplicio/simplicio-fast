@@ -282,6 +282,15 @@ tombstones instead of erasing prior evidence. The Python reference does not clai
 storage, compaction, Runtime authorization or cross-repository E2E integration; those are
 the remaining gates for issue #60.
 
+### Semantic pager reference
+
+`simplicio_fast.pager.SemanticPager` is the bounded Python reference for a
+generation-scoped working set. It enforces byte/page budgets, validates page digests,
+deduplicates concurrent loads with single-flight, supports leases, deterministic LRU
+eviction, bounded prefetch and selective invalidation. It reports observable cache
+metrics, but does not claim Rust mmap page-in, RSS/page-fault telemetry, Runtime quotas
+or 20/100-slot E2E behavior; those remain gates for issue #61.
+
 <p align="center">
   <img src="assets/simplicio-fast-verified-flow-v3.png" alt="Compact context moving through planning, editing, testing and verification gates" width="920" />
 </p>
