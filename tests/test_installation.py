@@ -100,3 +100,12 @@ class InstallationReportTest(unittest.TestCase):
         self.assertEqual("manifest_schema_mismatch", check["reason"])
         self.assertEqual("python", payload["resolution"]["selected_engine"])
         self.assertEqual("rust_artifact_unusable:manifest_schema_mismatch", payload["resolution"]["reason_code"])
+
+
+def test_source_and_package_versions_match() -> None:
+    import tomllib
+
+    pyproject = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8"))
+    project_version = pyproject["project"]["version"]
+    assert project_version == __version__
+    assert project_version == "2.0.13"
