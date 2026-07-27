@@ -764,13 +764,20 @@ def main() -> None:
         emit(error.receipt)
         raise SystemExit(2) from error
     except (FileNotFoundError, RuntimeError, ValueError, SnapshotBuildTimeout, StaleSnapshotError) as error:
-        emit(
-            {
-                "schema": "simplicio.fast.error/v1",
-                "error": type(error).__name__,
-                "message": str(error),
-            }
-        )
+        payload = {
+            "schema": "simplicio.fast.error/v1",
+            "error": type(error).__name__,
+            "message": str(error),
+        }
+        if isinstance(error, SnapshotBuildTimeout):
+            payload.update(
+                {
+                    "recovery_code": error.code,
+                    "recovery": error.recovery,
+                    "progress": error.progress,
+                }
+            )
+        emit(payload)
         raise SystemExit(2) from error
 
 

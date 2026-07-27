@@ -209,6 +209,28 @@ class ContextProvenanceTest(unittest.TestCase):
             self.assertEqual(0, code)
             self.assertEqual(1, len(query["matches"]))
 
+    def test_refresh_timeout_returns_structured_progress(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one.py").write_text("def one():\n    return True\n")
+            (root / "two.py").write_text("def two():\n    return True\n")
+            snapshot = root / "project.sfast"
+            self.assertEqual(0, self.invoke("refresh", str(root), "-o", str(snapshot))[0])
+            before = snapshot.read_bytes()
+
+            code, payload = self.invoke(
+                "refresh", str(root), "-o", str(snapshot), "--timeout", "0"
+            )
+
+            self.assertEqual(2, code)
+            self.assertEqual("SnapshotBuildTimeout", payload["error"])
+            self.assertEqual("snapshot_build_timeout", payload["recovery_code"])
+            self.assertEqual(2, payload["progress"]["files_total"])
+            self.assertEqual(0, payload["progress"]["files_processed"])
+            self.assertEqual(2, payload["progress"]["files_remaining"])
+            self.assertTrue(payload["progress"]["previous_snapshot_preserved"])
+            self.assertEqual(before, snapshot.read_bytes())
+
 
 if __name__ == "__main__":
     unittest.main()
