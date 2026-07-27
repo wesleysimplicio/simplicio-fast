@@ -1,4 +1,4 @@
-use simplicio_fast_core::{manifest, SegmentReader, SnapshotReader};
+use simplicio_fast_core::{manifest, SegmentReader, SegmentWriter, SnapshotReader};
 use std::{env, process::ExitCode};
 
 fn main() -> ExitCode {
@@ -85,6 +85,31 @@ fn main() -> ExitCode {
             }
         };
     }
+    if let Some(index) = args.iter().position(|arg| arg == "--publish-segments") {
+        let Some(snapshot_path) = args.get(index + 1) else {
+            eprintln!("missing snapshot path");
+            return ExitCode::from(2);
+        };
+        let Some(directory) = args.get(index + 2) else {
+            eprintln!("missing segment directory");
+            return ExitCode::from(2);
+        };
+        return match SnapshotReader::open(snapshot_path)
+            .and_then(|snapshot| SegmentWriter::new(directory).publish(&snapshot))
+        {
+            Ok(receipt) => {
+                println!("{}", serde_json::to_string(&receipt).expect("serializable receipt"));
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                println!(
+                    "{}",
+                    serde_json::json!({"schema":"simplicio.fast.error/v1", "engine":"rust", "status":"error", "reason":error.to_string()})
+                );
+                ExitCode::from(2)
+            }
+        };
+    }
     if let Some(index) = args.iter().position(|arg| arg == "--segment") {
         let Some(directory) = args.get(index + 1) else {
             eprintln!("missing segment directory");
@@ -118,7 +143,7 @@ fn main() -> ExitCode {
         };
     }
     let Some(index) = args.iter().position(|arg| arg == "--stats") else {
-        eprintln!("missing command: expected --version, --stats <snapshot> or --segment <directory> <name>");
+        eprintln!("missing command: expected --version, --stats <snapshot>, --publish-segments <snapshot> <directory> or --segment <directory> <name>");
         return ExitCode::from(2);
     };
     let Some(path) = args.get(index + 1) else {
