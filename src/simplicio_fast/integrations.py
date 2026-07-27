@@ -33,12 +33,15 @@ def _distribution_version(name: str) -> str | None:
         return None
 
 
-def _executable(name: str) -> str | None:
-    found = shutil.which(name)
-    if found:
-        return found
-    sibling = Path(sys.executable).with_name(name)
-    return str(sibling) if sibling.is_file() else None
+def _executable(*names: str) -> str | None:
+    for name in names:
+        found = shutil.which(name)
+        if found:
+            return found
+        sibling = Path(sys.executable).with_name(name)
+        if sibling.is_file():
+            return str(sibling)
+    return None
 
 
 def integration_status() -> dict[str, Any]:
@@ -49,6 +52,7 @@ def integration_status() -> dict[str, Any]:
     """
     mapper_version = _distribution_version("simplicio-mapper")
     dev_cli_version = _distribution_version("simplicio-cli")
+    dev_cli_executable = _executable("simplicio-dev-cli", "simplicio-cli")
     mapper_ok = bool(
         mapper_version
         and _executable("simplicio-mapper")
@@ -56,7 +60,7 @@ def integration_status() -> dict[str, Any]:
     )
     dev_cli_ok = bool(
         dev_cli_version
-        and _executable("simplicio-cli")
+        and dev_cli_executable
         and (_version_tuple(dev_cli_version) or ()) >= MINIMUM_DEV_CLI
     )
     return {
@@ -72,7 +76,7 @@ def integration_status() -> dict[str, Any]:
             "package": "simplicio-cli",
             "version": dev_cli_version,
             "minimum": ".".join(map(str, MINIMUM_DEV_CLI)),
-            "executable": _executable("simplicio-cli"),
+            "executable": dev_cli_executable,
             "compatible": dev_cli_ok,
         },
         "integrated_ready": mapper_ok and dev_cli_ok,
