@@ -26,6 +26,39 @@ class BitemporalOverlayTest(unittest.TestCase):
         self.assertEqual("superseded", overlay.as_of(1, include_tombstones=True)[0].state)
         self.assertEqual("valid", overlay.verify()["status"])
 
+    def test_dependency_invalidation_holds_only_affected_facts(self) -> None:
+        overlay = BitemporalOverlay("repo", base_generation="base")
+        dependent = "a" * 64
+        unrelated = "b" * 64
+        changed = "c" * 64
+        overlay.append(
+            dependent,
+            source_commit="c1",
+            source_sha256="d" * 64,
+            artifact_digest="e" * 64,
+            dependencies=(changed,),
+        )
+        overlay.append(
+            unrelated,
+            source_commit="c1",
+            source_sha256="f" * 64,
+            artifact_digest="0" * 64,
+            dependencies=("1" * 64,),
+        )
+
+        receipt = overlay.invalidate_dependencies(
+            [changed],
+            source_commit="c2",
+            source_sha256="2" * 64,
+        )
+        self.assertEqual("simplicio.fast.invalidation/v1", receipt["schema"])
+        self.assertEqual("invalidated", receipt["status"])
+        self.assertEqual([dependent], receipt["affected_ids"])
+        current = {fact.canonical_id: fact for fact in overlay.as_of(overlay.receipt()["as_of"])}
+        self.assertEqual("held", current[dependent].state)
+        self.assertEqual("active", current[unrelated].state)
+        self.assertEqual("dependency_changed", current[dependent].reason_code)
+
     def test_rename_and_tombstone_are_auditable(self) -> None:
         overlay = BitemporalOverlay("repo", base_generation="base")
         old_id, new_id = "1" * 64, "2" * 64

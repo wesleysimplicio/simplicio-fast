@@ -7,6 +7,7 @@ import json
 import re
 from dataclasses import dataclass, replace
 from typing import Any
+from collections.abc import Iterable
 
 
 SCHEMA = "simplicio.fast.bitemporal-fact/v1"
@@ -185,6 +186,46 @@ class BitemporalOverlay:
             provenance={"successor": successor} if successor else {},
         )
         return result
+
+    def invalidate_dependencies(
+        self,
+        changed_ids: Iterable[str],
+        *,
+        source_commit: str,
+        source_sha256: str,
+        reason_code: str = "dependency_changed",
+        valid_from: int | None = None,
+    ) -> dict[str, Any]:
+        """Hold active facts whose dependency set intersects changed IDs."""
+        changed = tuple(sorted({item for item in changed_ids if isinstance(item, str) and item}))
+        affected = [
+            fact
+            for versions in self._facts.values()
+            if (fact := self._current(versions[-1].canonical_id)) is not None
+            and fact.state == "active"
+            and set(fact.dependencies).intersection(changed)
+        ]
+        invalidated: list[str] = []
+        next_world = valid_from
+        for fact in sorted(affected, key=lambda item: item.canonical_id):
+            self.append(
+                fact.canonical_id,
+                source_commit=source_commit,
+                source_sha256=source_sha256,
+                artifact_digest=fact.artifact_digest,
+                state="held",
+                reason_code=reason_code,
+                valid_from=next_world,
+            )
+            invalidated.append(fact.canonical_id)
+            next_world = None
+        return {
+            "schema": "simplicio.fast.invalidation/v1",
+            "status": "invalidated" if invalidated else "no_op",
+            "changed_ids": list(changed),
+            "affected_ids": invalidated,
+            "reason_code": reason_code,
+        }
 
     def rename(
         self,
