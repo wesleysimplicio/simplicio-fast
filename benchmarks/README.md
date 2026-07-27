@@ -53,6 +53,14 @@ dependency is added. If the operating system cannot expose peak RSS, the benchma
 partial JSON receipt with schema `simplicio.fast.benchmark/v1`, `status: "partial"`,
 `peak_rss_kib: null`, a deterministic `peak_rss_reason` code and `metrics_status: "partial"`.
 
+
+## Allocation telemetry
+
+Each generated size receipt also includes `baseline_ast_query_allocation` and
+`snapshot_mmap_query_allocation` with schema `simplicio.fast.allocation-metric/v1`.
+When `tracemalloc` is available, each metric records ten or more raw peak-byte samples plus
+p50 (`median`), p95 and p99. Hosts without `tracemalloc` emit `status: "partial"` and an
+explicit `tracemalloc_unavailable` reason; missing allocation telemetry is never treated as zero.
 ## User CRUD benchmark
 
 The CRUD benchmark validates create, read, update and delete through the service and real HTTP API,
