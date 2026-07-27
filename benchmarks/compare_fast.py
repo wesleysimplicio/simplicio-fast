@@ -26,6 +26,8 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable
 
+from simplicio_fast.delivery import DeliveryEngine
+from simplicio_fast.engine import select_engine
 from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
@@ -196,6 +198,47 @@ def fast_edit(root: Path, snapshot: Path, term: str, *, refresh: bool) -> str:
     return context
 
 
+
+def delivery_scenarios(root: Path, snapshot: Path, term: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    target = direct_target(root, term)
+    original = target.read_bytes()
+    source_lines = original.decode("utf-8").splitlines()
+    return_line = next(index for index, line in enumerate(source_lines, start=1) if "return value" in line)
+    changeset = {
+        "schema": "simplicio.fast.changeset/v2",
+        "changes": [
+            {
+                "path": target.name,
+                "expected_sha256": hashlib.sha256(original).hexdigest(),
+                "replacements": [
+                    {
+                        "start_line": return_line,
+                        "end_line": return_line,
+                        "content": source_lines[return_line - 1].replace("return value", "return value + 1"),
+                    }
+                ],
+            }
+        ],
+    }
+    selection = select_engine("python").receipt()
+    engine = DeliveryEngine(root, snapshot)
+    full = engine.deliver(
+        changeset,
+        profile="full",
+        engine_receipt=selection,
+        write=True,
+        idempotency_key="benchmark-full",
+    )
+    loop = engine.deliver(
+        changeset,
+        profile="loop-standalone",
+        engine_receipt=selection,
+        write=True,
+        idempotency_key="benchmark-loop",
+    )
+    full["operation"] = "full-runtime-delivery"
+    loop["operation"] = "simplicio-loop-delivery"
+    return full, loop
 def rust_context(root: Path, snapshot: Path, term: str, executable: Path) -> str:
     completed = subprocess.run(
         [
@@ -303,16 +346,7 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
                 "repetitions": repetitions,
                 "operation": "rust-standalone-subprocess-context",
             }
-        full_standalone = {
-            "status": "blocked",
-            "reason": "cross_repo_runtime_integration_missing",
-            "operation": "full-runtime-delivery",
-        }
-        loop_standalone = {
-            "status": "blocked",
-            "reason": "cross_repo_runtime_integration_missing",
-            "operation": "simplicio-loop-delivery",
-        }
+        full_standalone, loop_standalone = delivery_scenarios(root, snapshot, term)
 
         baseline_scan_total = sum(baseline_scan["wall_ms"]["samples"])
         baseline_ast_total = sum(baseline_ast["wall_ms"]["samples"])
@@ -388,7 +422,7 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
             },
             "limitations": [
                 "Rust standalone measures the real subprocess/IPC context path over a Python-built snapshot; it does not measure Rust snapshot construction.",
-                "Full/Loop ecosystem cells are explicitly blocked until their cross-repository runtime integrations exist.",
+                "Full delivery is measured fail-closed until Runtime authorization; Loop standalone uses the real Dev CLI adapter.",
                 "Token counts use whitespace-v1 estimates, not provider billing telemetry.",
             ],
         }
@@ -421,12 +455,14 @@ def markdown_report(result: dict[str, Any]) -> str:
             f"- Rust standalone status: {result['scenarios']['fast_rust_standalone']['status']}",
             f"- Rust standalone total wall time: {totals['rust_standalone_wall_ms'] if totals['rust_standalone_wall_ms'] is not None else 'n/a'} ms",
             f"- Rust standalone speedup versus Python Fast: {totals['rust_standalone_speedup_vs_python'] if totals['rust_standalone_speedup_vs_python'] is not None else 'n/a'}x",
-            f"- Full standalone status: {result['scenarios']['full_standalone']['status']} ({result['scenarios']['full_standalone']['reason']})",
-            f"- Loop standalone status: {result['scenarios']['loop_standalone']['status']} ({result['scenarios']['loop_standalone']['reason']})",
+            f"- Full standalone status: {result['scenarios']['full_standalone']['status']} ({', '.join(result['scenarios']['full_standalone'].get('reason_codes', [])) or 'none'})",
+            f"- Full delivery wall time: {result['scenarios']['full_standalone'].get('timings', {}).get('delivery_wall_ms', 'n/a')} ms",
+            f"- Loop standalone status: {result['scenarios']['loop_standalone']['status']} ({', '.join(result['scenarios']['loop_standalone'].get('reason_codes', [])) or 'none'})",
+            f"- Loop delivery wall time: {result['scenarios']['loop_standalone'].get('timings', {}).get('delivery_wall_ms', 'n/a')} ms",
             "",
             "Token values use `whitespace-v1-estimate`; they are not provider billing telemetry.",
             "Rust standalone is a real subprocess/IPC read over a Python-built snapshot; it is not an end-to-end Rust build measurement.",
-            "Full/Loop cells are blocked with an explicit integration reason, not inferred as measured.",
+            "Full delivery is measured fail-closed without Runtime authorization; Loop standalone is a real local delivery through the Dev CLI adapter.",
             "Alteration is a deterministic local fixture (locate + edit + py_compile), not an LLM/provider delivery run.",
             "",
         ]
