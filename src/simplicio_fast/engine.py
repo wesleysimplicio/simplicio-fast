@@ -11,7 +11,8 @@ import json
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass, asdict
+import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -38,9 +39,29 @@ class EngineSelection:
     reason: str
     executable: str | None
     manifest: dict[str, Any]
+    probe_ms: float | None = None
 
     def receipt(self) -> dict[str, Any]:
-        return {"schema": SELECTION_SCHEMA, **asdict(self)}
+        conformance = self.manifest.get("conformance")
+        if not isinstance(conformance, dict):
+            conformance = {}
+        capabilities = self.manifest.get("capabilities")
+        if not isinstance(capabilities, list):
+            capabilities = None
+        return {
+            "schema": SELECTION_SCHEMA,
+            "requested": self.requested,
+            "selected": self.selected,
+            "requested_engine": self.requested,
+            "selected_engine": self.selected,
+            "version": self.manifest.get("version"),
+            "capabilities": capabilities,
+            "reason": self.reason,
+            "conformance_digest": conformance.get("digest"),
+            "timings": {"probe_ms": self.probe_ms},
+            "executable": self.executable,
+            "manifest": self.manifest,
+        }
 
 
 def python_manifest() -> dict[str, Any]:
@@ -108,30 +129,44 @@ def probe_rust() -> tuple[dict[str, Any] | None, str | None]:
     return manifest, None
 
 
+def _probe_rust_timed() -> tuple[dict[str, Any] | None, str | None, float]:
+    started = time.perf_counter()
+    manifest, reason = probe_rust()
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    return manifest, reason, elapsed_ms
+
+
 def select_engine(requested: str = "auto") -> EngineSelection:
-    if requested not in ENGINE_CHOICES:
+    normalized = requested.strip().lower()
+    if normalized not in ENGINE_CHOICES:
         raise ValueError(f"unsupported fast engine: {requested}")
-    if requested == "off":
-        return EngineSelection(requested, "off", "explicitly_disabled", None, {})
-    if requested == "python":
-        return EngineSelection(requested, "python", "explicitly_selected", None, python_manifest())
-    rust_manifest, rust_reason = probe_rust()
+    if normalized == "off":
+        return EngineSelection(normalized, "off", "explicitly_disabled", None, {})
+    if normalized == "python":
+        return EngineSelection(
+            normalized, "python", "explicitly_selected", None, python_manifest()
+        )
+    rust_manifest, rust_reason, probe_ms = _probe_rust_timed()
     rust_path = _rust_executable()
-    if requested in {"auto", "rust"} and rust_manifest is not None:
-        return EngineSelection(requested, "rust", "rust_probe_passed", rust_path, rust_manifest)
-    if requested == "rust":
+    if normalized in {"auto", "rust"} and rust_manifest is not None:
+        return EngineSelection(
+            normalized, "rust", "rust_probe_passed", rust_path, rust_manifest, probe_ms
+        )
+    if normalized == "rust":
         selection = EngineSelection(
-            requested,
+            normalized,
             "unavailable",
             rust_reason or "rust_unavailable",
             rust_path,
             {"schema": MANIFEST_SCHEMA, "engine": "rust", "status": "unavailable"},
+            probe_ms,
         )
         raise EngineSelectionError(selection.receipt())
     return EngineSelection(
-        requested,
+        normalized,
         "python",
         rust_reason or "rust_not_selected",
         None,
         python_manifest(),
+        probe_ms,
     )
