@@ -21,6 +21,8 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 from simplicio_fast.snapshot import Snapshot, build_snapshot, source_files
 from simplicio_fast.workspace import WorkspaceStore
 
+SHARED_BASE_OVERLAY_SLOTS = (1, 20, 100)
+
 
 def _unavailable(reason: str) -> dict[str, int | str | None]:
     return {"value": None, "reason": reason}
@@ -218,7 +220,7 @@ def run_size(size: int, repetitions: int) -> dict[str, object]:
             "snapshot_one_file_change": asdict(incremental),
             "changed_symbol_visible": changed_visible,
             "shared_base_overlay_slots": [
-                measure_shared_slots(root, snapshot_path, slots) for slots in (1, 5, 20)
+                measure_shared_slots(root, snapshot_path, slots) for slots in SHARED_BASE_OVERLAY_SLOTS
             ],
             "query_speedup": baseline["wall_median_ms"] / mapped["wall_median_ms"],
             "query_cpu_reduction_percent": (1 - mapped["cpu_median_ms"] / baseline["cpu_median_ms"]) * 100,

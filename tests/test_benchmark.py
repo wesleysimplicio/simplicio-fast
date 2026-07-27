@@ -5,8 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from benchmarks.compare_fast import timed
-from benchmarks.run import peak_rss_kib, peak_rss_metric
-
+from benchmarks.run import SHARED_BASE_OVERLAY_SLOTS, peak_rss_kib, peak_rss_metric
 
 class _FakeFunction:
     def __init__(self, result: bool) -> None:
@@ -42,6 +41,9 @@ class BenchmarkResourceTest(unittest.TestCase):
         self.assertIn("p99", wall)
         self.assertLessEqual(wall["median"], wall["p95"])
         self.assertLessEqual(wall["p95"], wall["p99"])
+
+    def test_shared_base_overlay_slot_matrix_is_stable(self) -> None:
+        self.assertEqual((1, 20, 100), SHARED_BASE_OVERLAY_SLOTS)
 
     def test_posix_keeps_resource_getrusage(self) -> None:
         fake_resource = types.SimpleNamespace(
