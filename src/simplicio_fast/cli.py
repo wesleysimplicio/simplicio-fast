@@ -38,6 +38,7 @@ def source_commit(root: Path) -> tuple[str | None, str | None]:
             capture_output=True,
             text=True,
             check=False,
+            close_fds=False
         )
     except OSError:
         return None, "git_unavailable"
