@@ -16,6 +16,11 @@ try:
 except ImportError:  # pragma: no cover - Windows Python can omit resource.
     resource = None
 
+
+try:
+    import tracemalloc
+except ImportError:  # pragma: no cover - Python builds can omit tracemalloc.
+    tracemalloc = None
 sys.path.insert(0, str(Path(__file__).parents[1] / "src"))
 
 from simplicio_fast.snapshot import Snapshot, build_snapshot, source_files
@@ -94,6 +99,50 @@ def peak_rss_kib() -> int | None:
     return peak_rss_metric()["value"]  # type: ignore[return-value]
 
 
+def _allocation_percentiles(samples: list[int]) -> dict[str, object]:
+    ordered = sorted(samples)
+    return {
+        "samples": samples,
+        "median": statistics.median(ordered),
+        "p95": ordered[max(0, int(len(ordered) * 0.95) - 1)],
+        "p99": ordered[max(0, int(len(ordered) * 0.99) - 1)],
+    }
+
+
+def measure_allocations(operation, repetitions: int) -> dict[str, object]:
+    """Measure traced peak allocations without making the benchmark mandatory on every host."""
+    if repetitions < 1:
+        raise ValueError("repetitions must be positive")
+    if tracemalloc is None:
+        return {
+            "schema": "simplicio.fast.allocation-metric/v1",
+            "status": "partial",
+            "reason": "tracemalloc_unavailable",
+            "repetitions": repetitions,
+            "peak_bytes": None,
+        }
+    was_tracing = tracemalloc.is_tracing()
+    if not was_tracing:
+        tracemalloc.start()
+    samples: list[int] = []
+    try:
+        for _ in range(repetitions):
+            tracemalloc.reset_peak()
+            operation()
+            _, peak = tracemalloc.get_traced_memory()
+            samples.append(int(peak))
+    finally:
+        if not was_tracing:
+            tracemalloc.stop()
+    return {
+        "schema": "simplicio.fast.allocation-metric/v1",
+        "status": "complete",
+        "reason": None,
+        "repetitions": repetitions,
+        "peak_bytes": _allocation_percentiles(samples),
+    }
+
+
 def generate_project(root: Path, symbols: int) -> None:
     files = max(1, (symbols + 99) // 100)
     package = root / "app"
@@ -106,10 +155,14 @@ def generate_project(root: Path, symbols: int) -> None:
             functions.append(
                 f"def update_user_{index}(user_id: int) -> int:\n    return user_id + {index}\n"
             )
-        (package / f"service_{file_index:04d}.py").write_text("\n".join(functions), encoding="utf-8")
+        (package / f"service_{file_index:04d}.py").write_text(
+            "\n".join(functions), encoding="utf-8"
+        )
 
 
-def measure_shared_slots(root: Path, snapshot_path: Path, slots: int, repetitions: int = 10) -> dict[str, float | int | str]:
+def measure_shared_slots(
+    root: Path, snapshot_path: Path, slots: int, repetitions: int = 10
+) -> dict[str, float | int | str]:
     store = WorkspaceStore(root, root / ".bench-store")
     base = store.build_base()
     wall: list[float] = []
@@ -119,7 +172,14 @@ def measure_shared_slots(root: Path, snapshot_path: Path, slots: int, repetition
         wall_start = time.perf_counter()
         cpu_start = time.process_time()
         with concurrent.futures.ThreadPoolExecutor(max_workers=slots) as executor:
-            list(executor.map(lambda index: store.create_overlay(f"slot-{slots}-{index}", base.generation_id), range(slots)))
+            list(
+                executor.map(
+                    lambda index: store.create_overlay(
+                        f"slot-{slots}-{index}", base.generation_id
+                    ),
+                    range(slots),
+                )
+            )
         wall.append((time.perf_counter() - wall_start) * 1000)
         cpu.append((time.process_time() - cpu_start) * 1000)
         observed = peak_rss_kib()
@@ -133,7 +193,9 @@ def measure_shared_slots(root: Path, snapshot_path: Path, slots: int, repetition
         "wall_p95_ms": sorted(wall)[max(0, int(repetitions * 0.95) - 1)],
         "cpu_median_ms": statistics.median(cpu),
         "peak_rss_kib": rss,
-        "peak_rss_reason": None if rss is not None else "native process RSS unavailable on this host",
+        "peak_rss_reason": None
+        if rss is not None
+        else "native process RSS unavailable on this host",
         "base_generation": base.generation_id,
     }
 
@@ -185,9 +247,17 @@ def run_size(size: int, repetitions: int) -> dict[str, object]:
         generate_project(root, size)
         snapshot_path = root / ".simplicio/fast/project.sfast"
         baseline = measure(lambda: baseline_query(root, "update_user"), repetitions)
+
+        baseline_allocation = measure_allocations(
+            lambda: baseline_query(root, "update_user"), repetitions
+        )
         cold = build_snapshot(root, snapshot_path)
         with Snapshot(snapshot_path) as snapshot:
             mapped = measure(lambda: snapshot.find("update_user"), repetitions)
+
+            mapped_allocation = measure_allocations(
+                lambda: snapshot.find("update_user"), repetitions
+            )
         warm_build = build_snapshot(root, snapshot_path)
         changed_file = root / "app/service_0000.py"
         changed_file.write_text(
@@ -214,23 +284,31 @@ def run_size(size: int, repetitions: int) -> dict[str, object]:
                 "metrics_status": status,
             },
             "baseline_ast_query": baseline,
+            "baseline_ast_query_allocation": baseline_allocation,
             "snapshot_cold_build": asdict(cold),
             "snapshot_mmap_query": mapped,
+            "snapshot_mmap_query_allocation": mapped_allocation,
             "snapshot_no_change_build": asdict(warm_build),
             "snapshot_one_file_change": asdict(incremental),
             "changed_symbol_visible": changed_visible,
             "shared_base_overlay_slots": [
-                measure_shared_slots(root, snapshot_path, slots) for slots in SHARED_BASE_OVERLAY_SLOTS
+                measure_shared_slots(root, snapshot_path, slots)
+                for slots in SHARED_BASE_OVERLAY_SLOTS
             ],
             "query_speedup": baseline["wall_median_ms"] / mapped["wall_median_ms"],
-            "query_cpu_reduction_percent": (1 - mapped["cpu_median_ms"] / baseline["cpu_median_ms"]) * 100,
+            "query_cpu_reduction_percent": (
+                1 - mapped["cpu_median_ms"] / baseline["cpu_median_ms"]
+            )
+            * 100,
             "usage": process_usage(),
         }
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--sizes", default="1000,10000,100000", help="comma-separated symbol counts")
+    parser.add_argument(
+        "--sizes", default="1000,10000,100000", help="comma-separated symbol counts"
+    )
     parser.add_argument("--repetitions", type=int, default=10)
     args = parser.parse_args()
     if args.repetitions < 10:
@@ -241,7 +319,11 @@ def main() -> None:
     result = {
         "schema": "simplicio.fast.benchmark/v1",
         "environment": {"python": sys.version.split()[0], "usage": process_usage()},
-        "workload": {"sizes": sizes, "repetitions": args.repetitions, "query": "update_user"},
+        "workload": {
+            "sizes": sizes,
+            "repetitions": args.repetitions,
+            "query": "update_user",
+        },
         "runs": [run_size(size, args.repetitions) for size in sizes],
     }
     output = Path("benchmarks/results/latest.json")

@@ -5,7 +5,15 @@ import unittest
 from unittest.mock import patch
 
 from benchmarks.compare_fast import timed
-from benchmarks.run import SHARED_BASE_OVERLAY_SLOTS, peak_rss_kib, peak_rss_metric
+
+from benchmarks.run import (
+    SHARED_BASE_OVERLAY_SLOTS,
+    measure_allocations,
+    peak_rss_kib,
+    peak_rss_metric,
+    run_size,
+)
+
 
 class _FakeFunction:
     def __init__(self, result: bool) -> None:
@@ -29,7 +37,9 @@ class _FakeWindowsLibraries:
             return object()
 
     def __init__(self, result: bool) -> None:
-        self.psapi = type("Psapi", (), {"GetProcessMemoryInfo": _FakeFunction(result)})()
+        self.psapi = type(
+            "Psapi", (), {"GetProcessMemoryInfo": _FakeFunction(result)}
+        )()
 
 
 class BenchmarkResourceTest(unittest.TestCase):
@@ -60,17 +70,56 @@ class BenchmarkResourceTest(unittest.TestCase):
 
     def test_windows_process_memory_api_returns_kib(self) -> None:
         with patch.object(sys, "platform", "win32"):
-            with patch.object(ctypes, "windll", _FakeWindowsLibraries(True), create=True):
+            with patch.object(
+                ctypes, "windll", _FakeWindowsLibraries(True), create=True
+            ):
                 metric = peak_rss_metric()
         self.assertEqual(8, metric["value"])
         self.assertIsNone(metric["reason"])
 
     def test_windows_failure_is_a_machine_readable_partial_metric(self) -> None:
         with patch.object(sys, "platform", "win32"):
-            with patch.object(ctypes, "windll", _FakeWindowsLibraries(False), create=True):
+            with patch.object(
+                ctypes, "windll", _FakeWindowsLibraries(False), create=True
+            ):
                 metric = peak_rss_metric()
         self.assertIsNone(metric["value"])
         self.assertEqual("windows_get_process_memory_info_failed", metric["reason"])
+
+    def test_allocation_receipt_contains_percentiles_and_raw_samples(self) -> None:
+        calls = 0
+
+        def operation() -> None:
+            nonlocal calls
+            calls += 1
+            [index * 2 for index in range(32)]
+
+        receipt = measure_allocations(operation, repetitions=10)
+        self.assertEqual("complete", receipt["status"])
+        self.assertEqual(10, receipt["repetitions"])
+        peak = receipt["peak_bytes"]
+        self.assertEqual(10, len(peak["samples"]))
+        self.assertLessEqual(peak["median"], peak["p95"])
+        self.assertLessEqual(peak["p95"], peak["p99"])
+        self.assertEqual(10, calls)
+
+    def test_allocation_receipt_is_partial_when_tracemalloc_is_unavailable(
+        self,
+    ) -> None:
+        with patch("benchmarks.run.tracemalloc", None):
+            receipt = measure_allocations(lambda: None, repetitions=10)
+        self.assertEqual("partial", receipt["status"])
+        self.assertEqual("tracemalloc_unavailable", receipt["reason"])
+        self.assertIsNone(receipt["peak_bytes"])
+
+    def test_run_size_emits_allocation_receipts(self) -> None:
+        receipt = run_size(1000, repetitions=10)
+        for name in ("baseline_ast_query_allocation", "snapshot_mmap_query_allocation"):
+            metric = receipt[name]
+            self.assertEqual("simplicio.fast.allocation-metric/v1", metric["schema"])
+            self.assertEqual("complete", metric["status"])
+            self.assertEqual(10, metric["repetitions"])
+            self.assertEqual(10, len(metric["peak_bytes"]["samples"]))
 
 
 if __name__ == "__main__":
