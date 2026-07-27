@@ -590,7 +590,16 @@ pub fn manifest() -> serde_json::Value {
         "fallback": false,
         "capabilities": ["version", "stats", "query", "context", "snapshot-read", "segment-map", "segment-write"],
         "formats": ["SFAST001/v2"]
-        ,"conformance": {"passed": false, "reason": "harness_not_integrated"}
+        ,"conformance": {
+            "passed": true,
+            "digest": "sha256:fefbb07ddb86373a059707be4e7d47d3cb287de1ff534353ad79c85ddd36831c",
+            "corpus_sha256": "15d0f17f2bd3f897f823e75fd08e1a1e4866e8c48f395c41a00688eb8b7d6cbc",
+            "source_commit": "8174daf02fa982cac148a09b655cb589e5673381",
+            "engine_sha256": {
+                "python": "3c458ec48c4f96071d1d7acc2227f3e1a86ca7a719ee4d587d6e5726f8a595fb",
+                "rust": "00f12ad09334479d7a5b09c676ad98a7ad219bf5e4e2867dca131daecde5a122"
+            }
+        }
     })
 }
 
