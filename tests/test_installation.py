@@ -17,6 +17,10 @@ class InstallationReportTest(unittest.TestCase):
         self.assertEqual("ready", payload["status"])
         self.assertEqual("pass", payload["checks"][1]["status"])
         self.assertEqual("artifact_missing", payload["checks"][2]["reason"])
+        receipt = payload["checks"][3]["receipt"]
+        self.assertEqual("auto", receipt["requested_engine"])
+        self.assertEqual("python", receipt["selected_engine"])
+        self.assertEqual("artifact_missing", receipt["reason_code"])
         self.assertFalse(payload["rollback"]["supported"])
 
     def test_rust_manifest_and_digest_are_reported(self) -> None:
@@ -33,6 +37,14 @@ class InstallationReportTest(unittest.TestCase):
         self.assertEqual("pass", check["status"])
         self.assertEqual("rust", check["manifest"]["engine"])
         self.assertTrue(check["sha256"])
+        self.assertEqual(
+            {
+                "requested_engine": "auto",
+                "selected_engine": "rust",
+                "reason_code": "rust_artifact_available",
+            },
+            payload["checks"][3]["receipt"],
+        )
 
     def test_incompatible_rust_manifest_is_degraded_and_not_ready(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -49,3 +61,7 @@ class InstallationReportTest(unittest.TestCase):
         self.assertEqual("degraded", payload["status"])
         self.assertEqual("fail", check["status"])
         self.assertEqual("manifest_schema_mismatch", check["reason"])
+        self.assertEqual("python", payload["checks"][3]["receipt"]["selected_engine"])
+        self.assertEqual(
+            "manifest_schema_mismatch", payload["checks"][3]["receipt"]["reason_code"]
+        )

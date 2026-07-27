@@ -70,19 +70,41 @@ def report() -> dict[str, Any]:
             rust_reason = None
     rust_status = "pass" if rust_manifest else ("info" if rust is None else "fail")
     overall_status = "ready" if rust_status != "fail" else "degraded"
+    python_only_check = {"name": "python_only_path", "status": "pass", "detail": "supported"}
+    rust_check = {
+        "name": "rust_artifact",
+        "status": rust_status,
+        "path": str(rust) if rust else None,
+        "sha256": _digest(rust) if rust else None,
+        "manifest": rust_manifest,
+        "reason": rust_reason,
+    }
     checks = [
         {"name": "python_package", "status": "pass", "version": __version__},
-        {"name": "python_only_path", "status": "pass", "detail": "supported"},
-        {
-            "name": "rust_artifact",
-            "status": rust_status,
-            "path": str(rust) if rust else None,
-            "sha256": _digest(rust) if rust else None,
-            "manifest": rust_manifest,
-            "reason": rust_reason,
-        },
-        {"name": "offline_resolution", "status": "pass", "detail": "no download performed"},
+        python_only_check,
+        rust_check,
     ]
+    if rust_check["status"] == "pass":
+        selected_engine = "rust"
+        reason_code = "rust_artifact_available"
+    elif python_only_check["status"] == "pass":
+        selected_engine = "python"
+        reason_code = rust_check["reason"] or "rust_artifact_unavailable"
+    else:
+        selected_engine = None
+        reason_code = "no_usable_engine"
+    checks.append(
+        {
+            "name": "offline_resolution",
+            "status": "pass",
+            "detail": "no download performed",
+            "receipt": {
+                "requested_engine": "auto",
+                "selected_engine": selected_engine,
+                "reason_code": reason_code,
+            },
+        }
+    )
     return {
         "schema": SCHEMA,
         "status": overall_status,
