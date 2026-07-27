@@ -24,9 +24,18 @@ def receipt(*, hot: float = 100.0, speedup: float = 1.5, tokens: float = 75.0, r
             "estimated_token_savings_percent": tokens,
         },
         "scenarios": {
-            "without_fast_alteration": {"repetitions": repetitions},
-            "fast_python_alteration": {"repetitions": repetitions},
-            "fast_python_alteration_refresh": {"repetitions": repetitions},
+            "without_fast_alteration": {
+                "repetitions": repetitions,
+                "wall_ms": {"median": 10.0, "p95": 12.0, "p99": 13.0, "samples": [10.0] * repetitions},
+            },
+            "fast_python_alteration": {
+                "repetitions": repetitions,
+                "wall_ms": {"median": 9.0, "p95": 11.0, "p99": 12.0, "samples": [9.0] * repetitions},
+            },
+            "fast_python_alteration_refresh": {
+                "repetitions": repetitions,
+                "wall_ms": {"median": 20.0, "p95": 22.0, "p99": 23.0, "samples": [20.0] * repetitions},
+            },
             "full_standalone": {"status": "blocked", "reason": "runtime_missing"},
             "loop_standalone": {"status": "blocked", "reason": "runtime_missing"},
         },
@@ -43,6 +52,13 @@ class PerfGateTest(unittest.TestCase):
         result = evaluate(receipt(), receipt(hot=120.0, speedup=1.0, tokens=60.0))
         self.assertEqual("regressed", result["status"])
         self.assertTrue(any(check["status"] == "fail" for check in result["checks"]))
+
+    def test_invalid_percentile_order_is_inconclusive(self) -> None:
+        candidate = copy.deepcopy(receipt())
+        candidate["scenarios"]["fast_python_alteration"]["wall_ms"]["p95"] = 8.0
+        result = evaluate(receipt(), candidate)
+        self.assertEqual("inconclusive", result["status"])
+        self.assertEqual("percentile_metrics_invalid", result["reason"])
 
     def test_missing_or_insufficient_repetitions_is_inconclusive(self) -> None:
         candidate = receipt(repetitions=9)
