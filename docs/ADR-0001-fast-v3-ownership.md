@@ -2,7 +2,7 @@
 
 - Status: Proposed for implementation
 - Date: 2026-07-26
-- Issue: https://github.com/wesleysimplicio/simplicio-fast/issues/38
+- issue: https://github.com/wesleysimplicio/simplicio-fast/issues/38
 - Parent: https://github.com/wesleysimplicio/simplicio-fast/issues/37
 
 ## Context
@@ -104,7 +104,8 @@ experiments and must never apply an effect twice.
 - JSON is allowed at CLI/API/export boundaries only.
 - Consumers use handles, ContextPackets, Changesets and Receipts; they do not parse
   .sfast offsets.
-- Every context span carries a source hash; every attempt carries a pinned generation.
+- mmap offsets are private implementation details; JSON is a boundary format only.
+- Every context span carries source hashes; every attempt carries a pinned generation.
 
 ### 6. Failure and fallback semantics
 
