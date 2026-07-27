@@ -92,7 +92,10 @@ class BuildMetrics:
     format_version: int = VERSION
     generation: str = ""
     relations: int = 0
-
+    parsed_paths: tuple[str, ...] = ()
+    reused_paths: tuple[str, ...] = ()
+    changed_paths: tuple[str, ...] = ()
+    reason_codes: tuple[str, ...] = ()
 
 @dataclass(frozen=True, slots=True)
 class ContextSpan:
@@ -479,12 +482,14 @@ def build_snapshot(
     previous: dict[str, tuple[bytes, list[Symbol]]] = {}
     previous_relations: list[Relation] = []
     previous_symbol_files: dict[str, str] = {}
+    previous_valid = False
     if output.exists():
         try:
             with Snapshot(output) as snapshot:
                 previous = snapshot.grouped()
                 previous_relations = snapshot.relations()
                 previous_symbol_files = {symbol.qualified_name: symbol.file for symbol in snapshot.symbols()}
+                previous_valid = True
         except (OSError, ValueError):
             # A snapshot is disposable derived state. Ignore invalid/truncated
             # cache bytes and rebuild from authoritative source files. _build_v2
@@ -495,7 +500,8 @@ def build_snapshot(
 
     entries: list[tuple[str, bytes, int, list[Symbol]]] = []
     relations: list[Relation] = []
-    parsed = reused = 0
+    parsed_paths: list[str] = []
+    reused_paths: list[str] = []
     deadline = None if timeout_seconds is None else wall_start + timeout_seconds
     for path in source_files(root):
         if deadline is not None and time.perf_counter() >= deadline:
@@ -516,33 +522,62 @@ def build_snapshot(
         cached = previous.get(relative)
         if cached and cached[0] == digest:
             symbols = cached[1]
-            reused += 1
+            reused_paths.append(relative)
         else:
             symbols, found_relations = _parse_file(path, relative, repository)
             relations.extend(found_relations)
-            parsed += 1
+            parsed_paths.append(relative)
         entries.append((relative, digest, len(contents), symbols))
-    if reused and output.exists():
-        changed_paths = {path for path, digest, _, _ in entries if previous.get(path, (None, []))[0] != digest}
+
+    current_digests = {path: digest for path, digest, _, _ in entries}
+    current_paths = set(current_digests)
+    previous_paths = set(previous)
+    added_paths = sorted(current_paths - previous_paths)
+    deleted_paths = sorted(previous_paths - current_paths)
+    modified_paths = sorted(
+        path for path in current_paths & previous_paths if previous[path][0] != current_digests[path]
+    )
+    if previous_valid:
+        changed_paths = tuple(sorted({*added_paths, *deleted_paths, *modified_paths}))
+        reason_codes = tuple(
+            [code for code, present in (
+                ("source_changed", bool(modified_paths)),
+                ("source_added", bool(added_paths)),
+                ("source_deleted", bool(deleted_paths)),
+            ) if present]
+            or ["no_change"]
+        )
+    elif output.exists():
+        changed_paths = ()
+        reason_codes = ("snapshot_invalidated",)
+    else:
+        changed_paths = ()
+        reason_codes = ("cold_build",)
+
+    if reused_paths and output.exists():
+        invalidated_paths = set(changed_paths)
         relations = [
             relation
             for relation in previous_relations
-            if relation.origin not in changed_paths
-            and previous_symbol_files.get(relation.origin) not in changed_paths
+            if relation.origin not in invalidated_paths
+            and previous_symbol_files.get(relation.origin) not in invalidated_paths
         ] + relations
     total_size, checksum = _build_v2(entries, relations, output)
     return BuildMetrics(
         files=len(entries),
         symbols=sum(len(found) for _, _, _, found in entries),
-        parsed_files=parsed,
-        reused_files=reused,
+        parsed_files=len(parsed_paths),
+        reused_files=len(reused_paths),
         snapshot_bytes=total_size,
         wall_ms=(time.perf_counter() - wall_start) * 1000,
         cpu_ms=(time.process_time() - cpu_start) * 1000,
         generation=checksum,
         relations=len(relations),
+        parsed_paths=tuple(parsed_paths),
+        reused_paths=tuple(reused_paths),
+        changed_paths=changed_paths,
+        reason_codes=reason_codes,
     )
-
 
 class Snapshot:
     def __init__(self, path: Path) -> None:
