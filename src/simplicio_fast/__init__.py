@@ -1,8 +1,9 @@
-"""Simplicio Fast proof of concept."""
+"""Simplicio Fast proof of concept. Bounded Knowledge Facade"""
 
 __version__ = "2.0.10"
 
 from .engine_selection import EngineSelection, EngineSelectionError, select_engine
+from .knowledge import KnowledgeFacade
 from .pager import RequestKey, SingleFlightCoordinator, SingleFlightError, make_request_key
 from .workspace import GenerationId, Manifest, WorkspaceStore
 from .navigation import (
@@ -30,6 +31,7 @@ __all__ = [
     "NavigationPage",
     "WorkspaceStore",
     "select_engine",
+    "KnowledgeFacade",
     "__version__",
     "navigate",
 ]
