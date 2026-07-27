@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Literal
 
 SCHEMA = "simplicio.fast.turboquant-4bit/v1"
+RERANK_METRICS = frozenset({"cosine", "dot", "l2"})
 _MIN_CODE = -8
 _MAX_CODE = 7
 _MASK64 = (1 << 64) - 1
@@ -14,6 +15,13 @@ _MASK64 = (1 << 64) - 1
 
 class QuantizationError(ValueError):
     """Raised when a vector or packed nibble stream violates the contract."""
+
+@dataclass(frozen=True, slots=True)
+class RerankedCandidate:
+    """A deterministic exact score for one integral candidate vector."""
+
+    canonical_id: str
+    score: float
 
 
 def _validate_dimension(dimension: int) -> None:
@@ -60,6 +68,51 @@ def rotate(values: Iterable[float], seed: int = 0, *, inverse: bool = False) -> 
         return tuple(result)
     return tuple(signs[index] * vector[source] for index, source in enumerate(permutation))
 
+
+def exact_rerank(
+    query: Iterable[float],
+    candidates: Iterable[tuple[str, Iterable[float]]],
+    *,
+    metric: Literal["cosine", "dot", "l2"] = "dot",
+    top_k: int = 10,
+) -> tuple[RerankedCandidate, ...]:
+    """Score integral candidate vectors and return a stable top-k ranking.
+
+    Candidates are expected to come from the exact/integral store after an
+    approximate search. Higher scores rank first; ties use canonical IDs.
+    """
+    if metric not in RERANK_METRICS:
+        raise QuantizationError("metric must be cosine, dot, or l2")
+    if isinstance(top_k, bool) or not isinstance(top_k, int) or top_k < 1:
+        raise QuantizationError("top_k must be a positive integer")
+    query_vector = _as_vector(query)
+    query_norm = math.sqrt(sum(value * value for value in query_vector))
+    seen: set[str] = set()
+    ranked: list[RerankedCandidate] = []
+    try:
+        candidate_iter = iter(candidates)
+    except TypeError as error:
+        raise QuantizationError("candidates must be an iterable") from error
+    for raw_id, raw_vector in candidate_iter:
+        if not isinstance(raw_id, str) or not raw_id:
+            raise QuantizationError("candidate IDs must be non-empty strings")
+        if raw_id in seen:
+            raise QuantizationError("candidate IDs must be unique")
+        seen.add(raw_id)
+        vector = _as_vector(raw_vector)
+        if len(vector) != len(query_vector):
+            raise QuantizationError("candidate dimension must match query")
+        dot = sum(left * right for left, right in zip(query_vector, vector))
+        if metric == "dot":
+            score = dot
+        elif metric == "l2":
+            score = -sum((left - right) ** 2 for left, right in zip(query_vector, vector))
+        else:
+            vector_norm = math.sqrt(sum(value * value for value in vector))
+            score = dot / (query_norm * vector_norm) if query_norm and vector_norm else 0.0
+        ranked.append(RerankedCandidate(raw_id, score))
+    ranked.sort(key=lambda candidate: (-candidate.score, candidate.canonical_id))
+    return tuple(ranked[:top_k])
 
 def _as_vector(values: Iterable[float]) -> tuple[float, ...]:
     try:
