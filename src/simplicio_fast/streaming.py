@@ -151,6 +151,24 @@ class StreamingBlockStore:
         checkpoint_path.unlink(missing_ok=True)
         return {**manifest, "status": "published", "appended_blocks": appended}
 
+    def build_file(
+        self,
+        source: str | Path,
+        *,
+        generation: str,
+        block_bytes: int = DEFAULT_BLOCK_BYTES,
+        resume: bool = False,
+    ) -> dict[str, Any]:
+        """Stream a file into bounded blocks without materializing it."""
+        source_path = Path(source)
+        try:
+            handle = source_path.open("rb")
+        except OSError as error:
+            raise StreamingStoreError("source_unavailable", "stream source is unavailable") from error
+        with handle:
+            chunks = iter(lambda: handle.read(block_bytes), b"")
+            return self.build(chunks, generation=generation, block_bytes=block_bytes, resume=resume)
+
     def read_range(self, generation: str, start: int, length: int) -> bytes:
         if (
             isinstance(start, bool)
