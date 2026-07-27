@@ -27,9 +27,9 @@ class EngineSelectionTest(unittest.TestCase):
 
     def test_python_selection_never_probes_or_imports_rust_engine(self) -> None:
         with patch("simplicio_fast.engine.probe_rust", side_effect=AssertionError):
-            selection = select_engine("off")
-        self.assertEqual("off", selection.selected)
-        self.assertEqual("explicitly_disabled", selection.reason)
+            selection = select_engine("python")
+        self.assertEqual("python", selection.selected)
+        self.assertEqual("explicitly_selected", selection.reason)
 
     def test_explicit_rust_fails_closed_when_missing(self) -> None:
         with patch("simplicio_fast.engine.shutil.which", return_value=None):
@@ -60,6 +60,9 @@ class EngineSelectionTest(unittest.TestCase):
         self.assertEqual("simplicio.fast.engine-manifest/v1", manifest["schema"])
         self.assertIn("context", manifest["capabilities"])
         self.assertIn("apply", manifest["capabilities"])
+        self.assertEqual(["python"], manifest["source_languages"])
+        self.assertEqual("3.11", manifest["minimum_python"])
+        self.assertEqual(512 * 1024 * 1024, manifest["limits"]["max_snapshot_bytes"])
 
     def test_cli_accepts_engine_selector_after_command(self) -> None:
         output = io.StringIO()
