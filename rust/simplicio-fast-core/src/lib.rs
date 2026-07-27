@@ -6,9 +6,14 @@
 //! dependency and maps validated snapshots read-only when opened from disk.
 
 use memmap2::{Mmap, MmapOptions};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, fmt, fs, fs::File, path::Path};
+use std::{
+    collections::BTreeMap,
+    fmt, fs,
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 pub const MAGIC: &[u8; 8] = b"SFAST001";
 pub const VERSION: u16 = 2;
@@ -107,6 +112,126 @@ impl SnapshotBytes {
 
     fn len(&self) -> usize {
         self.as_slice().len()
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct SegmentManifest {
+    schema: String,
+    segments: Vec<SegmentEntry>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SegmentEntry {
+    name: String,
+    file: String,
+    bytes: usize,
+    sha256: String,
+}
+
+enum SegmentBytes {
+    Empty,
+    Mapped(Mmap),
+}
+
+pub struct MappedSegment {
+    name: String,
+    bytes: SegmentBytes,
+    sha256: String,
+}
+
+impl MappedSegment {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        match &self.bytes {
+            SegmentBytes::Empty => &[],
+            SegmentBytes::Mapped(bytes) => bytes,
+        }
+    }
+
+    pub fn sha256(&self) -> &str {
+        &self.sha256
+    }
+}
+
+pub struct SegmentReader {
+    directory: PathBuf,
+    manifest: SegmentManifest,
+}
+
+impl SegmentReader {
+    pub fn open(directory: impl AsRef<Path>) -> Result<Self, SnapshotError> {
+        let directory = directory.as_ref().canonicalize()?;
+        let manifest_path = directory.join("manifest.json");
+        let manifest: SegmentManifest = serde_json::from_slice(&fs::read(manifest_path)?)
+            .map_err(|_| SnapshotError::Invalid("invalid segment manifest JSON".into()))?;
+        if manifest.schema != "simplicio.fast.segments/v1" {
+            return Err(SnapshotError::Invalid(
+                "unsupported segment manifest schema".into(),
+            ));
+        }
+        Ok(Self {
+            directory,
+            manifest,
+        })
+    }
+
+    pub fn map(&self, name: &str) -> Result<MappedSegment, SnapshotError> {
+        let entry = self
+            .manifest
+            .segments
+            .iter()
+            .find(|entry| entry.name == name)
+            .ok_or_else(|| SnapshotError::Invalid(format!("segment not found: {name}")))?;
+        let entry_path = Path::new(&entry.file);
+        if entry_path.file_name().and_then(|value| value.to_str()) != Some(entry.file.as_str()) {
+            return Err(SnapshotError::Invalid(
+                "segment path escapes directory".into(),
+            ));
+        }
+        let path = self.directory.join(entry_path).canonicalize()?;
+        if path.strip_prefix(&self.directory).is_err() {
+            return Err(SnapshotError::Invalid(
+                "segment path escapes directory".into(),
+            ));
+        }
+        let file = File::open(path)?;
+        let length = file.metadata()?.len() as usize;
+        if length != entry.bytes {
+            return Err(SnapshotError::Invalid(format!(
+                "segment size mismatch: {}",
+                entry.name
+            )));
+        }
+        if length == 0 {
+            if entry.sha256 != hex_bytes(&Sha256::digest([])) {
+                return Err(SnapshotError::Invalid(format!(
+                    "segment checksum mismatch: {}",
+                    entry.name
+                )));
+            }
+            return Ok(MappedSegment {
+                name: entry.name.clone(),
+                bytes: SegmentBytes::Empty,
+                sha256: entry.sha256.clone(),
+            });
+        }
+        let mapped = unsafe { MmapOptions::new().map(&file)? };
+        let actual = hex_bytes(&Sha256::digest(&mapped));
+        if actual != entry.sha256 {
+            return Err(SnapshotError::Invalid(format!(
+                "segment checksum mismatch: {}",
+                entry.name
+            )));
+        }
+        Ok(MappedSegment {
+            name: entry.name.clone(),
+            bytes: SegmentBytes::Mapped(mapped),
+            sha256: actual,
+        })
     }
 }
 
@@ -450,7 +575,7 @@ pub fn manifest() -> serde_json::Value {
         "status": "available",
         "reference": false,
         "fallback": false,
-        "capabilities": ["version", "stats", "doctor", "snapshot-read"],
+        "capabilities": ["version", "stats", "doctor", "snapshot-read", "segment-map"],
         "formats": ["SFAST001/v2"]
         ,"conformance": {"passed": false, "reason": "harness_not_integrated"}
     })
@@ -565,5 +690,33 @@ mod tests {
         assert!(
             matches!(result, Err(SnapshotError::Invalid(reason)) if reason == "truncated header")
         );
+    }
+
+    #[test]
+    fn segment_reader_maps_and_verifies_one_content_addressed_segment() {
+        let directory =
+            std::env::temp_dir().join(format!("simplicio-fast-segments-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("create segment fixture");
+        let bytes = b"segment-payload";
+        let digest = hex_bytes(&Sha256::digest(bytes));
+        std::fs::write(directory.join("symbols.seg"), bytes).expect("write segment");
+        std::fs::write(
+            directory.join("manifest.json"),
+            serde_json::json!({
+                "schema": "simplicio.fast.segments/v1",
+                "segments": [{"name":"symbols","file":"symbols.seg","bytes":bytes.len(),"sha256":digest}]
+            })
+            .to_string(),
+        )
+        .expect("write manifest");
+        let mapped = SegmentReader::open(&directory)
+            .expect("open segment store")
+            .map("symbols")
+            .expect("map segment");
+        assert_eq!(mapped.as_bytes(), bytes);
+        assert_eq!(mapped.sha256(), digest);
+        drop(mapped);
+        std::fs::remove_dir_all(directory).expect("remove segment fixture");
     }
 }

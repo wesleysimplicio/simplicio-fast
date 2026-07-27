@@ -376,8 +376,10 @@ simplicio-fast segments map --directory .simplicio/fast/segments --name symbols
 `segments map` validates the selected segment's size and SHA-256, then opens only that segment
 through read-only `mmap`; it never exposes offsets from the monolithic snapshot. Publication
 swaps the manifest atomically and retains content-addressed segments for unchanged generations.
-This is the local segmented-storage/page-in reference; Rust segmented writing, demand-driven
-semantic indexes and large-RSS/page-fault benchmarks remain open gates for issues #43 and #61.
+The Rust reader exposes the same bounded map contract through `simplicio-fast-rs --segment
+<directory> <name>`, with the same path and checksum guards. Python remains the writer authority;
+Rust segmented writing, demand-driven semantic indexes and large-RSS/page-fault benchmarks remain
+open gates for issues #40, #43 and #61.
 
 ### Migration from SFAST001/v1
 
