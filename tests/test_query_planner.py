@@ -13,7 +13,8 @@ class QueryPlannerTest(unittest.TestCase):
         holder = tempfile.TemporaryDirectory()
         root = Path(holder.name)
         (root / "service.py").write_text(
-            "class Service:\n    def run(self):\n        return True\n",
+            "def helper():\n    return True\n"
+            "class Service:\n    def run(self):\n        return helper()\n",
             encoding="utf-8",
         )
         path = root / "project.sfast"
@@ -28,6 +29,7 @@ class QueryPlannerTest(unittest.TestCase):
             self.assertEqual("exact", plan.selected_index)
             self.assertEqual(1, plan.candidate_records)
             self.assertEqual(72, plan.estimated_bytes)
+            self.assertEqual(("helper",), plan.prefetch)
             self.assertEqual(64, len(plan.request_digest))
             self.assertEqual("SFAST001:" + snapshot.sha256, plan.generation)
         finally:
@@ -41,6 +43,7 @@ class QueryPlannerTest(unittest.TestCase):
             self.assertEqual("name-substring+path+kind", plan.selected_index)
             self.assertEqual(1, plan.candidate_records)
             self.assertEqual("bounded_name_indexes", plan.reason)
+            self.assertEqual((), plan.prefetch)
         finally:
             snapshot.close()
             holder.cleanup()

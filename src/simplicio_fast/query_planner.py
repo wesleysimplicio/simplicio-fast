@@ -120,6 +120,30 @@ def _intersection(*values: list[int]) -> list[int]:
     return sorted(result)
 
 
+def _causal_prefetch(snapshot: Snapshot, indices: list[int], max_items: int) -> tuple[str, ...]:
+    if not indices or max_items < 1:
+        return ()
+    origins = {snapshot._symbol_at(index).qualified_name for index in indices}
+    ranked = sorted(
+        (
+            (relation.confidence, relation.destination)
+            for relation in snapshot.relations()
+            if relation.origin in origins and relation.destination
+        ),
+        key=lambda item: (-item[0], item[1]),
+    )
+    result: list[str] = []
+    seen: set[str] = set()
+    for _confidence, destination in ranked:
+        if destination in seen:
+            continue
+        seen.add(destination)
+        result.append(destination)
+        if len(result) >= max_items:
+            break
+    return tuple(result)
+
+
 def plan_query(
     snapshot: Snapshot,
     term: str,
@@ -151,6 +175,8 @@ def plan_query(
         cached = cache.get(snapshot.generation, request_digest)
         if cached is not None:
             return cached
+
+    candidate_indices: list[int] = []
     if snapshot.format_version == 1:
         selected = "legacy-linear-scan"
         candidate_records = snapshot.symbol_count if operation != "impact" else snapshot.relation_count
@@ -188,7 +214,8 @@ def plan_query(
         if kind is not None:
             selected += "+kind"
             filters.append(indexes["kinds"].get(kind, []))
-        candidate_records = len(_intersection(*filters)) if filters else 0
+        candidate_indices = _intersection(*filters) if filters else []
+        candidate_records = len(candidate_indices)
     plan = QueryPlan(
         schema=PLAN_SCHEMA,
         generation=snapshot.generation,
@@ -200,7 +227,7 @@ def plan_query(
         max_results=max_results,
         max_bytes=max_bytes,
         max_tokens=max_tokens,
-        prefetch=(),
+        prefetch=_causal_prefetch(snapshot, candidate_indices, min(max_results, 8)) if operation == "context" else (),
         reason=reason,
         request_digest=request_digest,
     )
