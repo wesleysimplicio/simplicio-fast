@@ -129,6 +129,8 @@ class SegmentStore:
         with Snapshot(snapshot_path) as snapshot:
             source_digest = snapshot.sha256
             segments: list[Segment] = []
+            written = 0
+            reused = 0
             staging = Path(tempfile.mkdtemp(prefix=".segments-", dir=self.directory.parent if self.directory.parent.exists() else None))
             try:
                 self.directory.mkdir(parents=True, exist_ok=True)
@@ -149,8 +151,18 @@ class SegmentStore:
                         handle.flush()
                         os.fsync(handle.fileno())
                     final = self.directory / filename
-                    if not final.exists():
+                    if final.exists():
+                        try:
+                            existing_size = final.stat().st_size
+                            existing_digest = hashlib.sha256(final.read_bytes()).hexdigest()
+                        except OSError as error:
+                            raise SegmentStoreError(f"segment_existing_unreadable:{name}") from error
+                        if existing_size != len(data) or existing_digest != digest:
+                            raise SegmentStoreError(f"segment_existing_checksum_mismatch:{name}")
+                        reused += 1
+                    else:
                         os.replace(temporary, final)
+                        written += 1
                     segments.append(Segment(name, filename, len(data), digest))
                 payload = {
                     "schema": MANIFEST_SCHEMA,
@@ -162,6 +174,8 @@ class SegmentStore:
                         "bytes": segment.bytes,
                         "sha256": segment.sha256,
                     } for segment in segments],
+                    "segments_written": written,
+                    "segments_reused": reused,
                 }
                 self.directory.mkdir(parents=True, exist_ok=True)
                 manifest_tmp = self.directory / f".{MANIFEST_NAME}.{os.getpid()}.tmp"
