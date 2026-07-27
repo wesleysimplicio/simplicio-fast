@@ -198,6 +198,12 @@ class SegmentStore:
             or any(char not in "0123456789abcdef" for char in source_digest.lower())
         ):
             raise SegmentStoreError("manifest_metadata_invalid")
+        segments = payload["segments"]
+        if not segments:
+            raise SegmentStoreError("manifest_segments_invalid")
+        names = [item.get("name") if isinstance(item, dict) else None for item in segments]
+        if any(not isinstance(name, str) or not name for name in names) or len(set(names)) != len(names):
+            raise SegmentStoreError("manifest_segments_invalid")
         return payload
 
     def read_manifest(self) -> dict[str, Any]:
