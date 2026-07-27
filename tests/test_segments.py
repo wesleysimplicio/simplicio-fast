@@ -72,6 +72,21 @@ class SegmentStoreTest(unittest.TestCase):
             self.assertEqual(first["generation"], store.read_manifest()["generation"])
             self.assertEqual("valid", store.validate()["status"])
 
+    def test_read_range_enforces_a_bounded_segment_window(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            store.publish(snapshot)
+            expected = store.read("symbols")
+            self.assertEqual(expected[1:9], store.read_range("symbols", 1, 8))
+            with self.assertRaisesRegex(SegmentStoreError, "segment_range_invalid"):
+                store.read_range("symbols", -1, 8)
+            with self.assertRaisesRegex(SegmentStoreError, "segment_range_out_of_bounds"):
+                store.read_range("symbols", len(expected) - 2, 8)
+
     def test_map_validates_and_reads_one_segment_without_snapshot_offsets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

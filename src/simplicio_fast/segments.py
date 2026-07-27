@@ -136,6 +136,22 @@ class SegmentStore:
         with self.map(name) as mapped:
             return bytes(mapped)
 
+    def read_range(self, name: str, offset: int, size: int) -> bytes:
+        """Read one bounded range without materializing the whole segment."""
+        if (
+            isinstance(offset, bool)
+            or not isinstance(offset, int)
+            or isinstance(size, bool)
+            or not isinstance(size, int)
+            or offset < 0
+            or size < 1
+        ):
+            raise SegmentStoreError("segment_range_invalid")
+        with self.map(name) as mapped:
+            if offset + size > len(mapped):
+                raise SegmentStoreError("segment_range_out_of_bounds")
+            return bytes(mapped[offset : offset + size])
+
     @contextmanager
     def map(self, name: str) -> Iterator[mmap.mmap | bytes]:
         """Validate and map one segment, loading only its requested bytes."""
