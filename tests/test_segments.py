@@ -173,3 +173,31 @@ class SegmentStoreTest(unittest.TestCase):
                 stale.read("symbols", 0, 1)
             self.assertEqual("stale_generation", error.exception.reason_code)
 
+    def test_manifest_rejects_duplicate_segment_names(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            store.publish(snapshot)
+            manifest = store.read_manifest()
+            manifest["segments"].append(dict(manifest["segments"][0]))
+            store.manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(SegmentStoreError, "manifest_segments_invalid"):
+                store.read_manifest()
+
+    def test_manifest_rejects_empty_segment_set(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            store.publish(snapshot)
+            manifest = store.read_manifest()
+            manifest["segments"] = []
+            store.manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(SegmentStoreError, "manifest_segments_invalid"):
+                store.read_manifest()
+
