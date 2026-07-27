@@ -381,6 +381,19 @@ The Rust reader exposes the same bounded map contract through `simplicio-fast-rs
 Rust segmented writing, demand-driven semantic indexes and large-RSS/page-fault benchmarks remain
 open gates for issues #40, #43 and #61.
 
+### Deterministic query planning
+
+`query-plan` emits `simplicio.fast.query-plan/v1` with the selected exact, prefix, path, kind,
+or relation index, candidate record count, bounded byte estimate, generation and reason code:
+
+```bash
+simplicio-fast query-plan DeliveryEngine --operation context --max-results 3 --max-bytes 12000
+```
+
+The planner uses index statistics and record sizes; it does not claim provider tokens, does not
+materialize source spans, and keeps causal prefetch disabled until a bounded neighbor policy is
+available. Plan output is explainable and comparable across identical generations.
+
 ### Migration from SFAST001/v1
 
 Readers accept both the frozen v1 table and v2 section snapshots. A v1 snapshot is read-only during
