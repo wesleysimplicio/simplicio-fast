@@ -434,6 +434,10 @@ class BitemporalOverlay:
         observed_sequence = value.get("observed_sequence")
         if not isinstance(world_sequence, int) or not isinstance(observed_sequence, int) or world_sequence < 0 or observed_sequence < 0:
             raise TemporalInvariantError("persistence_sequence", "persisted sequences are invalid")
+        expected_world_sequence = max((fact.valid_from for versions in overlay._facts.values() for fact in versions), default=0)
+        expected_observed_sequence = max((fact.observed_at for versions in overlay._facts.values() for fact in versions), default=0)
+        if world_sequence != expected_world_sequence or observed_sequence != expected_observed_sequence:
+            raise TemporalInvariantError("persistence_sequence", "persisted sequences do not match facts")
         overlay._world_sequence = world_sequence
         overlay._observed_sequence = observed_sequence
         if overlay.verify()["status"] != "valid":
