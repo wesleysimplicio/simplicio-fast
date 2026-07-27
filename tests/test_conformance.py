@@ -1,11 +1,24 @@
 from __future__ import annotations
 
+import sys
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
-from scripts.conformance import normalize
-
+from scripts.conformance import _json_command, _python_stats, _require_envelope, _rust_stats, normalize
 
 class ConformanceHarnessTest(unittest.TestCase):
+    def test_real_engine_envelope_is_validated_at_harness_boundary(self) -> None:
+        command = [
+            sys.executable,
+            "-c",
+            "import json; print(json.dumps({'schema': 'simplicio.fast.stats/v1', 'engine': 'rust', 'stats': {}}))",
+        ]
+        payload = _json_command(command)
+        self.assertEqual(
+            _require_envelope(payload, schema="simplicio.fast.stats/v1", engine="rust")["engine"],
+            "rust",
+        )
     def test_normalize_maps_python_and_rust_stats_to_one_contract(self) -> None:
         python = {
             "version": 2,
@@ -20,6 +33,34 @@ class ConformanceHarnessTest(unittest.TestCase):
         self.assertEqual(normalize(python), normalize(rust))
 
     def test_normalize_preserves_drift_for_the_gate(self) -> None:
-        python = {"version": 2, "bytes": 10, "files": 1, "symbols": 2, "relations": 3, "sections": [], "generation": "a"}
-        rust = {"format_version": 2, "bytes": 11, "files": 1, "symbols": 2, "relations": 3, "sections": [], "generation": "a"}
+        python = {
+            "version": 2,
+            "bytes": 10,
+            "files": 1,
+            "symbols": 2,
+            "relations": 3,
+            "sections": [],
+            "generation": "a",
+        }
+        rust = {
+            "format_version": 2,
+            "bytes": 11,
+            "files": 1,
+            "symbols": 2,
+            "relations": 3,
+            "sections": [],
+            "generation": "a",
+        }
         self.assertNotEqual(normalize(python), normalize(rust))
+
+    def test_rust_envelope_requires_rust_engine_identity(self) -> None:
+        payload = {"schema": "simplicio.fast.stats/v1", "stats": {}}
+        with patch("scripts.conformance._json_command", return_value=payload):
+            with self.assertRaisesRegex(RuntimeError, "engine_identity_mismatch"):
+                _rust_stats(Path("rust"), Path("snapshot"))
+
+    def test_python_envelope_rejects_schema_drift(self) -> None:
+        payload = {"schema": "simplicio.fast.query/v1", "stats": {}}
+        with patch("scripts.conformance._json_command", return_value=payload):
+            with self.assertRaisesRegex(RuntimeError, "engine_schema_mismatch"):
+                _python_stats(Path("snapshot"))

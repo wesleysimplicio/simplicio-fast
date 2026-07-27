@@ -11,9 +11,11 @@ removed-file tombstone, partial capability, abstention and corruption scenarios.
 fail-closed detection after a fixture mutation.
 
 This is a contract/fixture slice only. The current differential harness can prove
-Python/Rust stats, query and bounded context for a generated SFAST snapshot, but it
-does not yet parse TypeScript or C#, perform bidirectional cross-language
-write/read, run mutation/fuzz/schema matrices, or gate auto-selection on this
+Python/Rust stats, query and bounded context for a generated SFAST snapshot. Before comparing
+normalized fields, it now requires each versioned response envelope and requires Rust responses
+to identify `engine: rust`; schema or engine-identity drift fails closed and cannot produce a
+passing conformance receipt. It still does not parse TypeScript or C#, perform bidirectional
+cross-language write/read, run mutation/fuzz/schema matrices, or gate auto-selection on this
 corpus. Those remain open acceptance criteria for issue #41.
 
 Run the focused receipt with:
