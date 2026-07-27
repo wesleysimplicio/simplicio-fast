@@ -57,6 +57,15 @@ class DeliveryEngine:
         self.snapshot = snapshot.resolve()
         self.cache = (cache or self.root / ".simplicio-fast" / "delivery-cache").resolve()
 
+    def cache_stats(self) -> dict[str, Any]:
+        """Return deterministic size telemetry for the disposable delivery cache."""
+        paths = sorted(path for path in self.cache.rglob("*.json") if path.is_file()) if self.cache.is_dir() else []
+        return {
+            "schema": "simplicio.fast.delivery-cache/v1",
+            "entries": len(paths),
+            "bytes": sum(path.stat().st_size for path in paths),
+        }
+
     def prepare(self, task: str, *, profile: str, engine_receipt: dict[str, Any]) -> dict[str, Any]:
         started = time.perf_counter_ns()
         if profile not in PROFILE_NAMES:
