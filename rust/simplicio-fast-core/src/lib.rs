@@ -588,7 +588,7 @@ pub fn manifest() -> serde_json::Value {
         "status": "available",
         "reference": false,
         "fallback": false,
-        "capabilities": ["version", "stats", "doctor", "snapshot-read", "segment-map", "segment-write"],
+        "capabilities": ["version", "stats", "query", "context", "snapshot-read", "segment-map", "segment-write"],
         "formats": ["SFAST001/v2"]
         ,"conformance": {"passed": false, "reason": "harness_not_integrated"}
     })
