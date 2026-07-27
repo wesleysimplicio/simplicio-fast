@@ -12,14 +12,19 @@ use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
+    sync::atomic::{AtomicU64, Ordering},
 };
 
 #[cfg(unix)]
 use std::fs::File;
 
+#[cfg(windows)]
+use std::os::windows::ffi::OsStrExt;
+
 pub const MANIFEST_SCHEMA: &str = "simplicio.fast.segments/v1";
 const MANIFEST_NAME: &str = "manifest.json";
 const PREVIOUS_MANIFEST_NAME: &str = "manifest.previous.json";
+static TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct PublishedSegment {
@@ -35,8 +40,8 @@ pub struct PublishReceipt {
     pub generation: String,
     pub source_snapshot_sha256: String,
     pub segments: Vec<PublishedSegment>,
-    pub written: usize,
-    pub reused: usize,
+    pub segments_written: usize,
+    pub segments_reused: usize,
 }
 
 pub struct SegmentWriter {
@@ -95,9 +100,7 @@ impl SegmentWriter {
                 }
                 reused += 1;
             } else {
-                let temporary = self
-                    .directory
-                    .join(format!(".{file_name}.{}.tmp", std::process::id()));
+                let temporary = temporary_path(&self.directory, &file_name);
                 write_synced(&temporary, &bytes)?;
                 match fs::rename(&temporary, &final_path) {
                     Ok(()) => written += 1,
@@ -130,24 +133,19 @@ impl SegmentWriter {
             generation,
             source_snapshot_sha256,
             segments,
-            written,
-            reused,
+            segments_written: written,
+            segments_reused: reused,
         };
         let manifest = serde_json::to_vec_pretty(&receipt)
             .map_err(|_| SnapshotError::Invalid("cannot serialize segment manifest".into()))?;
         let manifest_path = self.directory.join(MANIFEST_NAME);
         if manifest_path.exists() {
-            let previous_tmp = self.directory.join(format!(
-                ".{PREVIOUS_MANIFEST_NAME}.{}.tmp",
-                std::process::id()
-            ));
+            let previous_tmp = temporary_path(&self.directory, PREVIOUS_MANIFEST_NAME);
             fs::copy(&manifest_path, &previous_tmp)?;
             sync_file(&previous_tmp)?;
             replace_file(&previous_tmp, &self.directory.join(PREVIOUS_MANIFEST_NAME))?;
         }
-        let manifest_tmp = self
-            .directory
-            .join(format!(".{MANIFEST_NAME}.{}.tmp", std::process::id()));
+        let manifest_tmp = temporary_path(&self.directory, MANIFEST_NAME);
         let mut bytes = manifest;
         bytes.push(b'\n');
         write_synced(&manifest_tmp, &bytes)?;
@@ -155,6 +153,11 @@ impl SegmentWriter {
         sync_directory(&self.directory)?;
         Ok(receipt)
     }
+}
+
+fn temporary_path(directory: &Path, name: &str) -> PathBuf {
+    let sequence = TEMPORARY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    directory.join(format!(".{name}.{}.{}.tmp", std::process::id(), sequence))
 }
 
 fn validate_name(name: &str) -> Result<(), SnapshotError> {
@@ -190,41 +193,38 @@ fn sync_file(path: &Path) -> Result<(), SnapshotError> {
 
 #[cfg(windows)]
 fn replace_file(source: &Path, destination: &Path) -> Result<(), SnapshotError> {
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+
+    #[link(name = "Kernel32")]
+    extern "system" {
+        fn MoveFileExW(existing: *const u16, replacement: *const u16, flags: u32) -> i32;
+    }
+
+    let source_wide: Vec<u16> = source.as_os_str().encode_wide().chain(Some(0)).collect();
+    let destination_wide: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
     let mut last_error = None;
     for attempt in 0..4 {
-        if destination.exists() {
-            match fs::remove_file(destination) {
-                Ok(()) => {}
-                Err(error) if attempt < 3 => {
-                    last_error = Some(error);
-                    std::thread::sleep(std::time::Duration::from_millis(10));
-                    continue;
-                }
-                Err(error) => return Err(error.into()),
-            }
+        let replaced = unsafe {
+            MoveFileExW(
+                source_wide.as_ptr(),
+                destination_wide.as_ptr(),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+        };
+        if replaced != 0 {
+            return Ok(());
         }
-        match fs::rename(source, destination) {
-            Ok(()) => return Ok(()),
-            Err(error) if attempt < 3 => {
-                last_error = Some(error);
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-            Err(error) => {
-                fs::copy(source, destination).map_err(|copy_error| {
-                    SnapshotError::Io(std::io::Error::new(
-                        copy_error.kind(),
-                        format!("replace copy fallback after {error}: {copy_error}"),
-                    ))
-                })?;
-                fs::remove_file(source).map_err(|copy_error| {
-                    SnapshotError::Io(std::io::Error::new(
-                        copy_error.kind(),
-                        format!("replace cleanup after {error}: {copy_error}"),
-                    ))
-                })?;
-                return Ok(());
-            }
+        let error = std::io::Error::last_os_error();
+        if attempt == 3 {
+            return Err(error.into());
         }
+        last_error = Some(error);
+        std::thread::sleep(std::time::Duration::from_millis(10));
     }
     Err(last_error
         .unwrap_or_else(|| std::io::Error::new(std::io::ErrorKind::Other, "atomic replace failed"))
@@ -281,14 +281,19 @@ mod tests {
         let first = writer
             .publish_payloads(payload(b"v1"), "gen-1".into(), "a".repeat(64))
             .expect("first publish");
-        assert_eq!(first.written, 5);
-        assert_eq!(first.reused, 0);
+        assert_eq!(first.segments_written, 5);
+        assert_eq!(first.segments_reused, 0);
+        let encoded = serde_json::to_value(&first).expect("serialize receipt");
+        assert_eq!(encoded["segments_written"], 5);
+        assert_eq!(encoded["segments_reused"], 0);
+        assert!(encoded.get("written").is_none());
+        assert!(encoded.get("reused").is_none());
 
         let second = writer
             .publish_payloads(payload(b"v1"), "gen-1".into(), "a".repeat(64))
             .expect("no-change refresh");
-        assert_eq!(second.written, 0);
-        assert_eq!(second.reused, 5);
+        assert_eq!(second.segments_written, 0);
+        assert_eq!(second.segments_reused, 5);
         assert!(directory.join(PREVIOUS_MANIFEST_NAME).is_file());
         fs::remove_dir_all(directory).expect("remove fixture");
     }
@@ -303,8 +308,8 @@ mod tests {
         let second = writer
             .publish_payloads(payload(b"v2"), "gen-2".into(), "b".repeat(64))
             .expect("incremental publish");
-        assert_eq!(second.written, 1);
-        assert_eq!(second.reused, 4);
+        assert_eq!(second.segments_written, 1);
+        assert_eq!(second.segments_reused, 4);
 
         let current: Value =
             serde_json::from_slice(&fs::read(directory.join(MANIFEST_NAME)).expect("current"))
@@ -332,6 +337,28 @@ mod tests {
             Err(SnapshotError::Invalid(reason)) if reason == "unsafe segment name"
         ));
         assert!(!directory.join(MANIFEST_NAME).exists());
+        fs::remove_dir_all(directory).expect("remove fixture");
+    }
+
+    #[test]
+    fn temporary_paths_are_unique_within_one_process() {
+        let directory = fixture_directory();
+        let first = temporary_path(&directory, MANIFEST_NAME);
+        let second = temporary_path(&directory, MANIFEST_NAME);
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn failed_replace_preserves_current_manifest() {
+        let directory = fixture_directory();
+        fs::create_dir_all(&directory).expect("create fixture");
+        let destination = directory.join(MANIFEST_NAME);
+        fs::write(&destination, b"current").expect("write current");
+
+        let result = replace_file(&directory.join("missing.tmp"), &destination);
+
+        assert!(result.is_err());
+        assert_eq!(fs::read(&destination).expect("read current"), b"current");
         fs::remove_dir_all(directory).expect("remove fixture");
     }
 }
