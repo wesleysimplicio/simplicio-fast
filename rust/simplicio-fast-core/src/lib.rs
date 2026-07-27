@@ -435,6 +435,11 @@ impl SnapshotReader {
     }
 
     pub fn query(&self, term: &str, limit: usize) -> Result<Vec<RustSymbol>, SnapshotError> {
+        if limit == 0 {
+            return Err(SnapshotError::Invalid(
+                "query limit must be positive".into(),
+            ));
+        }
         let needle = term.to_lowercase();
         let mut matches: Vec<RustSymbol> = self
             .symbols()?
@@ -465,6 +470,11 @@ impl SnapshotReader {
         max_bytes: usize,
         max_tokens: usize,
     ) -> Result<Vec<RustContextSpan>, SnapshotError> {
+        if max_results == 0 || max_lines == 0 || max_bytes == 0 || max_tokens == 0 {
+            return Err(SnapshotError::Invalid(
+                "context limits must be positive".into(),
+            ));
+        }
         let root = root
             .canonicalize()
             .map_err(|_| SnapshotError::Invalid("repository root is unavailable".into()))?;
@@ -683,6 +693,30 @@ mod tests {
         let result = SnapshotReader::from_bytes(vec![0; HEADER_SIZE - 1]);
         assert!(
             matches!(result, Err(SnapshotError::Invalid(reason)) if reason == "truncated header")
+        );
+    }
+
+    fn empty_reader() -> SnapshotReader {
+        SnapshotReader {
+            bytes: SnapshotBytes::Owned(Vec::new()),
+            sections: BTreeMap::new(),
+            digest: [0; 32],
+        }
+    }
+
+    #[test]
+    fn query_rejects_zero_limit() {
+        let result = empty_reader().query("symbol", 0);
+        assert!(
+            matches!(result, Err(SnapshotError::Invalid(reason)) if reason == "query limit must be positive")
+        );
+    }
+
+    #[test]
+    fn context_rejects_zero_budget() {
+        let result = empty_reader().context(Path::new("."), "symbol", 1, 1, 1, 0);
+        assert!(
+            matches!(result, Err(SnapshotError::Invalid(reason)) if reason == "context limits must be positive")
         );
     }
 
