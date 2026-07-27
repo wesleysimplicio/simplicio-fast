@@ -16,6 +16,7 @@ from . import __version__
 
 
 SCHEMA = "simplicio.fast.installation/v1"
+ENGINE_MANIFEST_SCHEMA = "simplicio.fast.engine-manifest/v1"
 
 
 def _digest(path: Path) -> str | None:
@@ -48,7 +49,15 @@ def _manifest(path: Path) -> tuple[dict[str, Any] | None, str | None]:
         value = json.loads(result.stdout)
     except json.JSONDecodeError:
         return None, "invalid_json"
-    return value if isinstance(value, dict) else None, None
+    if not isinstance(value, dict):
+        return None, "manifest_not_object"
+    if value.get("schema") != ENGINE_MANIFEST_SCHEMA:
+        return None, "manifest_schema_mismatch"
+    if value.get("engine") != "rust":
+        return None, "manifest_engine_mismatch"
+    if value.get("status") != "available":
+        return None, "manifest_not_available"
+    return value, None
 
 
 def report() -> dict[str, Any]:
@@ -59,12 +68,14 @@ def report() -> dict[str, Any]:
         rust_manifest, rust_reason = _manifest(rust)
         if rust_manifest is not None:
             rust_reason = None
+    rust_status = "pass" if rust_manifest else ("info" if rust is None else "fail")
+    overall_status = "ready" if rust_status != "fail" else "degraded"
     checks = [
         {"name": "python_package", "status": "pass", "version": __version__},
         {"name": "python_only_path", "status": "pass", "detail": "supported"},
         {
             "name": "rust_artifact",
-            "status": "pass" if rust_manifest else "info",
+            "status": rust_status,
             "path": str(rust) if rust else None,
             "sha256": _digest(rust) if rust else None,
             "manifest": rust_manifest,
@@ -74,7 +85,7 @@ def report() -> dict[str, Any]:
     ]
     return {
         "schema": SCHEMA,
-        "status": "ready",
+        "status": overall_status,
         "platform": platform.platform(),
         "python": sys.version.split()[0],
         "package": {"name": "simplicio-fast", "version": __version__},
