@@ -114,6 +114,62 @@ def exact_rerank(
     ranked.sort(key=lambda candidate: (-candidate.score, candidate.canonical_id))
     return tuple(ranked[:top_k])
 
+def approximate_candidates(
+    query: Iterable[float],
+    candidates: Iterable[tuple[str, QuantizedVector]],
+    *,
+    seed: int = 0,
+    metric: Literal["cosine", "dot", "l2"] = "dot",
+    candidate_k: int = 10,
+) -> tuple[RerankedCandidate, ...]:
+    """Rank 4-bit candidates using deterministic packed-code scoring.
+
+    This is the hot approximate stage; callers can pass its IDs to
+    :func:`exact_rerank` for integral scoring.
+    """
+    if metric not in RERANK_METRICS:
+        raise QuantizationError("metric must be cosine, dot, or l2")
+    if isinstance(candidate_k, bool) or not isinstance(candidate_k, int) or candidate_k < 1:
+        raise QuantizationError("candidate_k must be a positive integer")
+    normalized_seed = _validate_seed(seed)
+    query_vector = _as_vector(query)
+    query_quantized = quantize(query_vector, normalized_seed)
+    query_codes = query_quantized.codes
+    query_norm = math.sqrt(sum(code * code for code in query_codes))
+    seen: set[str] = set()
+    ranked: list[RerankedCandidate] = []
+    try:
+        candidate_iter = iter(candidates)
+    except TypeError as error:
+        raise QuantizationError("candidates must be an iterable") from error
+    for raw_id, vector in candidate_iter:
+        if not isinstance(raw_id, str) or not raw_id:
+            raise QuantizationError("candidate IDs must be non-empty strings")
+        if raw_id in seen:
+            raise QuantizationError("candidate IDs must be unique")
+        seen.add(raw_id)
+        if not isinstance(vector, QuantizedVector):
+            raise QuantizationError("candidates must contain QuantizedVector values")
+        if vector.dimension != len(query_vector):
+            raise QuantizationError("candidate dimension must match query")
+        if vector.seed != normalized_seed:
+            raise QuantizationError("candidate seed must match query seed")
+        codes = vector.codes
+        dot = sum(left * right for left, right in zip(query_codes, codes)) * query_quantized.scale * vector.scale
+        if metric == "dot":
+            score = dot
+        elif metric == "l2":
+            score = -sum(
+                (left * query_quantized.scale - right * vector.scale) ** 2
+                for left, right in zip(query_codes, codes)
+            )
+        else:
+            vector_norm = math.sqrt(sum(code * code for code in codes))
+            score = dot / (query_norm * vector_norm * query_quantized.scale * vector.scale) if query_norm and vector_norm else 0.0
+        ranked.append(RerankedCandidate(raw_id, score))
+    ranked.sort(key=lambda candidate: (-candidate.score, candidate.canonical_id))
+    return tuple(ranked[:candidate_k])
+
 def _as_vector(values: Iterable[float]) -> tuple[float, ...]:
     try:
         vector = tuple(float(value) for value in values)

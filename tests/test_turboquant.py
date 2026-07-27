@@ -4,6 +4,7 @@ import unittest
 
 from simplicio_fast.turboquant import (
     QuantizationError,
+    approximate_candidates,
     exact_rerank,
     QuantizedVector,
     dequantize,
@@ -68,6 +69,24 @@ class TurboQuantTest(unittest.TestCase):
             exact_rerank((1.0,), (("a", (1.0,)),), top_k=0)
         with self.assertRaises(QuantizationError):
             exact_rerank((1.0,), (("a", (1.0,)),), metric="manhattan")  # type: ignore[arg-type]
+
+    def test_approximate_candidates_scores_packed_codes(self) -> None:
+        query = (1.0, 0.0, 0.0, 0.0)
+        candidates = (
+            ("orthogonal", quantize((0.0, 1.0, 0.0, 0.0), seed=7)),
+            ("near", quantize((1.0, 0.0, 0.0, 0.0), seed=7)),
+        )
+        self.assertEqual("near", approximate_candidates(query, candidates, seed=7, candidate_k=1)[0].canonical_id)
+        self.assertEqual("near", approximate_candidates(query, candidates, seed=7, metric="cosine")[0].canonical_id)
+        self.assertEqual("near", approximate_candidates(query, candidates, seed=7, metric="l2")[0].canonical_id)
+
+    def test_approximate_candidates_rejects_incompatible_packed_vectors(self) -> None:
+        with self.assertRaises(QuantizationError):
+            approximate_candidates((1.0, 0.0), (("a", quantize((1.0, 0.0), seed=8)),), seed=7)
+        with self.assertRaises(QuantizationError):
+            approximate_candidates((1.0, 0.0), (("a", quantize((1.0, 0.0, 0.0), seed=7)),), seed=7)
+        with self.assertRaises(QuantizationError):
+            approximate_candidates((1.0, 0.0), (("a", quantize((1.0, 0.0), seed=7)),), candidate_k=0)
 
     def test_zero_vector_uses_stable_unit_scale(self) -> None:
         vector = quantize((0.0, 0.0), seed=1)
