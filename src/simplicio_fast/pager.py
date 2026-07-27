@@ -238,8 +238,10 @@ class SemanticPager:
         page.last_touch = self._clock
         self._metrics["bytes_touched"] += len(page.data)
 
-    def _evict(self, required: int = 0) -> None:
+    def _evict(self, required: int = 0, *, allow_eviction: bool = True) -> None:
         while self._bytes + required > self.max_bytes or len(self._pages) >= self.max_pages:
+            if not allow_eviction:
+                raise PagerError("budget_exhausted", "prefetch would evict resident pages")
             candidates = [page for page in self._pages.values() if page.leases == 0]
             if not candidates:
                 raise PagerError("budget_exhausted", "all resident pages are leased")
@@ -254,6 +256,7 @@ class SemanticPager:
         loader: Callable[[], bytes] | None = None,
         *,
         expected_sha256: str | None = None,
+        allow_eviction: bool = True,
     ) -> bytes:
         self._check_key(key)
         owner = False
@@ -281,7 +284,7 @@ class SemanticPager:
             flight.event.wait()
             if flight.error is not None:
                 raise flight.error
-            return self.get(key, loader, expected_sha256=expected_sha256)
+            return self.get(key, loader, expected_sha256=expected_sha256, allow_eviction=allow_eviction)
         try:
             data = loader()
             if not isinstance(data, bytes):
@@ -290,7 +293,7 @@ class SemanticPager:
             if expected_sha256 is not None and digest != expected_sha256:
                 raise PagerError("page_digest_mismatch", "loaded page digest differs from expected")
             with self._lock:
-                self._evict(len(data))
+                self._evict(len(data), allow_eviction=allow_eviction)
                 self._clock += 1
                 page = _Page(key, data, digest, self._clock)
                 self._pages[key] = page
@@ -353,7 +356,7 @@ class SemanticPager:
             try:
                 with self._lock:
                     resident = key in self._pages and not self._pages[key].invalidated
-                self.get(key, lambda key=key: loader(key))
+                self.get(key, lambda key=key: loader(key), allow_eviction=False)
                 if resident:
                     wasted += 1
                 else:

@@ -67,6 +67,24 @@ class SemanticPagerTest(unittest.TestCase):
             pager.get(key, lambda: b"wrong", expected_sha256=hashlib.sha256(data).hexdigest())
         self.assertEqual("page_digest_mismatch", error.exception.reason_code)
 
+    def test_prefetch_does_not_evict_resident_pages_when_budget_is_full(self) -> None:
+        pager = SemanticPager("repo", "g", max_bytes=6, max_pages=2)
+        first = self.key("first")
+        second = self.key("second")
+        third = self.key("third")
+        pager.get(first, lambda: b"aaa")
+        pager.get(second, lambda: b"bbb")
+
+        result = pager.prefetch([third], lambda key: b"ccc")
+
+        self.assertEqual({"useful": 0, "wasted": 1}, result)
+        self.assertEqual(2, pager.stats()["resident_pages"])
+        self.assertEqual(6, pager.stats()["resident_bytes"])
+        self.assertEqual(0, pager.stats()["evictions"])
+        self.assertEqual(b"aaa", pager.get(first))
+        self.assertEqual(b"bbb", pager.get(second))
+        self.assertEqual(1, pager.stats()["prefetch_wasted"])
+
 
 class SingleFlightCoordinatorTest(unittest.TestCase):
     def key(self, request: object = None, *, generation: str = "g1"):
