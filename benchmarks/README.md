@@ -22,8 +22,8 @@ python benchmarks/run.py --sizes 1000 --repetitions 10
 
 For comparisons, use the same machine, Python version, repository, query and cache policy. Run at
 least ten repetitions and retain raw results for wall time, CPU time, peak RSS, page faults and
-incremental reuse. Page-fault fields are `null` when the host does not expose them.
-
+incremental reuse. Shared-base overlay receipts always cover the deterministic 1/20/100 slot matrix.
+Page-fault fields are `null` when the host does not expose them.
 Each wall-time receipt includes p50 (`median`), p95 and p99 values alongside the raw samples;
 percentiles are computed deterministically from the recorded repetition set.
 
