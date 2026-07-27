@@ -99,7 +99,7 @@ impl SegmentWriter {
                 write_synced(&temporary, &bytes)?;
                 match fs::rename(&temporary, &final_path) {
                     Ok(()) => written += 1,
-                    Err(error) if final_path.exists() => {
+                    Err(_error) if final_path.exists() => {
                         let _ = fs::remove_file(&temporary);
                         let existing = fs::read(&final_path)?;
                         if existing != bytes {
