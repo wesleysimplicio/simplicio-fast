@@ -354,6 +354,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     snapshot_argument(doctor)
     doctor.add_argument("--installation", action="store_true", help="report local Python/Rust artifacts without downloading")
+    doctor.add_argument("--smoke", action="store_true", help="run a disposable installed Python CLI smoke flow")
     json_option(doctor)
 
     rollout = commands.add_parser(
@@ -634,9 +635,12 @@ def main() -> None:
                     )
         elif args.command == "doctor":
             if args.installation:
-                from .installation import report
+                from .installation import python_smoke, report
 
-                emit(report())
+                payload = report()
+                if args.smoke:
+                    payload["python_smoke"] = python_smoke()
+                emit(payload)
                 return
             path = Path(args.snapshot)
             from .integrations import integration_status

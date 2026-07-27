@@ -7,6 +7,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from simplicio_fast.installation import report
+from simplicio_fast import __version__
+from simplicio_fast.installation import python_smoke
 
 
 class InstallationReportTest(unittest.TestCase):
@@ -21,11 +23,22 @@ class InstallationReportTest(unittest.TestCase):
         self.assertEqual("rust_artifact_missing", payload["resolution"]["reason_code"])
         self.assertFalse(payload["rollback"]["supported"])
 
+    def test_python_cli_smoke_is_bounded_and_fail_closed_for_rust(self) -> None:
+        payload = python_smoke()
+        self.assertIn(payload["status"], {"pass", "partial"})
+        self.assertEqual("simplicio.fast.python-smoke/v1", payload["schema"])
+        self.assertEqual({"auto": "python", "python": "python", "off": "off"}, payload["engine_selection"])
+        self.assertTrue(payload["rust_probe"]["forced_unavailable"])
+        self.assertTrue(payload["checks"]["build_refresh_query_context_plan_delivery"])
+        self.assertTrue(payload["checks"]["python_fallback"])
+        self.assertTrue(payload["checks"]["rust_not_loaded"])
+        self.assertTrue(all(step["status"] == "pass" for step in payload["steps"]))
+
     def test_rust_manifest_and_digest_are_reported(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "simplicio-fast-rs.exe"
             path.write_bytes(b"artifact")
-            manifest = '{"schema":"simplicio.fast.engine-manifest/v1","engine":"rust","status":"available","version":"2.0.9"}'
+            manifest = f'{{"schema":"simplicio.fast.engine-manifest/v1","engine":"rust","status":"available","version":"{__version__}"}}'
             completed = type("Completed", (), {"returncode": 0, "stdout": manifest})()
             with patch.dict(os.environ, {"SIMPLICIO_FAST_RUST": str(path)}, clear=True), patch(
                 "simplicio_fast.installation.subprocess.run", return_value=completed
