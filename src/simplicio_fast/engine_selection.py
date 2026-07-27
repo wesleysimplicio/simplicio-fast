@@ -13,6 +13,24 @@ ENGINE_SELECTION_SCHEMA = "simplicio.fast.engine-selection/v1"
 SUPPORTED_MODES = frozenset({"auto", "rust", "python", "off"})
 
 
+def resolve_mode(
+    *,
+    cli: str | None = None,
+    workspace: str | None = None,
+    user: str | None = None,
+    default: str = "auto",
+) -> tuple[str, str]:
+    """Resolve mode by CLI, workspace, user, then default precedence."""
+    for source, value in (("cli", cli), ("workspace", workspace), ("user", user), ("default", default)):
+        if value is None:
+            continue
+        normalized = str(value).strip().lower()
+        if normalized not in SUPPORTED_MODES:
+            raise ValueError(f"invalid Fast engine mode from {source}: {value}")
+        return normalized, source
+    raise ValueError("no Fast engine mode configured")
+
+
 class EngineSelectionError(RuntimeError):
     """An explicit engine request cannot be satisfied."""
 
@@ -85,4 +103,4 @@ def select_engine(
                            python_available, conformance_passed)
 
 
-__all__ = ["ENGINE_SELECTION_SCHEMA", "EngineSelection", "EngineSelectionError", "select_engine"]
+__all__ = ["ENGINE_SELECTION_SCHEMA", "EngineSelection", "EngineSelectionError", "resolve_mode", "select_engine"]
