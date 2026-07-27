@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import subprocess
 import sys
@@ -252,6 +253,17 @@ def build_parser() -> argparse.ArgumentParser:
     stats = commands.add_parser("stats", help="show snapshot generation and section statistics")
     snapshot_argument(stats)
     json_option(stats)
+
+    segments = commands.add_parser(
+        "segments",
+        help="publish, validate or map immutable snapshot sections",
+        description="Expose the bounded segmented-storage contract without exposing raw snapshot offsets.",
+    )
+    segments.add_argument("action", choices=("publish", "validate", "map"))
+    segments.add_argument("--directory", required=True, help="segmented storage directory")
+    segments.add_argument("--snapshot", default=DEFAULT_SNAPSHOT, help="source SFAST snapshot for publish")
+    segments.add_argument("--name", help="segment name for map")
+    json_option(segments)
 
     for name in ("understand", "plan"):
         command = commands.add_parser(
@@ -528,6 +540,26 @@ def main() -> None:
         elif args.command == "stats":
             with Snapshot(Path(args.snapshot)) as snapshot:
                 emit({"schema": "simplicio.fast.stats/v1", "stats": snapshot.stats()})
+        elif args.command == "segments":
+            from .segments import SegmentStore
+
+            store = SegmentStore(Path(args.directory))
+            if args.action == "publish":
+                emit(store.publish(Path(args.snapshot)))
+            elif args.action == "validate":
+                emit(store.validate())
+            else:
+                if not args.name:
+                    raise ValueError("--name is required for segments map")
+                with store.map(args.name) as mapped:
+                    emit(
+                        {
+                            "schema": "simplicio.fast.segment-map/v1",
+                            "name": args.name,
+                            "bytes": len(mapped),
+                            "sha256": hashlib.sha256(bytes(mapped)).hexdigest(),
+                        }
+                    )
         elif args.command == "doctor":
             if args.installation:
                 from .installation import report

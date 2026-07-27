@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import mmap
 import os
 import shutil
 import tempfile
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from collections.abc import Iterator
 from typing import Any
 
 from .snapshot import Snapshot
@@ -100,25 +103,50 @@ class SegmentStore:
         payload = self.read_manifest()
         checked = 0
         for item in payload["segments"]:
-            if not isinstance(item, dict) or not all(key in item for key in ("name", "file", "bytes", "sha256")):
-                raise SegmentStoreError("segment_entry_invalid")
-            path = self.directory / item["file"]
-            try:
-                data = path.read_bytes()
-            except OSError as error:
-                raise SegmentStoreError(f"segment_missing:{item['name']}") from error
-            if len(data) != item["bytes"] or hashlib.sha256(data).hexdigest() != item["sha256"]:
-                raise SegmentStoreError(f"segment_checksum_mismatch:{item['name']}")
+            self._validate_entry(item)
             checked += 1
         return {"schema": "simplicio.fast.segments-validation/v1", "status": "valid", "segments": checked, "generation": payload["generation"]}
 
     def read(self, name: str) -> bytes:
+        with self.map(name) as mapped:
+            return bytes(mapped)
+
+    @contextmanager
+    def map(self, name: str) -> Iterator[mmap.mmap | bytes]:
+        """Validate and map one segment, loading only its requested bytes."""
+
         payload = self.read_manifest()
         item = next((entry for entry in payload["segments"] if entry.get("name") == name), None)
         if item is None:
             raise SegmentStoreError(f"segment_not_found:{name}")
-        self.validate()
-        return (self.directory / item["file"]).read_bytes()
+        self._validate_entry(item)
+        path = self.directory / item["file"]
+        if item["bytes"] == 0:
+            yield b""
+            return
+        with path.open("rb") as handle:
+            mapped = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
+            try:
+                yield mapped
+            finally:
+                mapped.close()
+
+    def _validate_entry(self, item: Any) -> None:
+        if not isinstance(item, dict) or not all(key in item for key in ("name", "file", "bytes", "sha256")):
+            raise SegmentStoreError("segment_entry_invalid")
+        if not isinstance(item["file"], str) or Path(item["file"]).name != item["file"]:
+            raise SegmentStoreError("segment_path_invalid")
+        path = self.directory / item["file"]
+        try:
+            size = path.stat().st_size
+            digest = hashlib.sha256()
+            with path.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
+        except OSError as error:
+            raise SegmentStoreError(f"segment_missing:{item['name']}") from error
+        if size != item["bytes"] or digest.hexdigest() != item["sha256"]:
+            raise SegmentStoreError(f"segment_checksum_mismatch:{item['name']}")
 
 
 def migrate_snapshot(snapshot_path: Path, directory: Path) -> dict[str, Any]:

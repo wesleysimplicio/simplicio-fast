@@ -52,3 +52,15 @@ class SegmentStoreTest(unittest.TestCase):
             self.assertNotEqual(first["generation"], second["generation"])
             self.assertEqual("valid", store.validate()["status"])
 
+    def test_map_validates_and_reads_one_segment_without_snapshot_offsets(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            store.publish(snapshot)
+            with Snapshot(snapshot) as opened:
+                with store.map("symbols") as mapped:
+                    self.assertEqual(opened._section_bytes("symbols"), bytes(mapped))
+
