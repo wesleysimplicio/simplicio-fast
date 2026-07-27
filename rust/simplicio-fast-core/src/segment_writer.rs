@@ -87,8 +87,7 @@ impl SegmentWriter {
             let final_path = self.directory.join(&file_name);
             if final_path.exists() {
                 let existing = fs::read(&final_path)?;
-                if existing.len() != bytes.len()
-                    || hex_bytes(&Sha256::digest(&existing)) != digest
+                if existing.len() != bytes.len() || hex_bytes(&Sha256::digest(&existing)) != digest
                 {
                     return Err(SnapshotError::Invalid(format!(
                         "content-addressed segment collision: {name}"
@@ -138,9 +137,10 @@ impl SegmentWriter {
             .map_err(|_| SnapshotError::Invalid("cannot serialize segment manifest".into()))?;
         let manifest_path = self.directory.join(MANIFEST_NAME);
         if manifest_path.exists() {
-            let previous_tmp = self
-                .directory
-                .join(format!(".{PREVIOUS_MANIFEST_NAME}.{}.tmp", std::process::id()));
+            let previous_tmp = self.directory.join(format!(
+                ".{PREVIOUS_MANIFEST_NAME}.{}.tmp",
+                std::process::id()
+            ));
             fs::copy(&manifest_path, &previous_tmp)?;
             sync_file(&previous_tmp)?;
             replace_file(&previous_tmp, &self.directory.join(PREVIOUS_MANIFEST_NAME))?;
@@ -170,10 +170,7 @@ fn validate_name(name: &str) -> Result<(), SnapshotError> {
 }
 
 fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), SnapshotError> {
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)?;
+    let mut file = OpenOptions::new().write(true).create_new(true).open(path)?;
     if let Err(error) = file.write_all(bytes).and_then(|_| file.sync_all()) {
         drop(file);
         let _ = fs::remove_file(path);
@@ -183,7 +180,11 @@ fn write_synced(path: &Path, bytes: &[u8]) -> Result<(), SnapshotError> {
 }
 
 fn sync_file(path: &Path) -> Result<(), SnapshotError> {
-    OpenOptions::new().read(true).write(true).open(path)?.sync_all()?;
+    OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(path)?
+        .sync_all()?;
     Ok(())
 }
 

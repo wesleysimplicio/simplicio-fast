@@ -116,7 +116,10 @@ fn main() -> ExitCode {
             .and_then(|snapshot| SegmentWriter::new(directory).publish(&snapshot))
         {
             Ok(receipt) => {
-                println!("{}", serde_json::to_string(&receipt).expect("serializable receipt"));
+                println!(
+                    "{}",
+                    serde_json::to_string(&receipt).expect("serializable receipt")
+                );
                 ExitCode::SUCCESS
             }
             Err(error) => {
