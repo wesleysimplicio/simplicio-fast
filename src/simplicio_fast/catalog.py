@@ -20,7 +20,7 @@ MAGIC = b"SFACAT01"
 MAX_CATALOG_BYTES = 64 * 1024 * 1024
 MAX_RECORDS = 1_000_000
 STATES = {"active", "superseded", "tombstoned", "held"}
-NAMESPACES = {"file", "symbol", "relation", "span", "test", "plan", "precedent", "receipt"}
+NAMESPACES = {"file", "symbol", "relation", "span", "test", "plan", "precedent", "receipt", "skill"}
 _SHA256 = __import__("re").compile(r"^[0-9a-f]{64}$")
 
 
