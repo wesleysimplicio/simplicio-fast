@@ -8,6 +8,9 @@
 use memmap2::{Mmap, MmapOptions};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+mod segment_writer;
+pub use segment_writer::{PublishReceipt, PublishedSegment, SegmentWriter};
+
 use std::{
     collections::BTreeMap,
     fmt, fs,
@@ -86,24 +89,24 @@ pub struct RustContextSpan {
 }
 
 #[derive(Debug, Clone)]
-struct Section {
-    offset: usize,
-    length: usize,
+pub(crate) struct Section {
+    pub(crate) offset: usize,
+    pub(crate) length: usize,
 }
 
 pub struct SnapshotReader {
-    bytes: SnapshotBytes,
-    sections: BTreeMap<String, Section>,
+    pub(crate) bytes: SnapshotBytes,
+    pub(crate) sections: BTreeMap<String, Section>,
     digest: [u8; 32],
 }
 
-enum SnapshotBytes {
+pub(crate) enum SnapshotBytes {
     Owned(Vec<u8>),
     Mapped(Mmap),
 }
 
 impl SnapshotBytes {
-    fn as_slice(&self) -> &[u8] {
+    pub(crate) fn as_slice(&self) -> &[u8] {
         match self {
             Self::Owned(bytes) => bytes,
             Self::Mapped(bytes) => bytes,
@@ -575,7 +578,7 @@ pub fn manifest() -> serde_json::Value {
         "status": "available",
         "reference": false,
         "fallback": false,
-        "capabilities": ["version", "stats", "doctor", "snapshot-read", "segment-map"],
+        "capabilities": ["version", "stats", "doctor", "snapshot-read", "segment-map", "segment-write"],
         "formats": ["SFAST001/v2"]
         ,"conformance": {"passed": false, "reason": "harness_not_integrated"}
     })
@@ -589,7 +592,7 @@ fn region_valid(offset: usize, length: usize, total: usize) -> bool {
     offset <= total && length <= total.saturating_sub(offset)
 }
 
-fn section_bytes<'a>(bytes: &'a [u8], section: &Section) -> &'a [u8] {
+pub(crate) fn section_bytes<'a>(bytes: &'a [u8], section: &Section) -> &'a [u8] {
     &bytes[section.offset..section.offset + section.length]
 }
 
@@ -667,7 +670,7 @@ fn hex(bytes: &[u8; 32]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-fn hex_bytes(bytes: &[u8]) -> String {
+pub(crate) fn hex_bytes(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
