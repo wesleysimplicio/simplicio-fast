@@ -57,6 +57,11 @@ def _manifest(path: Path) -> tuple[dict[str, Any] | None, str | None]:
         return None, "manifest_engine_mismatch"
     if value.get("status") != "available":
         return None, "manifest_not_available"
+    version = value.get("version")
+    if not isinstance(version, str) or not version.strip():
+        return None, "manifest_version_missing"
+    if version != __version__:
+        return None, "manifest_version_mismatch"
     return value, None
 
 
