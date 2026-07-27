@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .snapshot import MAX_FILES, MAX_RELATIONS, MAX_SNAPSHOT_BYTES, MAX_SYMBOLS
 
 
 MANIFEST_SCHEMA = "simplicio.fast.engine-manifest/v1"
@@ -88,6 +89,14 @@ def python_manifest() -> dict[str, Any]:
             "receipts",
         ],
         "formats": ["SFAST001/v1", "SFAST001/v2"],
+        "source_languages": ["python"],
+        "minimum_python": "3.11",
+        "limits": {
+            "max_snapshot_bytes": MAX_SNAPSHOT_BYTES,
+            "max_files": MAX_FILES,
+            "max_symbols": MAX_SYMBOLS,
+            "max_relations": MAX_RELATIONS,
+        },
     }
 
 
