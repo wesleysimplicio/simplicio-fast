@@ -53,9 +53,20 @@ class ChangeJournalTest(unittest.TestCase):
 
             self.assertEqual(("a.py", "b.py"), journal.changed_paths_since(sequence=1))
             self.assertEqual(("a.py", "b.py"), journal.changed_paths_since(generation="g2"))
-            self.assertEqual(("b.py",), journal.changed_paths_since(sequence=2))
+            self.assertEqual(("b.py",), journal.changed_paths_since(sequence=2, max_events=1))
+            self.assertEqual(
+                ["b.py"],
+                [event.path for event in journal.events_since(sequence=2, max_events=1)],
+            )
             with self.assertRaisesRegex(ChangeJournalError, "sequence_invalid"):
                 journal.events_since(sequence=-1)
+            with self.assertRaisesRegex(ChangeJournalError, "max_events_invalid"):
+                journal.events_since(max_events=0)
+            with self.assertRaisesRegex(ChangeJournalError, "event_window_overflow"):
+                journal.events_since(max_events=2)
+            with self.assertRaisesRegex(ChangeJournalError, "event_window_overflow"):
+                journal.changed_paths_since(generation="g2", max_events=1)
+
 
 
 if __name__ == "__main__":
