@@ -1,11 +1,23 @@
 from __future__ import annotations
 
+import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from scripts.conformance import _json_command, _python_stats, _require_envelope, _rust_stats, normalize
+from scripts.conformance import (
+    DEFAULT_CORPUS,
+    _canonical_digest,
+    _corpus_digest,
+    _json_command,
+    _python_stats,
+    _require_envelope,
+    _rust_stats,
+    normalize,
+    run,
+)
 
 class ConformanceHarnessTest(unittest.TestCase):
     def test_real_engine_envelope_is_validated_at_harness_boundary(self) -> None:
@@ -75,3 +87,26 @@ class ConformanceHarnessTest(unittest.TestCase):
         with patch("scripts.conformance._json_command", return_value=payload):
             with self.assertRaisesRegex(RuntimeError, "engine_schema_mismatch"):
                 _python_stats(Path("snapshot"))
+
+    def test_corpus_digest_is_stable_and_fails_closed_on_fixture_mutation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            copy = Path(directory) / "v1"
+            shutil.copytree(DEFAULT_CORPUS, copy)
+            first = _corpus_digest(copy)
+            self.assertEqual(first, _corpus_digest(copy))
+            target = copy / "python" / "service.py"
+            target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "corpus_digest_mismatch"):
+                _corpus_digest(copy)
+
+    def test_run_receipt_attaches_raw_engine_payloads_and_digests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            snapshot_path = Path(directory) / "snapshot.bin"
+            snapshot_path.write_bytes(b"snapshot")
+            stats = {"version": 2, "bytes": 1, "files": 1, "symbols": 0, "relations": 0, "sections": [], "generation": "g"}
+            with patch("scripts.conformance._python_stats", return_value=stats), patch("scripts.conformance._rust_stats", return_value=dict(stats)):
+                receipt = run(snapshot_path, Path("rust"), corpus=DEFAULT_CORPUS)
+        self.assertEqual("pass", receipt["status"])
+        self.assertEqual(stats, receipt["engine_raw"]["python"])
+        self.assertEqual(_canonical_digest(stats), receipt["engine_sha256"]["python"])
+        self.assertEqual(64, len(receipt["corpus_sha256"]))
