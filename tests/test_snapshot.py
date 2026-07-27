@@ -18,6 +18,7 @@ from simplicio_fast.snapshot import (
     build_snapshot,
     source_files,
 )
+import simplicio_fast.snapshot as snapshot_module
 
 
 class SnapshotTest(unittest.TestCase):
@@ -31,6 +32,26 @@ class SnapshotTest(unittest.TestCase):
             (root / ".git" / "objects" / "ignored.py").write_text("def ignored():\n    pass\n")
 
             self.assertEqual([root / "app.py"], source_files(root))
+
+    def test_snapshot_publish_retries_transient_windows_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "app.py").write_text("def run():\n    return True\n")
+            output = root / "snapshot.sfast"
+            original_replace = snapshot_module.os.replace
+            calls = 0
+
+            def flaky_replace(source: Path, destination: Path) -> None:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise PermissionError(5, "access denied")
+                original_replace(source, destination)
+
+            with patch.object(snapshot_module.os, "replace", side_effect=flaky_replace):
+                build_snapshot(root, output)
+            self.assertGreaterEqual(calls, 2)
+            self.assertTrue(output.is_file())
 
     def test_binary_snapshot_query_and_incremental_reuse(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

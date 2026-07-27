@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -13,6 +14,8 @@ SCHEMA = "simplicio.fast.streaming-store/v1"
 DEFAULT_BLOCK_BYTES = 1024 * 1024
 MAX_BLOCK_BYTES = 16 * 1024 * 1024
 MAX_RANGE_BYTES = 64 * 1024 * 1024
+ATOMIC_REPLACE_ATTEMPTS = 4
+ATOMIC_REPLACE_DELAY_SECONDS = 0.01
 
 
 class StreamingStoreError(ValueError):
@@ -29,12 +32,23 @@ class StreamingBlockStore:
         self.root.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
+    def _atomic_replace(temporary: Path, destination: Path) -> None:
+        for attempt in range(ATOMIC_REPLACE_ATTEMPTS):
+            try:
+                os.replace(temporary, destination)
+                return
+            except PermissionError as error:
+                if attempt + 1 >= ATOMIC_REPLACE_ATTEMPTS:
+                    raise StreamingStoreError("atomic_replace_unavailable", "destination remained locked after bounded retries") from error
+                time.sleep(ATOMIC_REPLACE_DELAY_SECONDS * (attempt + 1))
+
+    @staticmethod
     def _atomic_json(path: Path, value: dict[str, Any]) -> None:
         temporary = path.with_suffix(path.suffix + ".tmp")
         temporary.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
         with temporary.open("r+b") as handle:
             os.fsync(handle.fileno())
-        os.replace(temporary, path)
+        StreamingBlockStore._atomic_replace(temporary, path)
 
     @staticmethod
     def _blocks(chunks: Iterable[bytes], block_bytes: int) -> Iterable[bytes]:

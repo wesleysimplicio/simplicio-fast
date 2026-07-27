@@ -56,6 +56,23 @@ class WorkspaceGenerationTest(unittest.TestCase):
                 self.assertEqual([], second_view.find("one"))
                 self.assertEqual(1, len(second_view.find("two")))
 
+
+    def test_refresh_validates_previous_overlay_and_records_lineage(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "service.py"
+            source.write_text("def one():\n    return 1\n", encoding="utf-8")
+            store = WorkspaceStore(root)
+            base = store.build_base()
+            first = store.refresh("slot", base.generation_id)
+            source.write_text("def one():\n    return 1\n\ndef two():\n    return 2\n", encoding="utf-8")
+            second = store.refresh("slot", base.generation_id, first.overlay_generation)
+            self.assertNotEqual(first.overlay_generation, second.overlay_generation)
+            with self.assertRaisesRegex(ValueError, "overlay base generation"):
+                store.refresh("slot", "0" * 64, first.overlay_generation)
+            receipts = sorted((root / ".simplicio" / "fast" / "receipts").glob("*-refresh.json"))
+            self.assertTrue(receipts)
+            self.assertEqual(first.overlay_generation, json.loads(receipts[-1].read_text())["previous_overlay_generation"])
             receipt_files = list((root / ".simplicio" / "fast" / "receipts").glob("*.json"))
             self.assertGreaterEqual(len(receipt_files), 3)
 
