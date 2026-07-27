@@ -335,6 +335,11 @@ def build_parser() -> argparse.ArgumentParser:
     delivery.add_argument("--changeset", default=None, help="optional simplicio.fast.changeset/v2 JSON")
     delivery.add_argument("--write", action="store_true", help="apply a validated changeset; dry-run is the default")
     delivery.add_argument("--idempotency-key", default=None, help="stable delivery replay key")
+    delivery.add_argument(
+        "--runtime-transaction",
+        default=None,
+        help="coordinator-issued simplicio.effect-transaction/v1 JSON for Full writes",
+    )
 
     apply_command = commands.add_parser(
         "apply",
@@ -502,6 +507,13 @@ def main() -> None:
                 Path(args.cache) if args.cache else None,
             )
             if args.changeset:
+                runtime_transaction = None
+                if args.runtime_transaction:
+                    runtime_transaction = json.loads(
+                        Path(args.runtime_transaction).read_text(encoding="utf-8")
+                    )
+                    if not isinstance(runtime_transaction, dict):
+                        raise ValueError("--runtime-transaction must contain a JSON object")
                 emit(
                     delivery_engine.deliver(
                         load_changeset(Path(args.changeset)),
@@ -509,6 +521,7 @@ def main() -> None:
                         engine_receipt=selection.receipt(),
                         write=args.write,
                         idempotency_key=args.idempotency_key,
+                        runtime_transaction=runtime_transaction,
                     )
                 )
             else:

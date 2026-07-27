@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from . import __version__
+from .integrations import run_runtime_effect_transaction
 from .processor import ProjectProcessor
 from .snapshot import Snapshot, build_snapshot
 
@@ -141,12 +142,14 @@ class DeliveryEngine:
         write: bool = False,
         idempotency_key: str | None = None,
         runtime_authorized: bool = False,
+        runtime_transaction: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Execute one guarded changeset and persist a replay-safe delivery receipt.
 
-        Loop standalone may use the local guarded executor. Full write effects are
-        fail-closed until a Runtime authorization receipt is supplied. Dry-runs
-        remain available in both profiles for inspection and planning.
+        Loop standalone may use the local guarded executor. Full write effects
+        require a coordinator-issued EffectTransaction; the legacy boolean
+        argument is intentionally not an authority bypass. Dry-runs remain
+        available in both profiles for inspection and planning.
         """
         started = time.perf_counter_ns()
         if profile not in PROFILE_NAMES:
@@ -161,7 +164,12 @@ class DeliveryEngine:
         change_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         request_key = idempotency_key or hashlib.sha256(
             json.dumps(
-                {"changeset": change_digest, "profile": profile, "write": write},
+                {
+                    "changeset": change_digest,
+                    "profile": profile,
+                    "write": write,
+                    "runtime_transaction": runtime_transaction,
+                },
                 sort_keys=True,
                 separators=(",", ":"),
             ).encode("utf-8")
@@ -180,7 +188,52 @@ class DeliveryEngine:
 
         with Snapshot(self.snapshot) as snapshot:
             before_generation = snapshot.generation
-        if profile == "full" and write and not runtime_authorized:
+        if profile == "full" and write:
+            runtime_outcome: dict[str, Any] | None = None
+            reason_codes = ["runtime_authorization_required"]
+            if runtime_transaction is not None:
+                try:
+                    transaction_write_set = runtime_transaction.get("write_set")
+                    changeset_paths = [change["path"] for change in changeset["changes"]]
+                    if sorted(transaction_write_set or []) != sorted(changeset_paths):
+                        raise ValueError("runtime_write_set_mismatch")
+                    effect_payload = runtime_transaction.get("effect")
+                    patch_ref = effect_payload.get("patch_ref") if isinstance(effect_payload, dict) else None
+                    if patch_ref is not None and patch_ref != change_digest:
+                        raise ValueError("runtime_patch_ref_mismatch")
+                    runtime_outcome = run_runtime_effect_transaction(
+                        self.root, runtime_transaction
+                    )
+                except (ImportError, RuntimeError, TypeError, ValueError) as error:
+                    reason_codes = ["runtime_effect_transaction_rejected", type(error).__name__]
+                else:
+                    if runtime_outcome.get("state") == "completed":
+                        build_snapshot(self.root, self.snapshot)
+                        with Snapshot(self.snapshot) as snapshot:
+                            after_generation = snapshot.generation
+                        receipt = {
+                            "schema": SCHEMA,
+                            "status": "applied",
+                            "profile": PROFILE_NAMES[profile],
+                            "engine": engine_receipt,
+                            "engine_version": __version__,
+                            "changeset": {"schema": changeset["schema"], "sha256": change_digest},
+                            "base_generation": before_generation,
+                            "result_generation": after_generation,
+                            "idempotency": {"key": request_key, "hit": False, "replayed": False},
+                            "cache": {"L0_delivery": "miss", "key": request_key},
+                            "ownership": {
+                                "source_writer": "simplicio-dev-cli",
+                                "full_effect_authority": "simplicio-runtime",
+                                "mutation_applied": True,
+                            },
+                            "runtime": runtime_outcome,
+                            "refresh": {"attempted": True, "status": "refreshed"},
+                            "reason_codes": ["runtime_effect_completed"],
+                            "timings": {"delivery_wall_ms": (time.perf_counter_ns() - started) / 1_000_000},
+                        }
+                        _atomic_json(result_path, receipt)
+                        return receipt
             receipt = {
                 "schema": SCHEMA,
                 "status": "blocked",
@@ -196,7 +249,8 @@ class DeliveryEngine:
                     "full_effect_authority": "simplicio-runtime",
                     "mutation_applied": False,
                 },
-                "reason_codes": ["runtime_authorization_required"],
+                "runtime": runtime_outcome,
+                "reason_codes": reason_codes,
                 "timings": {"delivery_wall_ms": (time.perf_counter_ns() - started) / 1_000_000},
             }
             _atomic_json(result_path, receipt)
