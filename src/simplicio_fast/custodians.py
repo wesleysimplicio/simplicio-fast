@@ -10,6 +10,7 @@ from typing import ClassVar, Literal, Mapping
 
 ADDRESS_SCHEMA = "simplicio.fast.custodian-address/v1"
 CATALOG_SCHEMA = "simplicio.fast.custodian-catalog/v1"
+RESOLUTION_SCHEMA = "simplicio.fast.custodian-resolution/v1"
 VIRTUAL_POINTER_KIND = "virtual-pointer"
 
 CustodianRole = Literal[
@@ -151,6 +152,37 @@ def custodian_catalog() -> tuple[CustodianAddressV1, ...]:
     return CUSTODIAN_CATALOG
 
 
+def resolve_custodian(role: object) -> dict[str, object]:
+    """Resolve one virtual role without dispatching a worker or effect."""
+    if not isinstance(role, str) or not role.strip():
+        return {
+            "schema": RESOLUTION_SCHEMA,
+            "status": "rejected",
+            "role": None,
+            "address": None,
+            "reason_code": "invalid_role",
+            "dispatch": {"allowed": False, "reason_code": "virtual_pointer_only"},
+        }
+    address = CUSTODIANS.get(role)
+    if address is None:
+        return {
+            "schema": RESOLUTION_SCHEMA,
+            "status": "unavailable",
+            "role": role,
+            "address": None,
+            "reason_code": "unknown_role",
+            "dispatch": {"allowed": False, "reason_code": "virtual_pointer_only"},
+        }
+    return {
+        "schema": RESOLUTION_SCHEMA,
+        "status": "available",
+        "role": address.role,
+        "address": address.to_dict(),
+        "reason_code": "catalog_match",
+        "dispatch": {"allowed": False, "reason_code": "virtual_pointer_only"},
+    }
+
+
 def catalog_json() -> str:
     """Serialize the catalog deterministically as JSON-safe data."""
     return json.dumps(
@@ -164,6 +196,7 @@ def catalog_json() -> str:
 
 
 __all__ = [
+    "RESOLUTION_SCHEMA",
     "ADDRESS_SCHEMA",
     "CATALOG_SCHEMA",
     "CUSTODIAN_CATALOG",
@@ -174,4 +207,5 @@ __all__ = [
     "VIRTUAL_POINTER_KIND",
     "catalog_json",
     "custodian_catalog",
+    "resolve_custodian",
 ]
