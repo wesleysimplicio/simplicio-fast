@@ -112,6 +112,76 @@ class LedgerStore:
             "payload_sha256": digest.hex(),
         }
 
+    def recover_tail(self) -> dict[str, Any]:
+        """Recover only a crash-consistent HBP/HBI prefix and discard orphaned tails."""
+        with self._writer_lock():
+            try:
+                hbp_data = self.hbp_path.read_bytes()
+                hbi_data = self.hbi_path.read_bytes()
+            except FileNotFoundError as error:
+                raise LedgerStoreError("missing_store", "HBP and HBI are required for recovery") from error
+            header_size = _FILE_HEADER.size
+            if len(hbp_data) < header_size or hbp_data[:header_size] != _FILE_HEADER.pack(HBP_MAGIC, 1):
+                raise LedgerStoreError("invalid_header", "HBP header is invalid")
+            if len(hbi_data) < header_size or hbi_data[:header_size] != _FILE_HEADER.pack(HBI_MAGIC, 1):
+                raise LedgerStoreError("invalid_header", "HBI header is invalid")
+            index_body = hbi_data[header_size:]
+            complete_index_bytes = len(index_body) - (len(index_body) % _INDEX_ENTRY.size)
+            valid_events = 0
+            valid_hbp_end = header_size
+            recovery_reason: str | None = None
+            for sequence in range(complete_index_bytes // _INDEX_ENTRY.size):
+                start = header_size + sequence * _INDEX_ENTRY.size
+                indexed_sequence, offset, length, _digest = _INDEX_ENTRY.unpack_from(hbi_data, start)
+                if indexed_sequence != sequence or length > MAX_RECORD_BYTES or offset != valid_hbp_end:
+                    raise LedgerStoreError("index_mismatch", "HBI prefix is not contiguous")
+                try:
+                    if offset < header_size or offset + _RECORD_HEADER.size + length > len(hbp_data):
+                        raise LedgerStoreError("body_out_of_bounds", "HBI points outside HBP")
+                    record_sequence, record_length = _RECORD_HEADER.unpack_from(hbp_data, offset)
+                    payload_start = offset + _RECORD_HEADER.size
+                    payload = hbp_data[payload_start : payload_start + record_length]
+                    if record_sequence != sequence or record_length != length or hashlib.sha256(payload).digest() != _digest:
+                        raise LedgerStoreError("payload_digest_mismatch", "HBP payload does not match HBI")
+                    try:
+                        record = json.loads(payload.decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+                        raise LedgerStoreError("invalid_record", "HBP payload is not valid JSON") from error
+                    if not isinstance(record, dict):
+                        raise LedgerStoreError("invalid_record", "HBP record must be an object")
+                except LedgerStoreError as error:
+                    if error.reason_code != "body_out_of_bounds":
+                        raise
+                    recovery_reason = error.reason_code
+                    break
+                valid_events += 1
+                valid_hbp_end = offset + _RECORD_HEADER.size + length
+            if complete_index_bytes < len(index_body) and recovery_reason is None:
+                recovery_reason = "partial_index"
+            target_hbi_size = header_size + valid_events * _INDEX_ENTRY.size
+            target_hbp_size = valid_hbp_end
+            truncated_hbi_bytes = len(hbi_data) - target_hbi_size
+            truncated_hbp_bytes = max(0, len(hbp_data) - target_hbp_size)
+            if truncated_hbi_bytes or truncated_hbp_bytes:
+                with self.hbi_path.open("r+b") as hbi:
+                    hbi.truncate(target_hbi_size)
+                    hbi.flush()
+                    os.fsync(hbi.fileno())
+                with self.hbp_path.open("r+b") as hbp:
+                    hbp.truncate(target_hbp_size)
+                    hbp.flush()
+                    os.fsync(hbp.fileno())
+            if recovery_reason is None and truncated_hbp_bytes:
+                recovery_reason = "orphan_hbp_tail"
+            return {
+                "schema": SCHEMA,
+                "status": "recovered" if truncated_hbi_bytes or truncated_hbp_bytes else "valid",
+                "events": valid_events,
+                "truncated_hbp_bytes": truncated_hbp_bytes,
+                "truncated_hbi_bytes": truncated_hbi_bytes,
+                "reason_code": recovery_reason or "already_consistent",
+            }
+
     def _index_entry(self, sequence: int) -> tuple[int, int, int, bytes]:
         if sequence < 0:
             raise LedgerStoreError("invalid_sequence", "sequence must be non-negative")

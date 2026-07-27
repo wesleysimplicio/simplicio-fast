@@ -59,3 +59,39 @@ class LedgerStoreTest(unittest.TestCase):
             with self.assertRaises(LedgerStoreError) as error:
                 store.read_record(0)
             self.assertEqual("body_out_of_bounds", error.exception.reason_code)
+
+    def test_recover_orphan_body_and_partial_index_is_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            ledger = DeliveryLedger("repo")
+            store = LedgerStore(root)
+            store.append(self.event(ledger))
+            body_before = Path(root, "delivery.hbp").read_bytes()
+            Path(root, "delivery.hbp").write_bytes(body_before + b"orphan")
+            Path(root, "delivery.hbi").write_bytes(Path(root, "delivery.hbi").read_bytes() + b"partial")
+            receipt = store.recover_tail()
+            self.assertEqual("recovered", receipt["status"])
+            self.assertEqual("partial_index", receipt["reason_code"])
+            self.assertEqual(1, receipt["events"])
+            self.assertEqual("valid", store.verify()["status"])
+            self.assertEqual("valid", store.recover_tail()["status"])
+
+    def test_recover_truncated_body_but_reject_digest_tamper(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            ledger = DeliveryLedger("repo")
+            store = LedgerStore(root)
+            store.append(self.event(ledger))
+            body = Path(root, "delivery.hbp").read_bytes()
+            Path(root, "delivery.hbp").write_bytes(body[:-1])
+            receipt = store.recover_tail()
+            self.assertEqual("body_out_of_bounds", receipt["reason_code"])
+            self.assertEqual("valid", store.verify()["status"])
+
+            store = LedgerStore(root)
+            ledger = DeliveryLedger("repo")
+            store.append(self.event(ledger))
+            tampered = bytearray(Path(root, "delivery.hbp").read_bytes())
+            tampered[-1] ^= 1
+            Path(root, "delivery.hbp").write_bytes(tampered)
+            with self.assertRaises(LedgerStoreError) as error:
+                store.recover_tail()
+            self.assertEqual("payload_digest_mismatch", error.exception.reason_code)
