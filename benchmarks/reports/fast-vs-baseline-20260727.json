@@ -2,10 +2,10 @@
   "build": {
     "metrics": {
       "changed_paths": [],
-      "cpu_ms": 93.75,
+      "cpu_ms": 46.875,
       "files": 50,
       "format_version": 2,
-      "generation": "d001a8a538246d1b67c930a620d0b5f693ca89c0caf87e60d0298cb96812ad98",
+      "generation": "5311aeb5aeaaee40d1f8e0b756d0905d83db114c78cc72259a195debbf59f0dc",
       "parsed_files": 50,
       "parsed_paths": [
         "service_0.py",
@@ -67,9 +67,9 @@
       "reused_paths": [],
       "snapshot_bytes": 547776,
       "symbols": 1050,
-      "wall_ms": 116.05929999495856
+      "wall_ms": 74.24009998794645
     },
-    "wall_ms": 116.2834
+    "wall_ms": 74.4186
   },
   "environment": {
     "cpu_count": 16,
@@ -86,6 +86,24 @@
     "Full/Loop ecosystem cells are explicitly blocked until their cross-repository runtime integrations exist.",
     "Token counts use whitespace-v1 estimates, not provider billing telemetry."
   ],
+  "provenance": {
+    "corpus_sha256": "39c1e4f39240ccd1235f26dcebb4f5bc0099a41e7f244180a77faee62a2a3d2c",
+    "repetition_order": [
+      7,
+      5,
+      1,
+      6,
+      2,
+      10,
+      4,
+      3,
+      8,
+      9
+    ],
+    "source_commit": "92f493f217783d7a5bf860fd427f8148d48d2c60",
+    "source_commit_reason": null,
+    "warmup_repetitions": 0
+  },
   "scenarios": {
     "fast_python": {
       "context_bytes": 24990,
@@ -93,20 +111,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 37.9206,
-        "p95": 57.5731,
-        "p99": 57.5731,
+        "median": 16.84235,
+        "p95": 20.0343,
+        "p99": 20.0343,
         "samples": [
-          57.5731,
-          55.894,
-          34.5638,
-          47.1597,
-          41.9709,
-          39.201,
-          36.6018,
-          36.6402,
-          32.1372,
-          34.0195
+          20.0343,
+          17.7863,
+          16.6012,
+          16.8467,
+          15.377,
+          16.1712,
+          16.2693,
+          16.838,
+          18.9787,
+          16.9783
         ]
       }
     },
@@ -117,20 +135,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 20.60615,
-        "p95": 23.2193,
-        "p99": 23.2193,
+        "median": 13.01885,
+        "p95": 15.0204,
+        "p99": 15.0204,
         "samples": [
-          18.9896,
-          18.5567,
-          21.9955,
-          21.813,
-          23.2193,
-          20.4081,
-          20.8042,
-          19.7298,
-          22.2485,
-          20.2483
+          11.5238,
+          13.1132,
+          13.6233,
+          12.9245,
+          10.9199,
+          11.392,
+          14.0354,
+          13.7864,
+          11.857,
+          15.0204
         ]
       }
     },
@@ -141,20 +159,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 102.25489999999999,
-        "p95": 114.6693,
-        "p99": 114.6693,
+        "median": 65.12755,
+        "p95": 73.2124,
+        "p99": 73.2124,
         "samples": [
-          105.3797,
-          105.3537,
-          107.779,
-          114.6693,
-          101.5067,
-          98.5785,
-          92.1237,
-          93.5053,
-          101.6995,
-          102.8103
+          73.2124,
+          65.063,
+          65.1921,
+          71.8484,
+          67.3087,
+          69.4432,
+          61.6723,
+          60.6934,
+          64.4581,
+          64.9024
         ]
       }
     },
@@ -181,20 +199,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 27.1141,
-        "p95": 47.1243,
-        "p99": 47.1243,
+        "median": 14.9252,
+        "p95": 16.5216,
+        "p99": 16.5216,
         "samples": [
-          47.1243,
-          28.4205,
-          26.402,
-          23.8878,
-          26.7045,
-          26.8547,
-          27.3735,
-          34.134,
-          26.8104,
-          27.636
+          13.0953,
+          16.5216,
+          13.9951,
+          14.5887,
+          15.0486,
+          15.7078,
+          15.1023,
+          14.2582,
+          14.8018,
+          15.1978
         ]
       }
     },
@@ -204,20 +222,20 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 37.98675,
-        "p95": 42.7104,
-        "p99": 42.7104,
+        "median": 19.41395,
+        "p95": 21.3957,
+        "p99": 21.3957,
         "samples": [
-          37.7163,
-          36.2552,
-          36.2067,
-          33.9832,
-          39.6647,
-          38.1762,
-          42.7104,
-          41.4074,
-          37.7973,
-          38.6267
+          19.018,
+          18.476,
+          18.9866,
+          17.9535,
+          19.8099,
+          20.1668,
+          20.1996,
+          18.5542,
+          21.3957,
+          19.9944
         ]
       }
     },
@@ -227,46 +245,46 @@
       "repetitions": 10,
       "token_measurement": "whitespace-v1-estimate",
       "wall_ms": {
-        "median": 16.61855,
-        "p95": 1192.6916,
-        "p99": 1192.6916,
+        "median": 6.78235,
+        "p95": 8.218,
+        "p99": 8.218,
         "samples": [
-          1192.6916,
-          14.3185,
-          13.5457,
-          12.6305,
-          16.8924,
-          18.1278,
-          15.4407,
-          16.3447,
-          18.1707,
-          17.2002
+          7.7664,
+          6.8925,
+          7.692,
+          6.4112,
+          7.2143,
+          6.5308,
+          6.6722,
+          6.5472,
+          6.5377,
+          8.218
         ]
       }
     }
   },
   "schema": "simplicio.fast.e2e-benchmark/v1",
   "source_bytes": 53390,
-  "status": "complete",
+  "status": "partial",
   "totals": {
     "alteration_estimated_tokens_fast": 50,
     "alteration_estimated_tokens_without_fast": 11000,
-    "alteration_speedup_hot": 1.419852124626826,
-    "alteration_speedup_with_refresh": 0.2885929793042974,
+    "alteration_speedup_hot": 1.1569574377963727,
+    "alteration_speedup_with_refresh": 0.2234385969141029,
     "estimated_token_savings_percent": 77.27272727272727,
     "estimated_tokens_fast": 2500,
     "estimated_tokens_saved": 8500,
     "estimated_tokens_without_fast": 11000,
-    "fast_python_alteration_refresh_wall_ms": 1023.4057,
-    "fast_python_alteration_wall_ms": 208.013,
-    "fast_python_wall_ms": 532.0446,
+    "fast_python_alteration_refresh_wall_ms": 663.794,
+    "fast_python_alteration_wall_ms": 128.1959,
+    "fast_python_wall_ms": 246.2996,
     "rust_standalone_speedup_vs_python": null,
     "rust_standalone_wall_ms": null,
-    "speedup_vs_ast_reparse": 0.7190075794397689,
-    "speedup_vs_scan": 2.5098700372111664,
-    "without_fast_alteration_wall_ms": 295.3477,
-    "without_fast_ast_reparse_wall_ms": 382.5441,
-    "without_fast_scan_wall_ms": 1335.3628
+    "speedup_vs_ast_reparse": 0.7899107428513891,
+    "speedup_vs_scan": 0.28616489835955883,
+    "without_fast_alteration_wall_ms": 148.3172,
+    "without_fast_ast_reparse_wall_ms": 194.5547,
+    "without_fast_scan_wall_ms": 70.4823
   },
   "workload": {
     "files": 50,
