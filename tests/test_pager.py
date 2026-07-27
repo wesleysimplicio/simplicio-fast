@@ -86,6 +86,16 @@ class SemanticPagerTest(unittest.TestCase):
         self.assertEqual(1, pager.stats()["prefetch_wasted"])
 
 
+    def test_stats_expose_bounded_working_set_receipt(self) -> None:
+        pager = SemanticPager("repo", "g", max_bytes=6, max_pages=2)
+        pager.get(self.key("a"), lambda: b"aaa")
+        working_set = pager.stats()["working_set"]
+        self.assertEqual(3, working_set["resident_bytes"])
+        self.assertEqual(1, working_set["resident_pages"])
+        self.assertEqual(6, working_set["max_bytes"])
+        self.assertEqual(2, working_set["max_pages"])
+        self.assertEqual(3, working_set["bytes_available"])
+
 class SingleFlightCoordinatorTest(unittest.TestCase):
     def key(self, request: object = None, *, generation: str = "g1"):
         return make_request_key("repo", "commit", generation, request or {"term": "x"})

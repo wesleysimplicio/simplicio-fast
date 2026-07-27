@@ -378,5 +378,12 @@ class SemanticPager:
                 "resident_pages": len(self._pages),
                 "resident_bytes": self._bytes,
                 "held_pages": sum(1 for page in self._pages.values() if page.leases),
+                "working_set": {
+                    "resident_bytes": self._bytes,
+                    "resident_pages": len(self._pages),
+                    "max_bytes": self.max_bytes,
+                    "max_pages": self.max_pages,
+                    "bytes_available": max(0, self.max_bytes - self._bytes),
+                },
                 **self._metrics,
             }
