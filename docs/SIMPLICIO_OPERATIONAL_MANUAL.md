@@ -12,10 +12,11 @@ simplicio-fast doctor -s .simplicio/fast/project.sfast
 ```
 
 `doctor` reports `integrated_ready: true` only when compatible Mapper and Dev
-CLI executables are installed. If either adapter is missing or below its
-minimum contract, the command fails closed; `ingest` and `apply` emit an
-explicit bootstrap-fallback receipt instead of silently returning empty
-context or claiming an integrated write.
+CLI executables are installed. The preferred action binary is
+`simplicio-dev-cli`; `simplicio-cli` is accepted as a legacy compatibility
+alias. If either adapter is missing or below its minimum contract, the command
+fails closed; `ingest` and `apply` emit an explicit bootstrap-fallback receipt
+instead of silently returning empty context or claiming an integrated write.
 
 ## Safe processing loop
 
