@@ -52,6 +52,26 @@ class SegmentStoreTest(unittest.TestCase):
             self.assertNotEqual(first["generation"], second["generation"])
             self.assertEqual("valid", store.validate()["status"])
 
+    def test_recover_previous_restores_last_manifest_after_pointer_corruption(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "service.py"
+            source.write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            first = store.publish(snapshot)
+            source.write_text("def run():\n    return False\n", encoding="utf-8")
+            build_snapshot(root, snapshot)
+            second = store.publish(snapshot)
+            self.assertNotEqual(first["generation"], second["generation"])
+
+            store.manifest_path.write_text("{", encoding="utf-8")
+            recovered = store.recover_previous()
+            self.assertEqual(first["generation"], recovered["generation"])
+            self.assertEqual(first["generation"], store.read_manifest()["generation"])
+            self.assertEqual("valid", store.validate()["status"])
+
     def test_map_validates_and_reads_one_segment_without_snapshot_offsets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

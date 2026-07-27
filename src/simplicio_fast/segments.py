@@ -19,6 +19,7 @@ from .snapshot import Snapshot
 
 MANIFEST_SCHEMA = "simplicio.fast.segments/v1"
 MANIFEST_NAME = "manifest.json"
+MANIFEST_BACKUP_NAME = "manifest.previous.json"
 
 
 class SegmentStoreError(ValueError):
@@ -37,6 +38,7 @@ class SegmentStore:
     def __init__(self, directory: Path) -> None:
         self.directory = directory.resolve()
         self.manifest_path = self.directory / MANIFEST_NAME
+        self.previous_manifest_path = self.directory / MANIFEST_BACKUP_NAME
 
     def publish(self, snapshot_path: Path) -> dict[str, Any]:
         """Publish all sections, then atomically swap the manifest pointer."""
@@ -85,18 +87,41 @@ class SegmentStore:
                 with manifest_tmp.open("r+b") as handle:
                     handle.flush()
                     os.fsync(handle.fileno())
+                if self.manifest_path.exists():
+                    backup_tmp = self.directory / f".{MANIFEST_BACKUP_NAME}.{os.getpid()}.tmp"
+                    shutil.copyfile(self.manifest_path, backup_tmp)
+                    with backup_tmp.open("r+b") as handle:
+                        handle.flush()
+                        os.fsync(handle.fileno())
+                    os.replace(backup_tmp, self.previous_manifest_path)
                 os.replace(manifest_tmp, self.manifest_path)
                 return payload
             finally:
                 shutil.rmtree(staging, ignore_errors=True)
 
-    def read_manifest(self) -> dict[str, Any]:
+    def _read_manifest_file(self, path: Path) -> dict[str, Any]:
         try:
-            payload = json.loads(self.manifest_path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise SegmentStoreError(f"manifest_unreadable:{error}") from error
         if payload.get("schema") != MANIFEST_SCHEMA or not isinstance(payload.get("segments"), list):
             raise SegmentStoreError("manifest_schema_mismatch")
+        return payload
+
+    def read_manifest(self) -> dict[str, Any]:
+        return self._read_manifest_file(self.manifest_path)
+
+    def recover_previous(self) -> dict[str, Any]:
+        """Restore the last verified manifest after an interrupted pointer swap."""
+        payload = self._read_manifest_file(self.previous_manifest_path)
+        for item in payload["segments"]:
+            self._validate_entry(item)
+        manifest_tmp = self.directory / f".{MANIFEST_NAME}.{os.getpid()}.recovery.tmp"
+        manifest_tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        with manifest_tmp.open("r+b") as handle:
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(manifest_tmp, self.manifest_path)
         return payload
 
     def validate(self) -> dict[str, Any]:
