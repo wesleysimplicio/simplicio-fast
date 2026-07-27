@@ -135,6 +135,27 @@ class ChangeJournal:
             events.append(event)
         return events
 
+    def events_since(
+        self, *, sequence: int = 0, generation: str | None = None
+    ) -> list[ChangeEvent]:
+        """Return verified events after a sequence, optionally scoped to a generation."""
+        if not isinstance(sequence, int) or sequence < 0:
+            raise ChangeJournalError("sequence_invalid")
+        event_list = self.read()
+        return [
+            event
+            for event in event_list
+            if event.sequence > sequence and (generation is None or event.generation == generation)
+        ]
+
+    def changed_paths_since(
+        self, *, sequence: int = 0, generation: str | None = None
+    ) -> tuple[str, ...]:
+        """Return stable unique paths for the verified incremental event window."""
+        return tuple(sorted({
+            event.path for event in self.events_since(sequence=sequence, generation=generation)
+        }))
+
     def recover(self) -> dict[str, Any]:
         events = self.read(recover=True)
         raw = self.path.read_bytes() if self.path.exists() else b""
