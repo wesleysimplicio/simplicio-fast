@@ -199,7 +199,7 @@ impl SegmentReader {
             ));
         }
         let file = File::open(path)?;
-        let length = file.metadata()?.len() as usize;
+        let length = u64_to_usize(file.metadata()?.len())?;
         if length != entry.bytes {
             return Err(SnapshotError::Invalid(format!(
                 "segment size mismatch: {}",
@@ -238,7 +238,7 @@ impl SegmentReader {
 impl SnapshotReader {
     pub fn open(path: impl AsRef<Path>) -> Result<Self, SnapshotError> {
         let file = File::open(path)?;
-        let length = file.metadata()?.len() as usize;
+        let length = u64_to_usize(file.metadata()?.len())?;
         if length > MAX_SNAPSHOT_BYTES {
             return Err(SnapshotError::Invalid(
                 "snapshot size limit exceeded".into(),
@@ -270,9 +270,9 @@ impl SnapshotReader {
         let version = u16_at(raw, 8)?;
         let endian = u16_at(raw, 10)?;
         let section_count = u32_at(raw, 12)? as usize;
-        let directory_offset = u64_at(raw, 24)? as usize;
-        let directory_size = u64_at(raw, 32)? as usize;
-        let total_size = u64_at(raw, 40)? as usize;
+        let directory_offset = u64_to_usize(u64_at(raw, 24)?)?;
+        let directory_size = u64_to_usize(u64_at(raw, 32)?)?;
+        let total_size = u64_to_usize(u64_at(raw, 40)?)?;
         if version != VERSION || endian != ENDIAN_MARKER {
             return Err(SnapshotError::Invalid(
                 "unsupported version or endian marker".into(),
@@ -312,8 +312,8 @@ impl SnapshotReader {
                     "duplicate or empty section name".into(),
                 ));
             }
-            let offset = u64_at(raw, start + 16)? as usize;
-            let length = u64_at(raw, start + 24)? as usize;
+            let offset = u64_to_usize(u64_at(raw, start + 16)?)?;
+            let length = u64_to_usize(u64_at(raw, start + 24)?)?;
             if offset % 8 != 0 || offset < directory_end || !region_valid(offset, length, raw.len())
             {
                 return Err(SnapshotError::Invalid(format!(
@@ -581,6 +581,10 @@ pub fn manifest() -> serde_json::Value {
     })
 }
 
+fn u64_to_usize(value: u64) -> Result<usize, SnapshotError> {
+    usize::try_from(value)
+        .map_err(|_| SnapshotError::Invalid("64-bit field exceeds platform usize".into()))
+}
 fn region_valid(offset: usize, length: usize, total: usize) -> bool {
     offset <= total && length <= total.saturating_sub(offset)
 }
@@ -677,6 +681,22 @@ mod tests {
         assert!(
             matches!(result, Err(SnapshotError::Invalid(reason)) if reason == "truncated header")
         );
+    }
+
+    #[test]
+    fn accepts_the_platform_usize_boundary() {
+        let boundary = usize::MAX as u64;
+        assert_eq!(
+            u64_to_usize(boundary).expect("platform boundary"),
+            usize::MAX
+        );
+        if usize::BITS < 64 {
+            assert!(matches!(
+                u64_to_usize(u64::MAX),
+                Err(SnapshotError::Invalid(reason))
+                    if reason == "64-bit field exceeds platform usize"
+            ));
+        }
     }
 
     #[test]
