@@ -70,6 +70,15 @@ def report() -> dict[str, Any]:
             rust_reason = None
     rust_status = "pass" if rust_manifest else ("info" if rust is None else "fail")
     overall_status = "ready" if rust_status != "fail" else "degraded"
+    if rust_manifest is not None:
+        selected_engine = "rust"
+        resolution_reason = "rust_manifest_available"
+    elif rust is None:
+        selected_engine = "python"
+        resolution_reason = "rust_artifact_missing"
+    else:
+        selected_engine = "python"
+        resolution_reason = f"rust_artifact_unusable:{rust_reason}"
     checks = [
         {"name": "python_package", "status": "pass", "version": __version__},
         {"name": "python_only_path", "status": "pass", "detail": "supported"},
@@ -89,6 +98,12 @@ def report() -> dict[str, Any]:
         "platform": platform.platform(),
         "python": sys.version.split()[0],
         "package": {"name": "simplicio-fast", "version": __version__},
+        "resolution": {
+            "requested_engine": "auto",
+            "selected_engine": selected_engine,
+            "reason_code": resolution_reason,
+            "offline": True,
+        },
         "checks": checks,
         "rollback": {"supported": False, "reason": "packaging_matrix_not_yet_published"},
     }
