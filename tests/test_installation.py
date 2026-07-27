@@ -33,3 +33,19 @@ class InstallationReportTest(unittest.TestCase):
         self.assertEqual("pass", check["status"])
         self.assertEqual("rust", check["manifest"]["engine"])
         self.assertTrue(check["sha256"])
+
+    def test_incompatible_rust_manifest_is_degraded_and_not_ready(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "simplicio-fast-rs.exe"
+            path.write_bytes(b"artifact")
+            completed = type(
+                "Completed", (), {"returncode": 0, "stdout": '{"schema":"wrong"}' }
+            )()
+            with patch.dict(os.environ, {"SIMPLICIO_FAST_RUST": str(path)}, clear=True), patch(
+                "simplicio_fast.installation.subprocess.run", return_value=completed
+            ):
+                payload = report()
+        check = payload["checks"][2]
+        self.assertEqual("degraded", payload["status"])
+        self.assertEqual("fail", check["status"])
+        self.assertEqual("manifest_schema_mismatch", check["reason"])

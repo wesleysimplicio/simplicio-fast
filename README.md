@@ -129,6 +129,30 @@ python -m pip install -e .
 
 The integrated install includes `simplicio-mapper` and `simplicio-cli`.
 
+### Offline installation verification
+
+`simplicio-fast doctor --installation --json` is an offline check: it reports the
+installed Python package, locates `simplicio-fast-rs` (or the path in
+`SIMPLICIO_FAST_RUST`), computes its SHA-256, and validates the Rust engine
+manifest before reporting it as usable. An absent Rust artifact keeps the
+Python-only installation `ready`; an incompatible discovered artifact produces
+`degraded` and is never treated as a valid engine. The command does not download,
+build, or remove files.
+
+For a local packaging smoke test on Windows, build both artifacts and install the
+wheel into a clean target directory:
+
+```powershell
+python -m build
+python -m venv .tmp-fast-venv
+& .\.tmp-fast-venv\Scripts\python.exe -m pip install --no-deps (Get-ChildItem dist\simplicio_fast-*.whl).FullName
+& .\.tmp-fast-venv\Scripts\python.exe -m simplicio_fast.cli doctor --installation --json
+```
+
+This is a local Python/wheel check. Cross-OS/architecture wheels, signed
+provenance, and upgrade/downgrade rollback still require the clean VM/container
+matrix tracked by issue #44.
+
 ## CLI and agent contract
 
 ```bash
