@@ -24,6 +24,9 @@ For comparisons, use the same machine, Python version, repository, query and cac
 least ten repetitions and retain raw results for wall time, CPU time, peak RSS, page faults and
 incremental reuse. Page-fault fields are `null` when the host does not expose them.
 
+Each wall-time receipt includes p50 (`median`), p95 and p99 values alongside the raw samples;
+percentiles are computed deterministically from the recorded repetition set.
+
 The latest Fast-vs-baseline receipt is recorded in
 [`reports/fast-vs-baseline.md`](reports/fast-vs-baseline.md), with raw JSON in
 [`reports/fast-vs-baseline-20260727.json`](reports/fast-vs-baseline-20260727.json). It is a

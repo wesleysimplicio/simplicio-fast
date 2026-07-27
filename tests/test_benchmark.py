@@ -4,6 +4,7 @@ import types
 import unittest
 from unittest.mock import patch
 
+from benchmarks.compare_fast import timed
 from benchmarks.run import peak_rss_kib, peak_rss_metric
 
 
@@ -33,6 +34,15 @@ class _FakeWindowsLibraries:
 
 
 class BenchmarkResourceTest(unittest.TestCase):
+    def test_timed_receipt_includes_p50_p95_and_p99(self) -> None:
+        receipt = timed(lambda: "context", repetitions=10)
+        wall = receipt["wall_ms"]
+        self.assertIn("median", wall)
+        self.assertIn("p95", wall)
+        self.assertIn("p99", wall)
+        self.assertLessEqual(wall["median"], wall["p95"])
+        self.assertLessEqual(wall["p95"], wall["p99"])
+
     def test_posix_keeps_resource_getrusage(self) -> None:
         fake_resource = types.SimpleNamespace(
             RUSAGE_SELF=0,

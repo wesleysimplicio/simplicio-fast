@@ -118,6 +118,7 @@ def timed_edit(call: Callable[[], str], root: Path, term: str, snapshot: Path | 
         "wall_ms": {
             "median": statistics.median(durations),
             "p95": sorted(durations)[max(0, math.ceil(repetitions * 0.95) - 1)],
+            "p99": sorted(durations)[max(0, math.ceil(repetitions * 0.99) - 1)],
             "samples": durations,
         },
         "estimated_input_tokens": sum(estimate_tokens(context) for context in contexts),
@@ -186,6 +187,7 @@ def timed(call: Callable[[], str], repetitions: int) -> dict[str, Any]:
         "wall_ms": {
             "median": statistics.median(durations),
             "p95": sorted(durations)[max(0, math.ceil(repetitions * 0.95) - 1)],
+            "p99": sorted(durations)[max(0, math.ceil(repetitions * 0.99) - 1)],
             "samples": durations,
         },
         "context_bytes": bytes_seen,
