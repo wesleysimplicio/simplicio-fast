@@ -168,14 +168,11 @@ pub struct SegmentReader {
 impl SegmentReader {
     pub fn open(directory: impl AsRef<Path>) -> Result<Self, SnapshotError> {
         let directory = directory.as_ref().canonicalize()?;
-        let manifest_path = directory.join("manifest.json");
-        let manifest: SegmentManifest = serde_json::from_slice(&fs::read(manifest_path)?)
-            .map_err(|_| SnapshotError::Invalid("invalid segment manifest JSON".into()))?;
-        if manifest.schema != "simplicio.fast.segments/v1" {
-            return Err(SnapshotError::Invalid(
-                "unsupported segment manifest schema".into(),
-            ));
-        }
+        let manifest = match read_segment_manifest(&directory.join("manifest.json")) {
+            Ok(manifest) => manifest,
+            Err(current_error) => read_segment_manifest(&directory.join("manifest.previous.json"))
+                .map_err(|_| current_error)?,
+        };
         Ok(Self {
             directory,
             manifest,
@@ -236,6 +233,17 @@ impl SegmentReader {
             sha256: actual,
         })
     }
+}
+
+fn read_segment_manifest(path: &Path) -> Result<SegmentManifest, SnapshotError> {
+    let manifest: SegmentManifest = serde_json::from_slice(&fs::read(path)?)
+        .map_err(|_| SnapshotError::Invalid("invalid segment manifest JSON".into()))?;
+    if manifest.schema != "simplicio.fast.segments/v1" {
+        return Err(SnapshotError::Invalid(
+            "unsupported segment manifest schema".into(),
+        ));
+    }
+    Ok(manifest)
 }
 
 impl SnapshotReader {
@@ -798,6 +806,39 @@ mod tests {
             .expect("map segment");
         assert_eq!(mapped.as_bytes(), bytes);
         assert_eq!(mapped.sha256(), digest);
+        drop(mapped);
+        std::fs::remove_dir_all(directory).expect("remove segment fixture");
+    }
+
+    #[test]
+    fn segment_reader_recovers_from_previous_manifest_after_interrupted_swap() {
+        let directory = std::env::temp_dir().join(format!(
+            "simplicio-fast-segments-recovery-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("create segment fixture");
+        let bytes = b"previous-segment";
+        let digest = hex_bytes(&Sha256::digest(bytes));
+        std::fs::write(directory.join("symbols.seg"), bytes).expect("write segment");
+        std::fs::write(directory.join("manifest.json"), b"{interrupted")
+            .expect("write interrupted manifest");
+        std::fs::write(
+            directory.join("manifest.previous.json"),
+            serde_json::json!({
+                "schema": "simplicio.fast.segments/v1",
+                "segments": [{"name":"symbols","file":"symbols.seg","bytes":bytes.len(),"sha256":digest}]
+            })
+            .to_string(),
+        )
+        .expect("write previous manifest");
+
+        let mapped = SegmentReader::open(&directory)
+            .expect("recover previous manifest")
+            .map("symbols")
+            .expect("map recovered segment");
+
+        assert_eq!(mapped.as_bytes(), bytes);
         drop(mapped);
         std::fs::remove_dir_all(directory).expect("remove segment fixture");
     }
