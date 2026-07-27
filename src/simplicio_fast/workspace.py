@@ -295,7 +295,20 @@ class WorkspaceStore:
         return result
 
     def refresh(self, worktree_id: str, base_generation: str, overlay_generation: str | None = None) -> Overlay:
-        return self.create_overlay(worktree_id, base_generation)
+        previous = None
+        if overlay_generation is not None:
+            previous = self.overlay(worktree_id, overlay_generation)
+            if previous.base_generation != base_generation:
+                raise ValueError("overlay base generation does not match refresh base")
+        refreshed = self.create_overlay(worktree_id, base_generation)
+        self._receipt("refresh", {
+            "base_generation": base_generation,
+            "overlay_generation": refreshed.overlay_generation,
+            "previous_overlay_generation": previous.overlay_generation if previous else None,
+            "worktree_id": worktree_id,
+            "changed_files": sorted(refreshed.changed),
+        })
+        return refreshed
 
     def watch_once(self, worktree_id: str, base_generation: str, previous: dict[str, str] | None = None) -> tuple[Overlay | None, dict[str, str]]:
         hashes = {path.relative_to(self.root).as_posix(): _hash_source(path) for path in source_files(self.root)}

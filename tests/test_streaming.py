@@ -6,6 +6,9 @@ import unittest
 from pathlib import Path
 
 from simplicio_fast.streaming import StreamingBlockStore, StreamingStoreError
+from unittest.mock import patch
+
+import simplicio_fast.streaming as streaming_module
 
 
 class StreamingBlockStoreTest(unittest.TestCase):
@@ -18,6 +21,25 @@ class StreamingBlockStoreTest(unittest.TestCase):
             self.assertEqual(hashlib.sha256(payload).hexdigest(), receipt["source_sha256"])
             self.assertEqual(payload, store.read_all("g1"))
 
+
+    def test_atomic_manifest_replace_retries_transient_windows_lock(self) -> None:
+        with tempfile.TemporaryDirectory() as root:
+            store = StreamingBlockStore(root)
+            original_replace = streaming_module.os.replace
+            calls = 0
+
+            def flaky_replace(source: Path, destination: Path) -> None:
+                nonlocal calls
+                calls += 1
+                if calls == 1:
+                    raise PermissionError(5, "access denied")
+                original_replace(source, destination)
+
+            with patch.object(streaming_module.os, "replace", side_effect=flaky_replace):
+                receipt = store.build((b"payload",), generation="retry", block_bytes=4)
+            self.assertEqual("published", receipt["status"])
+            self.assertGreaterEqual(calls, 2)
+            self.assertEqual(b"payload", store.read_all("retry"))
 
     def test_build_file_streams_source_and_reports_missing_source(self) -> None:
         with tempfile.TemporaryDirectory() as root:

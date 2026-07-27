@@ -1,7 +1,7 @@
 import unittest
 
 from benchmarks.e2e_protocol import (
-    METRICS, ProtocolError, blocked_run, preregister, sha256,
+    ENGINES, METRICS, SCENARIOS, WORKLOADS, ProtocolError, blocked_run, preregister, sha256,
     unavailable, validate_dataset, validate_run,
 )
 
@@ -23,7 +23,8 @@ class E2EProtocolTest(unittest.TestCase):
         left = preregister(seed=163)
         right = preregister(seed=163)
         self.assertEqual(left, right)
-        self.assertEqual(2700, len(left["runs"]))
+        expected_runs = sum(len(ENGINES[scenario]) for scenario in SCENARIOS) * len(WORKLOADS) * 3 * 10
+        self.assertEqual(expected_runs, len(left["runs"]))
         self.assertEqual(64, len(left["plan_sha256"]))
 
     def test_minimum_ten_repetitions_is_enforced(self):

@@ -39,6 +39,8 @@ def emit(value: object) -> None:
 
 def source_commit(root: Path) -> tuple[str | None, str | None]:
     """Return the checked-out commit, or a reason when root is outside Git."""
+    if not (root / ".git").exists():
+        return None, "not_a_git_checkout"
     try:
         result = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "--verify", "HEAD^{commit}"],

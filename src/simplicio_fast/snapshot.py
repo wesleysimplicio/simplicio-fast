@@ -32,6 +32,19 @@ MAX_FILES = 1_000_000
 MAX_SYMBOLS = 5_000_000
 MAX_RELATIONS = 10_000_000
 MAX_SECTIONS = 32
+ATOMIC_PUBLISH_ATTEMPTS = 4
+ATOMIC_PUBLISH_DELAY_SECONDS = 0.01
+
+
+def _atomic_publish(temporary: Path, destination: Path) -> None:
+    for attempt in range(ATOMIC_PUBLISH_ATTEMPTS):
+        try:
+            os.replace(temporary, destination)
+            return
+        except PermissionError:
+            if attempt + 1 >= ATOMIC_PUBLISH_ATTEMPTS:
+                raise
+            time.sleep(ATOMIC_PUBLISH_DELAY_SECONDS * (attempt + 1))
 
 DEFAULT_MAX_SOURCE_FILE_BYTES = 8 * 1024 * 1024
 DEFAULT_BUILD_TIMEOUT_SECONDS = 180.0
@@ -458,7 +471,7 @@ def _build_v2(entries: list[tuple[str, bytes, int, list[Symbol]]], relations: li
         # available until this succeeds and os.replace performs one atomic swap.
         with Snapshot(temporary_path):
             pass
-        os.replace(temporary_path, output)
+        _atomic_publish(temporary_path, output)
         temporary_name = None
     finally:
         if temporary_name is not None:
