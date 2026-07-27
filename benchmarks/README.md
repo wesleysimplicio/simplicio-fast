@@ -30,6 +30,19 @@ The latest Fast-vs-baseline receipt is recorded in
 bounded local fixture; Full/Loop cells remain explicitly blocked when cross-repository runtime
 integration is unavailable.
 
+Run the reproducible regression gate after generating a candidate receipt:
+
+```bash
+python scripts/perf_gate.py \
+  --baseline benchmarks/reports/fast-vs-baseline-20260727.json \
+  --candidate path/to/candidate.json \
+  --json-out perf-gate.json
+```
+
+The gate requires ten repetitions, rejects workload drift, treats unavailable metrics as
+`inconclusive`, and returns non-zero for `regressed` or `inconclusive`. It never converts a
+blocked Full/Loop cell or missing provider telemetry into a passing zero.
+
 `environment.peak_rss_kib` is normalized to KiB. POSIX uses the standard-library
 `resource.getrusage`; Windows uses `GetProcessMemoryInfo` through `ctypes`, so no runtime
 dependency is added. If the operating system cannot expose peak RSS, the benchmark still emits a
