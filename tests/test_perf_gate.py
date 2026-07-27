@@ -1,9 +1,16 @@
 from __future__ import annotations
 
+import contextlib
 import copy
+import io
+import json
+import sys
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
-from scripts.perf_gate import evaluate
+from scripts.perf_gate import _read, evaluate, main
 
 
 def receipt(*, hot: float = 100.0, speedup: float = 1.5, tokens: float = 75.0, repetitions: int = 10) -> dict:
@@ -50,6 +57,79 @@ class PerfGateTest(unittest.TestCase):
         self.assertEqual("inconclusive", result["status"])
         speedup = next(check for check in result["checks"] if check["metric"] == "alteration_speedup_hot")
         self.assertEqual("inconclusive", speedup["status"])
+
+    def test_environment_drift_is_inconclusive_before_metric_budget(self) -> None:
+        candidate = copy.deepcopy(receipt())
+        candidate["environment"]["platform"] = "different-host"
+        result = evaluate(receipt(), candidate)
+        self.assertEqual("inconclusive", result["status"])
+        self.assertEqual("environment_mismatch", result["reason"])
+        self.assertEqual("test", result["baseline"]["platform"])
+        self.assertEqual("different-host", result["candidate"]["platform"])
+
+    def test_missing_environment_metadata_is_inconclusive(self) -> None:
+        candidate = copy.deepcopy(receipt())
+        del candidate["environment"]
+        result = evaluate(receipt(), candidate)
+        self.assertEqual("inconclusive", result["status"])
+        self.assertEqual("environment_mismatch", result["reason"])
+
+    def test_workload_and_totals_mismatch_are_inconclusive(self) -> None:
+        candidate = copy.deepcopy(receipt())
+        candidate["workload"]["files"] = 51
+        self.assertEqual("workload_mismatch", evaluate(receipt(), candidate)["reason"])
+
+        candidate = copy.deepcopy(receipt())
+        candidate["totals"] = None
+        self.assertEqual("totals_missing", evaluate(receipt(), candidate)["reason"])
+
+    def test_missing_scenarios_are_inconclusive(self) -> None:
+        candidate = copy.deepcopy(receipt())
+        candidate["scenarios"] = None
+        self.assertEqual("minimum_repetitions_not_met", evaluate(receipt(), candidate)["reason"])
+
+        candidate = copy.deepcopy(receipt())
+        candidate["scenarios"]["fast_python_alteration"] = None
+        self.assertEqual("minimum_repetitions_not_met", evaluate(receipt(), candidate)["reason"])
+
+    def test_reader_rejects_unreadable_and_wrong_schema_receipts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "receipt.json"
+            path.write_text("{", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "receipt_unreadable"):
+                _read(path)
+            path.write_text("{}", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "receipt_schema_mismatch"):
+                _read(path)
+            with self.assertRaisesRegex(ValueError, "receipt_unreadable"):
+                _read(Path(directory) / "missing.json")
+
+    def test_cli_emits_and_writes_gate_result(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            baseline = root / "baseline.json"
+            candidate = root / "candidate.json"
+            output_path = root / "gate.json"
+            payload = receipt()
+            baseline.write_text(json.dumps(payload), encoding="utf-8")
+            candidate.write_text(json.dumps(payload), encoding="utf-8")
+            output = io.StringIO()
+            argv = [
+                "perf_gate.py",
+                "--baseline",
+                str(baseline),
+                "--candidate",
+                str(candidate),
+                "--json-out",
+                str(output_path),
+            ]
+            with patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
+                self.assertEqual(2, main())
+            self.assertEqual(json.loads(output.getvalue()), json.loads(output_path.read_text(encoding="utf-8")))
+
+            candidate.write_text("{}", encoding="utf-8")
+            with patch.object(sys, "argv", argv[:-2]), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(2, main())
 
 
 if __name__ == "__main__":

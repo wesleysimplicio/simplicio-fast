@@ -39,9 +39,10 @@ python scripts/perf_gate.py \
   --json-out perf-gate.json
 ```
 
-The gate requires ten repetitions, rejects workload drift, treats unavailable metrics as
-`inconclusive`, and returns non-zero for `regressed` or `inconclusive`. It never converts a
-blocked Full/Loop cell or missing provider telemetry into a passing zero.
+The gate requires ten repetitions, rejects workload and environment drift (baseline and candidate
+must carry the same non-empty environment metadata), treats unavailable metrics as `inconclusive`,
+and returns non-zero for `regressed` or `inconclusive`. It never converts a blocked Full/Loop cell
+or missing provider telemetry into a passing zero.
 
 `environment.peak_rss_kib` is normalized to KiB. POSIX uses the standard-library
 `resource.getrusage`; Windows uses `GetProcessMemoryInfo` through `ctypes`, so no runtime
