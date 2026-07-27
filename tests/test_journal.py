@@ -44,6 +44,19 @@ class ChangeJournalTest(unittest.TestCase):
             with self.assertRaisesRegex(ChangeJournalError, "path_outside_repository"):
                 journal.append("create", "../escape.py", generation="g1")
 
+    def test_incremental_queries_filter_by_sequence_and_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            journal = ChangeJournal(Path(directory) / "changes.log")
+            journal.append("create", "a.py", generation="g1")
+            journal.append("update", "a.py", generation="g2")
+            journal.append("create", "b.py", generation="g2")
+
+            self.assertEqual(("a.py", "b.py"), journal.changed_paths_since(sequence=1))
+            self.assertEqual(("a.py", "b.py"), journal.changed_paths_since(generation="g2"))
+            self.assertEqual(("b.py",), journal.changed_paths_since(sequence=2))
+            with self.assertRaisesRegex(ChangeJournalError, "sequence_invalid"):
+                journal.events_since(sequence=-1)
+
 
 if __name__ == "__main__":
     unittest.main()
