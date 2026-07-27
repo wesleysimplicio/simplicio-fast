@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,6 +29,34 @@ class SegmentStoreTest(unittest.TestCase):
             with Snapshot(snapshot) as opened:
                 for name in opened._sections:
                     self.assertEqual(opened._section_bytes(name), store.read(name))
+
+    def test_manifest_metadata_fails_closed_before_segment_access(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            store.publish(snapshot)
+            manifest = store.read_manifest()
+            manifest["generation"] = ""
+            store.manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(SegmentStoreError, "manifest_metadata_invalid"):
+                store.read_manifest()
+
+    def test_invalid_segment_entry_bounds_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            store.publish(snapshot)
+            manifest = store.read_manifest()
+            manifest["segments"][0]["bytes"] = -1
+            store.manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            with self.assertRaisesRegex(SegmentStoreError, "segment_entry_invalid"):
+                store.validate()
 
     def test_corruption_fails_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -186,8 +186,18 @@ class SegmentStore:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise SegmentStoreError(f"manifest_unreadable:{error}") from error
-        if payload.get("schema") != MANIFEST_SCHEMA or not isinstance(payload.get("segments"), list):
+        if not isinstance(payload, dict) or payload.get("schema") != MANIFEST_SCHEMA or not isinstance(payload.get("segments"), list):
             raise SegmentStoreError("manifest_schema_mismatch")
+        generation = payload.get("generation")
+        source_digest = payload.get("source_snapshot_sha256")
+        if (
+            not isinstance(generation, str)
+            or not generation
+            or not isinstance(source_digest, str)
+            or len(source_digest) != 64
+            or any(char not in "0123456789abcdef" for char in source_digest.lower())
+        ):
+            raise SegmentStoreError("manifest_metadata_invalid")
         return payload
 
     def read_manifest(self) -> dict[str, Any]:
@@ -256,6 +266,15 @@ class SegmentStore:
 
     def _validate_entry(self, item: Any) -> None:
         if not isinstance(item, dict) or not all(key in item for key in ("name", "file", "bytes", "sha256")):
+            raise SegmentStoreError("segment_entry_invalid")
+        if (
+            isinstance(item["bytes"], bool)
+            or not isinstance(item["bytes"], int)
+            or item["bytes"] < 0
+            or not isinstance(item["sha256"], str)
+            or len(item["sha256"]) != 64
+            or any(char not in "0123456789abcdef" for char in item["sha256"].lower())
+        ):
             raise SegmentStoreError("segment_entry_invalid")
         if not isinstance(item["file"], str) or Path(item["file"]).name != item["file"]:
             raise SegmentStoreError("segment_path_invalid")
