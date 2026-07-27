@@ -1,6 +1,6 @@
 """Simplicio Fast proof of concept."""
 
-__version__ = "2.0.9"
+__version__ = "2.0.10"
 
 from .engine_selection import EngineSelection, EngineSelectionError, select_engine
 from .pager import RequestKey, SingleFlightCoordinator, SingleFlightError, make_request_key

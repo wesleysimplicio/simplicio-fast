@@ -9,7 +9,13 @@ from pathlib import Path
 from . import __version__
 from .processor import ProjectProcessor, load_changeset
 from .rollout import RolloutController
-from .snapshot import Snapshot, SnapshotBuildTimeout, StaleSnapshotError, build_snapshot
+from .snapshot import (
+    DEFAULT_BUILD_TIMEOUT_SECONDS,
+    Snapshot,
+    SnapshotBuildTimeout,
+    StaleSnapshotError,
+    build_snapshot,
+)
 from .adapters import capability_report
 from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
 from .engine import EngineSelection, EngineSelectionError, select_engine
@@ -193,8 +199,8 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--timeout",
             type=float,
-            default=180.0,
-            help="maximum build time in seconds before failing without publishing (default: 180)",
+            default=DEFAULT_BUILD_TIMEOUT_SECONDS,
+            help=f"maximum build time in seconds before failing without publishing (default: {DEFAULT_BUILD_TIMEOUT_SECONDS:g})",
         )
 
         command.add_argument(

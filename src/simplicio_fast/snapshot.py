@@ -34,6 +34,7 @@ MAX_RELATIONS = 10_000_000
 MAX_SECTIONS = 32
 
 DEFAULT_MAX_SOURCE_FILE_BYTES = 8 * 1024 * 1024
+DEFAULT_BUILD_TIMEOUT_SECONDS = 180.0
 # v1 is deliberately frozen.  Do not change these structs: old snapshots must
 # remain readable after a v2 writer is installed.
 LEGACY_HEADER = struct.Struct("<8s7I")
