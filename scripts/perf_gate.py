@@ -59,6 +59,49 @@ def _check_repetitions(receipt: dict[str, Any], minimum: int) -> dict[str, Any]:
     return {"status": overall, "checks": checks}
 
 
+def _check_percentiles(receipt: dict[str, Any], minimum: int) -> dict[str, Any]:
+    scenarios = receipt.get("scenarios")
+    if not isinstance(scenarios, dict):
+        return {"status": "fail", "reason": "scenarios_missing"}
+    relevant = (
+        "without_fast_alteration",
+        "fast_python_alteration",
+        "fast_python_alteration_refresh",
+    )
+    checks: dict[str, Any] = {}
+    overall = "pass"
+    for name in relevant:
+        scenario = scenarios.get(name)
+        wall = scenario.get("wall_ms") if isinstance(scenario, dict) else None
+        samples = wall.get("samples") if isinstance(wall, dict) else None
+        p50 = _number(wall.get("median"), "median") if isinstance(wall, dict) else None
+        p95 = _number(wall.get("p95"), "p95") if isinstance(wall, dict) else None
+        p99 = _number(wall.get("p99"), "p99") if isinstance(wall, dict) else None
+        repetitions = scenario.get("repetitions") if isinstance(scenario, dict) else None
+        valid = (
+            isinstance(samples, list)
+            and isinstance(repetitions, int)
+            and len(samples) == repetitions
+            and repetitions >= minimum
+            and p50 is not None
+            and p95 is not None
+            and p99 is not None
+            and p50 <= p95 <= p99
+            and all(_number(value, "sample") is not None for value in samples)
+        )
+        checks[name] = {
+            "status": "pass" if valid else "fail",
+            "sample_count": len(samples) if isinstance(samples, list) else None,
+            "repetitions": repetitions,
+            "median": p50,
+            "p95": p95,
+            "p99": p99,
+        }
+        if not valid:
+            overall = "fail"
+    return {"status": overall, "checks": checks}
+
+
 def _metric_check(
     name: str,
     baseline: float | None,
@@ -128,6 +171,15 @@ def evaluate(
             "status": "inconclusive",
             "reason": "minimum_repetitions_not_met",
             "repetitions": {"baseline": baseline_reps, "candidate": candidate_reps},
+        }
+    baseline_percentiles = _check_percentiles(baseline, minimum_repetitions)
+    candidate_percentiles = _check_percentiles(candidate, minimum_repetitions)
+    if baseline_percentiles["status"] == "fail" or candidate_percentiles["status"] == "fail":
+        return {
+            "schema": GATE_SCHEMA,
+            "status": "inconclusive",
+            "reason": "percentile_metrics_invalid",
+            "percentiles": {"baseline": baseline_percentiles, "candidate": candidate_percentiles},
         }
     base_totals = baseline.get("totals", {})
     cand_totals = candidate.get("totals", {})
