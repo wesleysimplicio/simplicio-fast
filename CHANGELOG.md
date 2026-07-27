@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.0.8 - 2026-07-27
+
+### Fixed
+
+- Publishes auditable Fast engine-selection receipts with measured Rust probing and fail-closed conformance routing.
+- Restores Windows Python 3.14 close-on-exec handling for Git and Mapper subprocess probes.
+
 ## 2.0.6 - 2026-07-26
 
 ### Fixed
