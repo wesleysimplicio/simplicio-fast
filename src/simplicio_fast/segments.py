@@ -6,6 +6,7 @@ import hashlib
 import json
 import mmap
 import os
+import threading
 import shutil
 import tempfile
 from contextlib import contextmanager
@@ -15,11 +16,92 @@ from collections.abc import Iterator
 from typing import Any
 
 from .snapshot import Snapshot
+from .pager import PageKey, SemanticPager
 
 
 MANIFEST_SCHEMA = "simplicio.fast.segments/v1"
 MANIFEST_NAME = "manifest.json"
 MANIFEST_BACKUP_NAME = "manifest.previous.json"
+
+class SemanticSegmentPagerError(ValueError):
+    def __init__(self, reason_code: str, message: str) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
+
+
+class SemanticSegmentPager:
+    """Read bounded semantic windows from validated immutable segments."""
+
+    def __init__(
+        self,
+        store: SegmentStore,
+        repository: str,
+        generation: str,
+        *,
+        overlay: str | None = None,
+        page_bytes: int = 64 * 1024,
+        max_bytes: int = 4 * 1024 * 1024,
+        max_pages: int = 256,
+    ) -> None:
+        if not repository or not generation or page_bytes < 1:
+            raise ValueError("repository, generation and page_bytes are required")
+        self.store = store
+        self.repository = repository
+        self.generation = generation
+        self.overlay = overlay
+        self.page_bytes = page_bytes
+        self._pager = SemanticPager(repository, generation, max_bytes=max_bytes, max_pages=max_pages)
+        self._lock = threading.Lock()
+        self._segment_reads = 0
+
+    def read(self, name: str, offset: int, size: int) -> bytes:
+        if (
+            isinstance(offset, bool)
+            or not isinstance(offset, int)
+            or isinstance(size, bool)
+            or not isinstance(size, int)
+            or offset < 0
+            or size < 1
+        ):
+            raise SemanticSegmentPagerError("segment_range_invalid", "offset and size must be positive integers")
+        manifest = self.store.read_manifest()
+        if manifest.get("generation") != self.generation:
+            raise SemanticSegmentPagerError("stale_generation", "pager generation differs from segment manifest")
+        entry = next((item for item in manifest["segments"] if item.get("name") == name), None)
+        if entry is None:
+            raise SemanticSegmentPagerError("segment_not_found", f"segment not found: {name}")
+        segment_bytes = entry["bytes"]
+        if offset + size > segment_bytes:
+            raise SemanticSegmentPagerError("segment_range_out_of_bounds", "requested range exceeds segment")
+        first = (offset // self.page_bytes) * self.page_bytes
+        last = ((offset + size - 1) // self.page_bytes) * self.page_bytes
+        chunks: list[bytes] = []
+        for page_start in range(first, last + 1, self.page_bytes):
+            page_size = min(self.page_bytes, segment_bytes - page_start)
+            key = PageKey(self.repository, self.generation, self.overlay, name, f"{page_start}:{page_size}")
+            page = self._pager.get(
+                key,
+                lambda page_start=page_start, page_size=page_size: self.store.read_range(name, page_start, page_size),
+            )
+            begin = max(offset - page_start, 0)
+            end = min(offset + size - page_start, page_size)
+            chunks.append(page[begin:end])
+        with self._lock:
+            self._segment_reads += 1
+        return b"".join(chunks)
+
+    def stats(self) -> dict[str, object]:
+        with self._lock:
+            segment_reads = self._segment_reads
+        return {
+            "schema": "simplicio.fast.semantic-segment-pager/v1",
+            "repository": self.repository,
+            "generation": self.generation,
+            "overlay": self.overlay,
+            "page_bytes": self.page_bytes,
+            "segment_reads": segment_reads,
+            **self._pager.stats(),
+        }
 
 
 class SegmentStoreError(ValueError):

@@ -4,7 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from simplicio_fast.segments import SegmentStore, SegmentStoreError, migrate_snapshot
+from simplicio_fast.segments import (
+    SegmentStore,
+    SegmentStoreError,
+    SemanticSegmentPager,
+    SemanticSegmentPagerError,
+    migrate_snapshot,
+)
 from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
@@ -98,4 +104,43 @@ class SegmentStoreTest(unittest.TestCase):
             with Snapshot(snapshot) as opened:
                 with store.map("symbols") as mapped:
                     self.assertEqual(opened._section_bytes("symbols"), bytes(mapped))
+
+    def test_semantic_segment_pager_reads_aligned_windows_and_reuses_pages(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            manifest = store.publish(snapshot)
+            reader = SemanticSegmentPager(store, "repo", manifest["generation"], page_bytes=16, max_bytes=32, max_pages=4)
+            expected = store.read("symbols")
+            first = reader.read("symbols", 3, 24)
+            second = reader.read("symbols", 3, 24)
+            self.assertEqual(expected[3:27], first)
+            self.assertEqual(first, second)
+            stats = reader.stats()
+            self.assertEqual(2, stats["segment_reads"])
+            self.assertEqual(2, stats["misses"])
+            self.assertGreaterEqual(stats["hits"], 2)
+
+    def test_semantic_segment_pager_fails_closed_on_bounds_and_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            store = SegmentStore(root / "segments")
+            manifest = store.publish(snapshot)
+            reader = SemanticSegmentPager(store, "repo", manifest["generation"], page_bytes=8)
+            with self.assertRaises(SemanticSegmentPagerError) as error:
+                reader.read("symbols", -1, 1)
+            self.assertEqual("segment_range_invalid", error.exception.reason_code)
+            with self.assertRaises(SemanticSegmentPagerError) as error:
+                reader.read("symbols", 0, 10**9)
+            self.assertEqual("segment_range_out_of_bounds", error.exception.reason_code)
+            stale = SemanticSegmentPager(store, "repo", "stale-generation")
+            with self.assertRaises(SemanticSegmentPagerError) as error:
+                stale.read("symbols", 0, 1)
+            self.assertEqual("stale_generation", error.exception.reason_code)
 
