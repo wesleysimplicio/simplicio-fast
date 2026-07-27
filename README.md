@@ -291,6 +291,15 @@ eviction, bounded prefetch and selective invalidation. It reports observable cac
 metrics, but does not claim Rust mmap page-in, RSS/page-fault telemetry, Runtime quotas
 or 20/100-slot E2E behavior; those remain gates for issue #61.
 
+### Delivery ledger reference
+
+`simplicio_fast.ledger.DeliveryLedger` provides the Python boundary reference for
+`simplicio.fast.delivery-ledger/v1`: deterministic event IDs, domain-separated chained
+hashes, incremental/full verification, idempotent appends, winner fencing, delivery
+sealing and secret-redaction checks. It projects JSON only at the boundary and does not
+claim to replace the Runtime #3626 HBP/HBI codec, multiprocess persistence or Full/Loop
+E2E integration; those remain gates for issue #62.
+
 <p align="center">
   <img src="assets/simplicio-fast-verified-flow-v3.png" alt="Compact context moving through planning, editing, testing and verification gates" width="920" />
 </p>
