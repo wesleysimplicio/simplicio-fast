@@ -60,3 +60,53 @@ class AddressCatalogTest(unittest.TestCase):
             corrupted[-1] ^= 1
             with self.assertRaises(CatalogResolutionError):
                 AddressCatalog.from_bytes(bytes(corrupted))
+
+
+    def test_bounded_resolution_preserves_guards_and_payload_budget(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            catalog = self._catalog(Path(directory))
+            first = catalog.register("span", "a" * 64, b"first", source_sha256="b" * 64)
+            second = catalog.register("span", "c" * 64, b"second", source_sha256="d" * 64)
+            complete = catalog.resolve_many_bounded([first.handle, second.handle], max_entries=2, max_bytes=32)
+            self.assertEqual("resolution_complete", complete["reason_code"])
+            self.assertEqual([first.handle, second.handle], [item["handle"] for item in complete["references"]])
+            self.assertEqual([b"first", b"second"], [item["payload"] for item in complete["materialized"]])
+            limited = catalog.resolve_many_bounded([first.handle, second.handle], max_entries=2, max_bytes=len(first.payload) + len(second.payload) - 1)
+            self.assertTrue(limited["truncated"])
+            self.assertEqual(1, limited["entries_materialized"])
+            self.assertEqual("resolution_bounded", limited["reason_code"])
+            with self.assertRaises(CatalogResolutionError) as error:
+                catalog.resolve_many_bounded([first.handle], generation="SFAST001:stale")
+            self.assertEqual("stale_generation", error.exception.reason_code)
+
+    def test_validation_and_resolution_error_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaises(ValueError):
+                AddressCatalog(root, "")
+            catalog = self._catalog(root)
+            canonical = "e" * 64
+            source = "f" * 64
+            entry = catalog.register("symbol", canonical, b"payload", source_sha256=source)
+            self.assertEqual(b"payload", entry.record()["payload"])
+            self.assertNotIn("payload", entry.record(include_payload=False))
+            self.assertIs(entry, catalog.register("symbol", canonical, b"payload", source_sha256=source))
+            with self.assertRaises(CatalogResolutionError) as error:
+                catalog.register("symbol", canonical, b"changed", source_sha256=source)
+            self.assertEqual("canonical_id_reuse", error.exception.reason_code)
+            with self.assertRaises(CatalogResolutionError) as error:
+                catalog.resolve("missing")
+            self.assertEqual("handle_not_found", error.exception.reason_code)
+            with self.assertRaises(CatalogResolutionError) as error:
+                catalog.resolve(entry.handle, namespace="file")
+            self.assertEqual("namespace_mismatch", error.exception.reason_code)
+            with self.assertRaises(ValueError):
+                catalog.resolve_many_bounded([entry.handle], max_entries=0)
+            with self.assertRaises(ValueError):
+                catalog.resolve_many_bounded([entry.handle], max_bytes=0)
+            self.assertEqual([entry], catalog.resolve_many([entry.handle]))
+            with self.assertRaises(ValueError):
+                catalog.tombstone(entry.handle, state="active")
+            with self.assertRaises(CatalogResolutionError) as error:
+                catalog.tombstone("missing")
+            self.assertEqual("handle_not_found", error.exception.reason_code)

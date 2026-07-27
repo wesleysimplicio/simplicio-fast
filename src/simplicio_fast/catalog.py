@@ -164,6 +164,51 @@ class AddressCatalog:
     def resolve_many(self, handles: Iterable[str], **guards: object) -> list[CatalogEntry]:
         return [self.resolve(handle, **guards) for handle in handles]
 
+    def resolve_many_bounded(
+        self,
+        handles: Iterable[str],
+        *,
+        max_entries: int = 256,
+        max_bytes: int = 1 * 1024 * 1024,
+        **guards: object,
+    ) -> dict[str, object]:
+        """Resolve verified handles without exceeding materialization budgets."""
+        if max_entries < 1 or max_bytes < 1:
+            raise ValueError("max_entries and max_bytes must be positive")
+        references: list[dict[str, object]] = []
+        materialized: list[dict[str, object]] = []
+        bytes_materialized = 0
+        truncated = False
+        for handle in handles:
+            if len(references) >= max_entries:
+                truncated = True
+                break
+            entry = self.resolve(handle, **guards)
+            if bytes_materialized + len(entry.payload) > max_bytes:
+                truncated = True
+                break
+            references.append({
+                "handle": entry.handle,
+                "namespace": entry.namespace,
+                "canonical_id": entry.canonical_id,
+                "generation": entry.generation,
+                "payload_length": len(entry.payload),
+                "payload_sha256": entry.payload_sha256,
+            })
+            materialized.append({"handle": entry.handle, "payload": entry.payload})
+            bytes_materialized += len(entry.payload)
+        return {
+            "schema": "simplicio.fast.address-resolution/v1",
+            "repository": self.repository,
+            "generation": self.generation,
+            "references": references,
+            "materialized": materialized,
+            "entries_materialized": len(materialized),
+            "bytes_materialized": bytes_materialized,
+            "truncated": truncated,
+            "reason_code": "resolution_bounded" if truncated else "resolution_complete",
+        }
+
     def tombstone(self, handle: str, *, state: str = "tombstoned") -> CatalogEntry:
         if state not in {"superseded", "tombstoned", "held"}:
             raise ValueError("tombstone state must be superseded, tombstoned or held")
