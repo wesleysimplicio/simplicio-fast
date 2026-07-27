@@ -3,11 +3,12 @@
 //! The source tree remains authoritative. This reader treats snapshots as
 //! disposable derived data and validates every boundary and checksum before
 //! exposing statistics to a caller. It intentionally has no Python runtime
-//! dependency and does not use unsafe mmap access in this first core slice.
+//! dependency and maps validated snapshots read-only when opened from disk.
 
+use memmap2::{Mmap, MmapOptions};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, fmt, fs, path::Path};
+use std::{collections::BTreeMap, fmt, fs, fs::File, path::Path};
 
 pub const MAGIC: &[u8; 8] = b"SFAST001";
 pub const VERSION: u16 = 2;
@@ -86,65 +87,98 @@ struct Section {
 }
 
 pub struct SnapshotReader {
-    bytes: Vec<u8>,
+    bytes: SnapshotBytes,
     sections: BTreeMap<String, Section>,
     digest: [u8; 32],
 }
 
-impl SnapshotReader {
-    pub fn open(path: impl AsRef<Path>) -> Result<Self, SnapshotError> {
-        Self::from_bytes(fs::read(path)?)
+enum SnapshotBytes {
+    Owned(Vec<u8>),
+    Mapped(Mmap),
+}
+
+impl SnapshotBytes {
+    fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Owned(bytes) => bytes,
+            Self::Mapped(bytes) => bytes,
+        }
     }
 
-    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, SnapshotError> {
-        if bytes.len() < HEADER_SIZE {
-            return Err(SnapshotError::Invalid("truncated header".into()));
-        }
-        if bytes.len() > MAX_SNAPSHOT_BYTES {
+    fn len(&self) -> usize {
+        self.as_slice().len()
+    }
+}
+
+impl SnapshotReader {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, SnapshotError> {
+        let file = File::open(path)?;
+        let length = file.metadata()?.len() as usize;
+        if length > MAX_SNAPSHOT_BYTES {
             return Err(SnapshotError::Invalid(
                 "snapshot size limit exceeded".into(),
             ));
         }
-        if &bytes[..8] != MAGIC {
+        // The mapped bytes are validated by `from_storage` before any record
+        // is exposed. The mapping is read-only and owned by the reader.
+        let mapped = unsafe { MmapOptions::new().map(&file)? };
+        Self::from_storage(SnapshotBytes::Mapped(mapped))
+    }
+
+    pub fn from_bytes(bytes: Vec<u8>) -> Result<Self, SnapshotError> {
+        Self::from_storage(SnapshotBytes::Owned(bytes))
+    }
+
+    fn from_storage(bytes: SnapshotBytes) -> Result<Self, SnapshotError> {
+        let raw = bytes.as_slice();
+        if raw.len() < HEADER_SIZE {
+            return Err(SnapshotError::Invalid("truncated header".into()));
+        }
+        if raw.len() > MAX_SNAPSHOT_BYTES {
+            return Err(SnapshotError::Invalid(
+                "snapshot size limit exceeded".into(),
+            ));
+        }
+        if &raw[..8] != MAGIC {
             return Err(SnapshotError::Invalid("invalid magic".into()));
         }
-        let version = u16_at(&bytes, 8)?;
-        let endian = u16_at(&bytes, 10)?;
-        let section_count = u32_at(&bytes, 12)? as usize;
-        let directory_offset = u64_at(&bytes, 24)? as usize;
-        let directory_size = u64_at(&bytes, 32)? as usize;
-        let total_size = u64_at(&bytes, 40)? as usize;
+        let version = u16_at(raw, 8)?;
+        let endian = u16_at(raw, 10)?;
+        let section_count = u32_at(raw, 12)? as usize;
+        let directory_offset = u64_at(raw, 24)? as usize;
+        let directory_size = u64_at(raw, 32)? as usize;
+        let total_size = u64_at(raw, 40)? as usize;
         if version != VERSION || endian != ENDIAN_MARKER {
             return Err(SnapshotError::Invalid(
                 "unsupported version or endian marker".into(),
             ));
         }
-        if total_size != bytes.len() {
+        if total_size != raw.len() {
             return Err(SnapshotError::Invalid("total size mismatch".into()));
         }
         if !(REQUIRED_SECTIONS.len()..=32).contains(&section_count)
             || directory_size != section_count * SECTION_SIZE
             || directory_offset < HEADER_SIZE
-            || !region_valid(directory_offset, directory_size, bytes.len())
+            || !region_valid(directory_offset, directory_size, raw.len())
         {
             return Err(SnapshotError::Invalid("invalid section directory".into()));
         }
 
-        let expected_digest = slice32(&bytes, 48)?;
-        let mut whole = bytes.clone();
+        let expected_digest = slice32(raw, 48)?;
+        let mut whole = raw.to_vec();
         whole[48..80].fill(0);
         let payload_digest = Sha256::digest(&whole);
         if payload_digest.as_slice() != expected_digest {
             return Err(SnapshotError::Invalid("snapshot checksum mismatch".into()));
         }
-        let snapshot_digest = Sha256::digest(&bytes);
+        let snapshot_digest = Sha256::digest(raw);
 
         let directory_end = directory_offset + directory_size;
         let mut sections = BTreeMap::new();
         let mut ranges = Vec::with_capacity(section_count);
         for index in 0..section_count {
             let start = directory_offset + index * SECTION_SIZE;
-            let name_bytes = &bytes[start..start + 16];
+            let name_bytes = &raw[start..start + 16];
             let name_end = name_bytes.iter().position(|byte| *byte == 0).unwrap_or(16);
             let name = std::str::from_utf8(&name_bytes[..name_end])
                 .map_err(|_| SnapshotError::Invalid("non-ASCII section name".into()))?;
@@ -153,18 +187,16 @@ impl SnapshotReader {
                     "duplicate or empty section name".into(),
                 ));
             }
-            let offset = u64_at(&bytes, start + 16)? as usize;
-            let length = u64_at(&bytes, start + 24)? as usize;
-            if offset % 8 != 0
-                || offset < directory_end
-                || !region_valid(offset, length, bytes.len())
+            let offset = u64_at(raw, start + 16)? as usize;
+            let length = u64_at(raw, start + 24)? as usize;
+            if offset % 8 != 0 || offset < directory_end || !region_valid(offset, length, raw.len())
             {
                 return Err(SnapshotError::Invalid(format!(
                     "invalid section bounds: {name}"
                 )));
             }
-            let expected = slice32(&bytes, start + 32)?;
-            let actual = Sha256::digest(&bytes[offset..offset + length]);
+            let expected = slice32(raw, start + 32)?;
+            let actual = Sha256::digest(&raw[offset..offset + length]);
             if actual.as_slice() != expected {
                 return Err(SnapshotError::Invalid(format!(
                     "section checksum mismatch: {name}"
@@ -195,7 +227,7 @@ impl SnapshotReader {
             ));
         }
         let relation_value: serde_json::Value =
-            serde_json::from_slice(section_bytes(&bytes, &sections["relations"]))
+            serde_json::from_slice(section_bytes(raw, &sections["relations"]))
                 .map_err(|_| SnapshotError::Invalid("invalid relation JSON".into()))?;
         if !relation_value.is_array() {
             return Err(SnapshotError::Invalid(
@@ -211,7 +243,7 @@ impl SnapshotReader {
 
     pub fn stats(&self) -> SnapshotStats {
         let relations = serde_json::from_slice::<serde_json::Value>(section_bytes(
-            &self.bytes,
+            self.bytes.as_slice(),
             &self.sections["relations"],
         ))
         .ok()
@@ -237,36 +269,36 @@ impl SnapshotReader {
         for index in 0..symbols.length / SYMBOL_RECORD_SIZE {
             let base = symbols.offset + index * SYMBOL_RECORD_SIZE;
             let name = read_text(
-                &self.bytes,
+                self.bytes.as_slice(),
                 strings,
-                u32_at(&self.bytes, base)? as usize,
-                u32_at(&self.bytes, base + 4)? as usize,
+                u32_at(self.bytes.as_slice(), base)? as usize,
+                u32_at(self.bytes.as_slice(), base + 4)? as usize,
             )?;
             let qualified_name = read_text(
-                &self.bytes,
+                self.bytes.as_slice(),
                 strings,
-                u32_at(&self.bytes, base + 8)? as usize,
-                u32_at(&self.bytes, base + 12)? as usize,
+                u32_at(self.bytes.as_slice(), base + 8)? as usize,
+                u32_at(self.bytes.as_slice(), base + 12)? as usize,
             )?;
             let signature = read_text(
-                &self.bytes,
+                self.bytes.as_slice(),
                 strings,
-                u32_at(&self.bytes, base + 16)? as usize,
-                u32_at(&self.bytes, base + 20)? as usize,
+                u32_at(self.bytes.as_slice(), base + 16)? as usize,
+                u32_at(self.bytes.as_slice(), base + 20)? as usize,
             )?;
-            let file_index = u32_at(&self.bytes, base + 24)? as usize;
+            let file_index = u32_at(self.bytes.as_slice(), base + 24)? as usize;
             let file = files
                 .get(file_index)
                 .ok_or_else(|| SnapshotError::Invalid("symbol file index out of bounds".into()))?;
-            let kind = kind_name(u32_at(&self.bytes, base + 36)?)?;
-            let symbol_id = hex_bytes(&self.bytes[base + 40..base + 72]);
+            let kind = kind_name(u32_at(self.bytes.as_slice(), base + 36)?)?;
+            let symbol_id = hex_bytes(&self.bytes.as_slice()[base + 40..base + 72]);
             result.push(RustSymbol {
                 name,
                 qualified_name,
                 kind,
                 file: file.clone(),
-                line: u32_at(&self.bytes, base + 28)?,
-                end_line: u32_at(&self.bytes, base + 32)?,
+                line: u32_at(self.bytes.as_slice(), base + 28)?,
+                end_line: u32_at(self.bytes.as_slice(), base + 32)?,
                 symbol_id,
                 signature,
             });
@@ -396,12 +428,12 @@ impl SnapshotReader {
         for index in 0..files.length / FILE_RECORD_SIZE {
             let base = files.offset + index * FILE_RECORD_SIZE;
             let path = read_text(
-                &self.bytes,
+                self.bytes.as_slice(),
                 strings,
-                u32_at(&self.bytes, base)? as usize,
-                u32_at(&self.bytes, base + 4)? as usize,
+                u32_at(self.bytes.as_slice(), base)? as usize,
+                u32_at(self.bytes.as_slice(), base + 4)? as usize,
             )?;
-            let digest: [u8; 32] = self.bytes[base + 16..base + 48]
+            let digest: [u8; 32] = self.bytes.as_slice()[base + 16..base + 48]
                 .try_into()
                 .map_err(|_| SnapshotError::Invalid("file digest bounds".into()))?;
             paths.push((path, digest));
@@ -519,5 +551,19 @@ mod tests {
     fn manifest_is_versioned() {
         assert_eq!(manifest()["schema"], "simplicio.fast.engine-manifest/v1");
         assert_eq!(manifest()["engine"], "rust");
+    }
+
+    #[test]
+    fn open_maps_and_validates_a_file_boundary() {
+        let path = std::env::temp_dir().join(format!(
+            "simplicio-fast-invalid-{}.sfast",
+            std::process::id()
+        ));
+        std::fs::write(&path, vec![0; HEADER_SIZE - 1]).expect("write fixture");
+        let result = SnapshotReader::open(&path);
+        let _ = std::fs::remove_file(&path);
+        assert!(
+            matches!(result, Err(SnapshotError::Invalid(reason)) if reason == "truncated header")
+        );
     }
 }
