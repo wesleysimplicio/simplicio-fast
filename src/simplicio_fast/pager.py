@@ -3,13 +3,147 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import threading
+import time
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
-from typing import Callable, Iterable
+from typing import Any, Callable, Iterable
 
 
 SCHEMA = "simplicio.fast.semantic-pager/v1"
+
+@dataclass(frozen=True, slots=True)
+class RequestKey:
+    """Canonical identity for a shared Fast request."""
+
+    repository: str
+    commit: str
+    generation: str
+    request_digest: str
+
+    def __post_init__(self) -> None:
+        if not all(isinstance(value, str) and value for value in (self.repository, self.commit, self.generation, self.request_digest)):
+            raise ValueError("repository, commit, generation and request_digest are required")
+
+
+def make_request_key(repository: str, commit: str, generation: str, request: Any) -> RequestKey:
+    """Build a stable request identity from JSON-canonical request data."""
+    canonical = json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    return RequestKey(repository, commit, generation, digest)
+
+
+class SingleFlightError(ValueError):
+    def __init__(self, reason_code: str, message: str) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
+
+
+@dataclass(slots=True)
+class _RequestFlight:
+    event: threading.Event
+    waiters: int = 0
+    result: object = None
+    error: BaseException | None = None
+
+
+class SingleFlightCoordinator:
+    """Bounded, thread-safe single-flight admission for shared Fast work."""
+
+    def __init__(self, *, max_flights: int = 64, max_waiters: int = 64) -> None:
+        if max_flights < 1 or max_waiters < 1:
+            raise ValueError("max_flights and max_waiters must be positive")
+        self.max_flights = max_flights
+        self.max_waiters = max_waiters
+        self._flights: dict[RequestKey, _RequestFlight] = {}
+        self._lock = threading.RLock()
+        self._metrics = {
+            "owners": 0,
+            "completions": 0,
+            "waiters": 0,
+            "waiter_cancellations": 0,
+            "waiter_timeouts": 0,
+            "failures": 0,
+            "rejections": 0,
+        }
+
+    def run(
+        self,
+        key: RequestKey,
+        operation: Callable[[], Any],
+        *,
+        timeout: float | None = None,
+        cancel_event: threading.Event | None = None,
+    ) -> Any:
+        if not isinstance(key, RequestKey):
+            raise TypeError("key must be a RequestKey")
+        if timeout is not None and timeout < 0:
+            raise ValueError("timeout must be non-negative")
+        owner = False
+        with self._lock:
+            flight = self._flights.get(key)
+            if flight is None:
+                if len(self._flights) >= self.max_flights:
+                    self._metrics["rejections"] += 1
+                    raise SingleFlightError("flight_limit", "maximum active flights reached")
+                flight = _RequestFlight(threading.Event())
+                self._flights[key] = flight
+                self._metrics["owners"] += 1
+                owner = True
+            else:
+                if flight.waiters >= self.max_waiters:
+                    self._metrics["rejections"] += 1
+                    raise SingleFlightError("waiter_limit", "maximum waiters reached for request")
+                flight.waiters += 1
+                self._metrics["waiters"] += 1
+        if owner:
+            try:
+                result = operation()
+            except BaseException as error:
+                with self._lock:
+                    flight.error = error
+                    self._metrics["failures"] += 1
+                raise
+            else:
+                with self._lock:
+                    flight.result = result
+                    self._metrics["completions"] += 1
+                return result
+            finally:
+                with self._lock:
+                    self._flights.pop(key, None)
+                    flight.event.set()
+
+        deadline = None if timeout is None else time.monotonic() + timeout
+        try:
+            while not flight.event.is_set():
+                if cancel_event is not None and cancel_event.is_set():
+                    with self._lock:
+                        self._metrics["waiter_cancellations"] += 1
+                    raise SingleFlightError("waiter_cancelled", "waiter cancelled without stopping owner")
+                remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
+                if remaining == 0.0 or not flight.event.wait(0.05 if remaining is None else min(0.05, remaining)):
+                    if deadline is not None and time.monotonic() >= deadline:
+                        with self._lock:
+                            self._metrics["waiter_timeouts"] += 1
+                        raise SingleFlightError("waiter_timeout", "waiter deadline exceeded")
+            if flight.error is not None:
+                raise flight.error
+            return flight.result
+        finally:
+            with self._lock:
+                flight.waiters = max(0, flight.waiters - 1)
+
+    def stats(self) -> dict[str, int]:
+        with self._lock:
+            return {
+                "schema": "simplicio.fast.single-flight/v1",
+                "active_flights": len(self._flights),
+                "max_flights": self.max_flights,
+                "max_waiters": self.max_waiters,
+                **self._metrics,
+            }
 
 
 class PagerError(ValueError):
