@@ -136,24 +136,34 @@ class ChangeJournal:
         return events
 
     def events_since(
-        self, *, sequence: int = 0, generation: str | None = None
+        self, *, sequence: int = 0, generation: str | None = None, max_events: int | None = None
     ) -> list[ChangeEvent]:
-        """Return verified events after a sequence, optionally scoped to a generation."""
+        """Return a verified event window, failing closed when its bound overflows."""
         if not isinstance(sequence, int) or sequence < 0:
             raise ChangeJournalError("sequence_invalid")
+        if max_events is not None and (
+            not isinstance(max_events, int) or isinstance(max_events, bool) or max_events < 1
+        ):
+            raise ChangeJournalError("max_events_invalid")
         event_list = self.read()
-        return [
+        selected = [
             event
             for event in event_list
             if event.sequence > sequence and (generation is None or event.generation == generation)
         ]
+        if max_events is not None and len(selected) > max_events:
+            raise ChangeJournalError("event_window_overflow")
+        return selected
 
     def changed_paths_since(
-        self, *, sequence: int = 0, generation: str | None = None
+        self, *, sequence: int = 0, generation: str | None = None, max_events: int | None = None
     ) -> tuple[str, ...]:
-        """Return stable unique paths for the verified incremental event window."""
+        """Return stable unique paths for a verified bounded event window."""
         return tuple(sorted({
-            event.path for event in self.events_since(sequence=sequence, generation=generation)
+            event.path
+            for event in self.events_since(
+                sequence=sequence, generation=generation, max_events=max_events
+            )
         }))
 
     def recover(self) -> dict[str, Any]:
