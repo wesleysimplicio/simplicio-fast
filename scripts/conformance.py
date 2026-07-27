@@ -14,6 +14,49 @@ from typing import Any
 SCHEMA = "simplicio.fast.conformance/v1"
 
 
+DEFAULT_CORPUS = Path(__file__).resolve().parents[1] / "fixtures" / "conformance" / "v1"
+GOLDEN_CORPUS_SCHEMA = "simplicio.fast.golden-corpus/v1"
+
+
+def _canonical_digest(value: Any) -> str:
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _corpus_digest(corpus: Path) -> str:
+    root = corpus.resolve()
+    manifest_path = root / "corpus.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"corpus_manifest_invalid: {error}") from error
+    if not isinstance(manifest, dict) or manifest.get("schema") != GOLDEN_CORPUS_SCHEMA:
+        raise RuntimeError("corpus_schema_mismatch")
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files:
+        raise RuntimeError("corpus_files_missing")
+    digest = hashlib.sha256()
+    digest.update(b"manifest\0")
+    digest.update(json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    for entry in sorted(files, key=lambda item: str(item.get("path", ""))):
+        relative = entry.get("path") if isinstance(entry, dict) else None
+        expected = entry.get("sha256") if isinstance(entry, dict) else None
+        if not isinstance(relative, str) or not isinstance(expected, str):
+            raise RuntimeError("corpus_file_entry_invalid")
+        path = (root / relative).resolve()
+        if path != root and root not in path.parents:
+            raise RuntimeError(f"corpus_path_escape: {relative}")
+        try:
+            raw = path.read_bytes()
+        except OSError as error:
+            raise RuntimeError(f"corpus_file_missing: {relative}") from error
+        actual = hashlib.sha256(raw).hexdigest()
+        if actual != expected:
+            raise RuntimeError(f"corpus_digest_mismatch: {relative}")
+        digest.update(b"\0" + relative.encode("utf-8") + b"\0" + raw)
+    return digest.hexdigest()
+
+
 def _json_command(command: list[str]) -> dict[str, Any]:
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
     if completed.returncode != 0:
@@ -245,8 +288,11 @@ def run(
     term: str | None = None,
     root: Path | None = None,
     context_term: str | None = None,
+    corpus: Path | None = None,
 ) -> dict[str, Any]:
     snapshot_digest = hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    corpus_root = corpus or DEFAULT_CORPUS
+    corpus_digest = _corpus_digest(corpus_root)
     python = _python_stats(snapshot)
     rust_stats = _rust_stats(rust, snapshot)
     python_normalized = normalize(python)
@@ -280,6 +326,7 @@ def run(
             "match": python_spans == rust_spans,
         }
     context_mismatch = bool(contexts and not contexts["match"])
+    raw_engines = {"python": python, "rust": rust_stats}
     return {
         "schema": SCHEMA,
         "status": "pass"
@@ -287,7 +334,13 @@ def run(
         else "fail",
         "snapshot": str(snapshot.resolve()),
         "snapshot_sha256": snapshot_digest,
+        "corpus": str(corpus_root.resolve()),
+        "corpus_sha256": corpus_digest,
         "engines": {"python": python_normalized, "rust": rust_normalized},
+        "engine_raw": raw_engines,
+        "engine_sha256": {
+            name: _canonical_digest(payload) for name, payload in raw_engines.items()
+        },
         "mismatches": mismatches,
         "queries": queries,
         "query_mismatch": query_mismatch,
@@ -300,15 +353,14 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", type=Path, required=True)
     parser.add_argument("--rust", type=Path, required=True)
+    parser.add_argument("--corpus", type=Path, default=DEFAULT_CORPUS)
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--term", help="also compare a public symbol query")
     parser.add_argument("--context-term", help="also compare bounded source context")
-    parser.add_argument(
-        "--root", type=Path, help="source repository root for context comparison"
-    )
+    parser.add_argument("--root", type=Path, help="source repository root for context comparison")
     args = parser.parse_args()
     try:
-        receipt = run(args.snapshot, args.rust, args.term, args.root, args.context_term)
+        receipt = run(args.snapshot, args.rust, args.term, args.root, args.context_term, args.corpus)
     except (OSError, RuntimeError) as error:
         receipt = {
             "schema": SCHEMA,
