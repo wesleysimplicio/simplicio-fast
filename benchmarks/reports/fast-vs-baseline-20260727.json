@@ -1,0 +1,225 @@
+{
+  "build": {
+    "metrics": {
+      "cpu_ms": 62.5,
+      "files": 50,
+      "format_version": 2,
+      "generation": "e4cabcb4b8deff5f45478229f52a95abed22fe393e21d9f00c14b8d0ffefec89",
+      "parsed_files": 50,
+      "relations": 2050,
+      "reused_files": 0,
+      "snapshot_bytes": 547776,
+      "symbols": 1050,
+      "wall_ms": 89.65680000255816
+    },
+    "wall_ms": 89.8551
+  },
+  "environment": {
+    "platform": "Windows-11-10.0.26100-SP0",
+    "python": "3.14.5"
+  },
+  "limitations": [
+    "Rust standalone measures the real subprocess/IPC context path over a Python-built snapshot; it does not measure Rust snapshot construction.",
+    "Full/Loop ecosystem cells are explicitly blocked until their cross-repository runtime integrations exist.",
+    "Token counts use whitespace-v1 estimates, not provider billing telemetry."
+  ],
+  "scenarios": {
+    "fast_python": {
+      "context_bytes": 24990,
+      "estimated_input_tokens": 2500,
+      "repetitions": 10,
+      "token_measurement": "whitespace-v1-estimate",
+      "wall_ms": {
+        "median": 24.236150000000002,
+        "p95": 26.377,
+        "samples": [
+          23.8467,
+          24.6045,
+          23.887,
+          22.9573,
+          25.8201,
+          23.2849,
+          24.5338,
+          23.9385,
+          26.377,
+          25.3809
+        ]
+      }
+    },
+    "fast_python_alteration": {
+      "context_bytes": 490,
+      "estimated_input_tokens": 50,
+      "operation": "locate+edit+py_compile",
+      "repetitions": 10,
+      "token_measurement": "whitespace-v1-estimate",
+      "wall_ms": {
+        "median": 14.541599999999999,
+        "p95": 15.5939,
+        "samples": [
+          13.2142,
+          14.5608,
+          15.0337,
+          14.8263,
+          14.6029,
+          14.5224,
+          13.3366,
+          13.3808,
+          13.9328,
+          15.5939
+        ]
+      }
+    },
+    "fast_python_alteration_refresh": {
+      "context_bytes": 490,
+      "estimated_input_tokens": 50,
+      "operation": "locate+edit+py_compile+refresh",
+      "repetitions": 10,
+      "token_measurement": "whitespace-v1-estimate",
+      "wall_ms": {
+        "median": 71.88875,
+        "p95": 140.0539,
+        "samples": [
+          70.9066,
+          70.3333,
+          70.1219,
+          72.8709,
+          64.513,
+          66.4301,
+          124.2806,
+          116.5917,
+          80.2854,
+          140.0539
+        ]
+      }
+    },
+    "fast_rust_standalone": {
+      "context_bytes": 4990,
+      "estimated_input_tokens": 500,
+      "operation": "rust-standalone-subprocess-context",
+      "repetitions": 10,
+      "status": "complete",
+      "token_measurement": "whitespace-v1-estimate",
+      "wall_ms": {
+        "median": 54.033,
+        "p95": 953.829,
+        "samples": [
+          953.829,
+          54.0003,
+          54.0657,
+          52.1165,
+          54.4691,
+          53.1442,
+          51.8976,
+          57.0966,
+          51.051,
+          54.9833
+        ]
+      }
+    },
+    "full_standalone": {
+      "operation": "full-runtime-delivery",
+      "reason": "cross_repo_runtime_integration_missing",
+      "status": "blocked"
+    },
+    "loop_standalone": {
+      "operation": "simplicio-loop-delivery",
+      "reason": "cross_repo_runtime_integration_missing",
+      "status": "blocked"
+    },
+    "without_fast_alteration": {
+      "context_bytes": 107890,
+      "estimated_input_tokens": 11000,
+      "operation": "locate+edit+py_compile",
+      "repetitions": 10,
+      "token_measurement": "whitespace-v1-estimate",
+      "wall_ms": {
+        "median": 20.8705,
+        "p95": 31.8178,
+        "samples": [
+          31.8178,
+          30.9072,
+          20.3902,
+          20.8305,
+          19.8541,
+          20.9105,
+          19.8577,
+          19.5681,
+          21.0474,
+          21.357
+        ]
+      }
+    },
+    "without_fast_ast_reparse": {
+      "context_bytes": 107890,
+      "estimated_input_tokens": 11000,
+      "repetitions": 10,
+      "token_measurement": "whitespace-v1-estimate",
+      "wall_ms": {
+        "median": 27.11885,
+        "p95": 30.1933,
+        "samples": [
+          26.5516,
+          25.8572,
+          25.7199,
+          25.1418,
+          28.6158,
+          28.8228,
+          26.769,
+          27.4687,
+          28.3211,
+          30.1933
+        ]
+      }
+    },
+    "without_fast_scan": {
+      "context_bytes": 107890,
+      "estimated_input_tokens": 11000,
+      "repetitions": 10,
+      "token_measurement": "whitespace-v1-estimate",
+      "wall_ms": {
+        "median": 12.897549999999999,
+        "p95": 529.8122,
+        "samples": [
+          529.8122,
+          13.2307,
+          8.1633,
+          20.13,
+          13.6489,
+          12.1596,
+          12.1037,
+          11.3488,
+          13.2947,
+          12.5644
+        ]
+      }
+    }
+  },
+  "schema": "simplicio.fast.e2e-benchmark/v1",
+  "source_bytes": 53390,
+  "status": "complete",
+  "totals": {
+    "alteration_estimated_tokens_fast": 50,
+    "alteration_estimated_tokens_without_fast": 11000,
+    "alteration_speedup_hot": 1.5841505576052206,
+    "alteration_speedup_with_refresh": 0.2584935611808203,
+    "estimated_token_savings_percent": 77.27272727272727,
+    "estimated_tokens_fast": 2500,
+    "estimated_tokens_saved": 8500,
+    "estimated_tokens_without_fast": 11000,
+    "fast_python_alteration_refresh_wall_ms": 876.3874,
+    "fast_python_alteration_wall_ms": 143.0044,
+    "fast_python_wall_ms": 334.4858,
+    "rust_standalone_speedup_vs_python": 0.23282290863077404,
+    "rust_standalone_wall_ms": 1436.6533,
+    "speedup_vs_ast_reparse": 0.8175569785025255,
+    "speedup_vs_scan": 1.9326868285589403,
+    "without_fast_alteration_wall_ms": 226.5405,
+    "without_fast_ast_reparse_wall_ms": 273.4612,
+    "without_fast_scan_wall_ms": 646.4562999999999
+  },
+  "workload": {
+    "files": 50,
+    "functions_per_file": 20,
+    "term": "task_7"
+  }
+}
