@@ -41,6 +41,8 @@ class SnapshotTest(unittest.TestCase):
 
             cold = build_snapshot(root, output)
             self.assertEqual(1, cold.parsed_files)
+            self.assertEqual(("sample.py",), cold.parsed_paths)
+            self.assertEqual(("cold_build",), cold.reason_codes)
             with Snapshot(output) as snapshot:
                 matches = snapshot.find("save")
                 self.assertEqual("User.save", matches[0].qualified_name)
@@ -54,6 +56,10 @@ class SnapshotTest(unittest.TestCase):
             warm = build_snapshot(root, output)
             self.assertEqual(0, warm.parsed_files)
             self.assertEqual(1, warm.reused_files)
+            self.assertEqual((), warm.parsed_paths)
+            self.assertEqual(("sample.py",), warm.reused_paths)
+            self.assertEqual((), warm.changed_paths)
+            self.assertEqual(("no_change",), warm.reason_codes)
 
             source.write_text(source.read_text() + "\ndef deactivate():\n    return False\n")
             with Snapshot(output) as snapshot:
@@ -61,6 +67,9 @@ class SnapshotTest(unittest.TestCase):
                     snapshot.context(root, "save")
             changed = build_snapshot(root, output)
             self.assertEqual(1, changed.parsed_files)
+            self.assertEqual(("sample.py",), changed.parsed_paths)
+            self.assertEqual(("sample.py",), changed.changed_paths)
+            self.assertEqual(("source_changed",), changed.reason_codes)
             with Snapshot(output) as snapshot:
                 self.assertEqual(1, len(snapshot.find("deactivate")))
 
@@ -180,10 +189,29 @@ class SnapshotTest(unittest.TestCase):
             (root / "sample.py").write_text("def recovered():\n    return True\n")
             output = root / "project.sfast"
             output.write_bytes(b"truncated")
-            build_snapshot(root, output)
+            metrics = build_snapshot(root, output)
+            self.assertEqual(("snapshot_invalidated",), metrics.reason_codes)
+            self.assertEqual(("sample.py",), metrics.parsed_paths)
             with Snapshot(output) as snapshot:
                 self.assertEqual(1, len(snapshot.find("recovered")))
             self.assertEqual([], list(root.glob("*.tmp")))
+
+    def test_incremental_receipt_reports_added_and_deleted_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "a.py").write_text("def a():\n    return True\n")
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            (root / "b.py").write_text("def b():\n    return True\n")
+            (root / "a.py").unlink()
+
+            metrics = build_snapshot(root, output)
+
+            self.assertEqual(("a.py", "b.py"), metrics.changed_paths)
+            self.assertEqual(("source_added", "source_deleted"), metrics.reason_codes)
+            self.assertEqual(("b.py",), metrics.parsed_paths)
+            self.assertEqual((), metrics.reused_paths)
+
 
     def test_bounded_build_preserves_previous_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
