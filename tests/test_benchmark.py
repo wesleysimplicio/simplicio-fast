@@ -4,7 +4,7 @@ import types
 import unittest
 from unittest.mock import patch
 
-from benchmarks.compare_fast import timed
+from benchmarks.compare_fast import environment_receipt, timed
 
 from benchmarks.run import (
     SHARED_BASE_OVERLAY_SLOTS,
@@ -54,6 +54,15 @@ class BenchmarkResourceTest(unittest.TestCase):
 
     def test_shared_base_overlay_slot_matrix_is_stable(self) -> None:
         self.assertEqual((1, 20, 100), SHARED_BASE_OVERLAY_SLOTS)
+
+    def test_environment_receipt_has_frozen_raw_identity_fields(self) -> None:
+        receipt = environment_receipt()
+        self.assertEqual("simplicio.fast.environment/v1", receipt["schema"])
+        self.assertTrue(receipt["python"])
+        self.assertTrue(receipt["python_implementation"])
+        self.assertTrue(receipt["platform"])
+        self.assertIn("executable", receipt)
+        self.assertIn("cpu_count", receipt)
 
     def test_posix_keeps_resource_getrusage(self) -> None:
         fake_resource = types.SimpleNamespace(

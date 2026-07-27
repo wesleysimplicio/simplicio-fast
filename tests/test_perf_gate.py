@@ -16,7 +16,16 @@ from scripts.perf_gate import _read, evaluate, main
 def receipt(*, hot: float = 100.0, speedup: float = 1.5, tokens: float = 75.0, repetitions: int = 10) -> dict:
     return {
         "schema": "simplicio.fast.e2e-benchmark/v1",
-        "environment": {"python": "3.14", "platform": "test"},
+        "environment": {
+            "schema": "simplicio.fast.environment/v1",
+            "python": "3.14",
+            "python_implementation": "CPython",
+            "platform": "test",
+            "machine": "test-machine",
+            "processor": None,
+            "executable": "python",
+            "cpu_count": 4,
+        },
         "workload": {"files": 50, "functions_per_file": 20, "term": "task_7"},
         "totals": {
             "fast_python_alteration_wall_ms": hot,
@@ -83,12 +92,19 @@ class PerfGateTest(unittest.TestCase):
         self.assertEqual("test", result["baseline"]["platform"])
         self.assertEqual("different-host", result["candidate"]["platform"])
 
+    def test_invalid_environment_schema_is_inconclusive(self) -> None:
+        candidate = copy.deepcopy(receipt())
+        candidate["environment"]["schema"] = "wrong"
+        result = evaluate(receipt(), candidate)
+        self.assertEqual("inconclusive", result["status"])
+        self.assertEqual("environment_invalid", result["reason"])
+
     def test_missing_environment_metadata_is_inconclusive(self) -> None:
         candidate = copy.deepcopy(receipt())
         del candidate["environment"]
         result = evaluate(receipt(), candidate)
         self.assertEqual("inconclusive", result["status"])
-        self.assertEqual("environment_mismatch", result["reason"])
+        self.assertEqual("environment_invalid", result["reason"])
 
     def test_workload_and_totals_mismatch_are_inconclusive(self) -> None:
         candidate = copy.deepcopy(receipt())
