@@ -1,0 +1,162 @@
+"""Bounded raw block streaming with checkpoint and atomic manifest publication."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+from pathlib import Path
+from typing import Any, Iterable
+
+
+SCHEMA = "simplicio.fast.streaming-store/v1"
+DEFAULT_BLOCK_BYTES = 1024 * 1024
+MAX_BLOCK_BYTES = 16 * 1024 * 1024
+
+
+class StreamingStoreError(ValueError):
+    def __init__(self, reason_code: str, message: str) -> None:
+        super().__init__(message)
+        self.reason_code = reason_code
+
+
+class StreamingBlockStore:
+    """Write raw blocks without materializing the complete source in memory."""
+
+    def __init__(self, root: str | Path) -> None:
+        self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    def _atomic_json(path: Path, value: dict[str, Any]) -> None:
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+        with temporary.open("r+b") as handle:
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+
+    @staticmethod
+    def _blocks(chunks: Iterable[bytes], block_bytes: int) -> Iterable[bytes]:
+        pending = bytearray()
+        for chunk in chunks:
+            if not isinstance(chunk, bytes):
+                raise StreamingStoreError("invalid_chunk", "stream chunks must be bytes")
+            pending.extend(chunk)
+            while len(pending) >= block_bytes:
+                yield bytes(pending[:block_bytes])
+                del pending[:block_bytes]
+        if pending:
+            yield bytes(pending)
+
+    def _load_checkpoint(self, path: Path) -> dict[str, Any]:
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (FileNotFoundError, json.JSONDecodeError) as exc:
+            raise StreamingStoreError("invalid_checkpoint", "checkpoint is missing or malformed") from exc
+        if value.get("schema") != SCHEMA or not isinstance(value.get("blocks"), list):
+            raise StreamingStoreError("invalid_checkpoint", "checkpoint schema is invalid")
+        return value
+
+    def _validate_existing(self, work: Path, checkpoint: dict[str, Any]) -> None:
+        segment = work / "segment-000000.bin"
+        try:
+            data = segment.read_bytes()
+        except FileNotFoundError as exc:
+            raise StreamingStoreError("missing_segment", "checkpoint segment is missing") from exc
+        cursor = 0
+        for index, block in enumerate(checkpoint["blocks"]):
+            if block.get("index") != index:
+                raise StreamingStoreError("checkpoint_sequence", "checkpoint block sequence is invalid")
+            length = int(block["length"])
+            if length < 1 or cursor + length > len(data):
+                raise StreamingStoreError("checkpoint_bounds", "checkpoint block is outside segment")
+            payload = data[cursor : cursor + length]
+            if hashlib.sha256(payload).hexdigest() != block.get("sha256"):
+                raise StreamingStoreError("checkpoint_digest", "checkpoint block digest is invalid")
+            cursor += length
+        if cursor != len(data):
+            raise StreamingStoreError("segment_tail", "segment has bytes outside checkpoint")
+
+    def build(
+        self,
+        chunks: Iterable[bytes],
+        *,
+        generation: str,
+        block_bytes: int = DEFAULT_BLOCK_BYTES,
+        resume: bool = False,
+        fail_after_blocks: int | None = None,
+    ) -> dict[str, Any]:
+        if not generation or Path(generation).name != generation:
+            raise StreamingStoreError("invalid_generation", "generation must be a simple path component")
+        if not 1 <= block_bytes <= MAX_BLOCK_BYTES:
+            raise StreamingStoreError("invalid_block_size", "block size is outside supported bounds")
+        work = self.root / generation
+        work.mkdir(parents=True, exist_ok=True)
+        checkpoint_path = work / "checkpoint.json"
+        if resume:
+            checkpoint = self._load_checkpoint(checkpoint_path)
+            if checkpoint.get("generation") != generation or checkpoint.get("block_bytes") != block_bytes:
+                raise StreamingStoreError("checkpoint_mismatch", "checkpoint generation or block size differs")
+            self._validate_existing(work, checkpoint)
+        else:
+            checkpoint = {
+                "schema": SCHEMA,
+                "generation": generation,
+                "block_bytes": block_bytes,
+                "input_bytes": 0,
+                "blocks": [],
+            }
+            self._atomic_json(checkpoint_path, checkpoint)
+            (work / "segment-000000.bin").write_bytes(b"")
+        existing = checkpoint["blocks"]
+        segment_path = work / "segment-000000.bin"
+        source_digest = hashlib.sha256()
+        input_bytes = 0
+        appended = 0
+        with segment_path.open("ab") as segment:
+            for index, payload in enumerate(self._blocks(chunks, block_bytes)):
+                source_digest.update(payload)
+                input_bytes += len(payload)
+                if index < len(existing):
+                    expected = existing[index]
+                    if len(payload) != expected["length"] or hashlib.sha256(payload).hexdigest() != expected["sha256"]:
+                        raise StreamingStoreError("resume_source_mismatch", "source differs from checkpoint")
+                    continue
+                segment.write(payload)
+                segment.flush()
+                os.fsync(segment.fileno())
+                entry = {"index": index, "length": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+                checkpoint["blocks"].append(entry)
+                checkpoint["input_bytes"] = input_bytes
+                self._atomic_json(checkpoint_path, checkpoint)
+                appended += 1
+                if fail_after_blocks is not None and appended >= fail_after_blocks:
+                    raise RuntimeError("injected_stream_failure")
+        if len(existing) > input_bytes // block_bytes + (1 if input_bytes % block_bytes else 0):
+            raise StreamingStoreError("checkpoint_ahead", "checkpoint has more blocks than source")
+        if input_bytes != sum(int(item["length"]) for item in checkpoint["blocks"]):
+            raise StreamingStoreError("checkpoint_length", "checkpoint byte count is inconsistent")
+        manifest = {
+            "schema": SCHEMA,
+            "generation": generation,
+            "block_bytes": block_bytes,
+            "input_bytes": input_bytes,
+            "source_sha256": source_digest.hexdigest(),
+            "blocks": checkpoint["blocks"],
+            "segment": "segment-000000.bin",
+        }
+        self._atomic_json(work / "manifest.json", manifest)
+        self._atomic_json(self.root / "current.json", manifest)
+        checkpoint_path.unlink(missing_ok=True)
+        return {**manifest, "status": "published", "appended_blocks": appended}
+
+    def read_all(self, generation: str) -> bytes:
+        work = self.root / generation
+        try:
+            manifest = json.loads((work / "manifest.json").read_text(encoding="utf-8"))
+            data = (work / manifest["segment"]).read_bytes()
+        except (FileNotFoundError, KeyError, json.JSONDecodeError) as exc:
+            raise StreamingStoreError("missing_manifest", "published generation is unavailable") from exc
+        if len(data) != manifest["input_bytes"] or hashlib.sha256(data).hexdigest() != manifest["source_sha256"]:
+            raise StreamingStoreError("manifest_digest", "published generation digest is invalid")
+        return data
