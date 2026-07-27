@@ -270,6 +270,33 @@ class SnapshotBuildTimeout(TimeoutError):
     code = "snapshot_build_timeout"
     recovery = "retry with a larger timeout or exclude generated/vendor source directories"
 
+    def __init__(
+        self,
+        *,
+        timeout_seconds: float,
+        files_total: int,
+        files_processed: int,
+        parsed_files: int,
+        reused_files: int,
+        elapsed_ms: float,
+        previous_snapshot_preserved: bool,
+    ) -> None:
+        self.timeout_seconds = timeout_seconds
+        self.progress = {
+            "files_total": files_total,
+            "files_processed": files_processed,
+            "files_remaining": max(0, files_total - files_processed),
+            "parsed_files": parsed_files,
+            "reused_files": reused_files,
+            "elapsed_ms": round(elapsed_ms, 3),
+            "previous_snapshot_preserved": previous_snapshot_preserved,
+        }
+        super().__init__(
+            f"snapshot build exceeded {timeout_seconds:g}s before publishing; "
+            f"progress={json.dumps(self.progress, sort_keys=True, separators=(',', ':'))}; "
+            "the previous snapshot was preserved"
+        )
+
 
 class SnapshotTooLarge(ValueError):
     """Raised before allocating or publishing a snapshot over the hard bound."""
@@ -517,11 +544,17 @@ def build_snapshot(
     parsed_paths: list[str] = []
     reused_paths: list[str] = []
     deadline = None if timeout_seconds is None else wall_start + timeout_seconds
-    for path in source_files(root):
+    paths = source_files(root)
+    for index, path in enumerate(paths):
         if deadline is not None and time.perf_counter() >= deadline:
             raise SnapshotBuildTimeout(
-                f"snapshot build exceeded {timeout_seconds:g}s before publishing; "
-                "the previous snapshot was preserved"
+                timeout_seconds=timeout_seconds,
+                files_total=len(paths),
+                files_processed=len(entries),
+                parsed_files=len(parsed_paths),
+                reused_files=len(reused_paths),
+                elapsed_ms=(time.perf_counter() - wall_start) * 1000,
+                previous_snapshot_preserved=output.exists(),
             )
 
         try:
@@ -542,6 +575,16 @@ def build_snapshot(
             relations.extend(found_relations)
             parsed_paths.append(relative)
         entries.append((relative, digest, len(contents), symbols))
+        if deadline is not None and time.perf_counter() >= deadline:
+            raise SnapshotBuildTimeout(
+                timeout_seconds=timeout_seconds,
+                files_total=len(paths),
+                files_processed=index + 1,
+                parsed_files=len(parsed_paths),
+                reused_files=len(reused_paths),
+                elapsed_ms=(time.perf_counter() - wall_start) * 1000,
+                previous_snapshot_preserved=output.exists(),
+            )
 
     current_digests = {path: digest for path, digest, _, _ in entries}
     current_paths = set(current_digests)
@@ -576,6 +619,16 @@ def build_snapshot(
             if relation.origin not in invalidated_paths
             and previous_symbol_files.get(relation.origin) not in invalidated_paths
         ] + relations
+    if deadline is not None and time.perf_counter() >= deadline:
+        raise SnapshotBuildTimeout(
+            timeout_seconds=timeout_seconds,
+            files_total=len(paths),
+            files_processed=len(entries),
+            parsed_files=len(parsed_paths),
+            reused_files=len(reused_paths),
+            elapsed_ms=(time.perf_counter() - wall_start) * 1000,
+            previous_snapshot_preserved=output.exists(),
+        )
     total_size, checksum = _build_v2(entries, relations, output)
     return BuildMetrics(
         files=len(entries),

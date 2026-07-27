@@ -243,8 +243,14 @@ class SnapshotTest(unittest.TestCase):
             build_snapshot(root, output)
             before = output.read_bytes()
             source.write_text("def changed():\n    return True\n")
-            with self.assertRaises(SnapshotBuildTimeout):
+            with self.assertRaises(SnapshotBuildTimeout) as raised:
                 build_snapshot(root, output, timeout_seconds=0)
+            self.assertEqual(1, raised.exception.progress["files_total"])
+            self.assertEqual(0, raised.exception.progress["files_processed"])
+            self.assertEqual(1, raised.exception.progress["files_remaining"])
+            self.assertEqual(0, raised.exception.progress["parsed_files"])
+            self.assertEqual(0, raised.exception.progress["reused_files"])
+            self.assertTrue(raised.exception.progress["previous_snapshot_preserved"])
             self.assertEqual(before, output.read_bytes())
 
 
