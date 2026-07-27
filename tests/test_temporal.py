@@ -156,6 +156,14 @@ class BitemporalOverlayTest(unittest.TestCase):
         with self.assertRaises(TemporalInvariantError) as error:
             BitemporalOverlay.from_bytes(envelope(bad_sequence))
         self.assertEqual("persistence_sequence", error.exception.reason_code)
+        inconsistent_world = dict(value, world_sequence=int(value["world_sequence"]) + 1)
+        with self.assertRaises(TemporalInvariantError) as error:
+            BitemporalOverlay.from_bytes(envelope(inconsistent_world))
+        self.assertEqual("persistence_sequence", error.exception.reason_code)
+        inconsistent_observed = dict(value, observed_sequence=int(value["observed_sequence"]) + 1)
+        with self.assertRaises(TemporalInvariantError) as error:
+            BitemporalOverlay.from_bytes(envelope(inconsistent_observed))
+        self.assertEqual("persistence_sequence", error.exception.reason_code)
         bad_digest = dict(value)
         bad_digest["facts"] = [dict(value["facts"][0], digest="0" * 64)]
         with self.assertRaises(TemporalInvariantError) as error:
