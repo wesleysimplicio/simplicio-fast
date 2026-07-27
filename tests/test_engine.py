@@ -124,3 +124,68 @@ class EngineSelectionTest(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertIn("--max-lines", command)
         self.assertIn("9", command)
+
+    def test_receipt_exposes_python_selection_contract_without_probe(self) -> None:
+        with patch("simplicio_fast.engine.probe_rust", side_effect=AssertionError):
+            receipt = select_engine(" Python ").receipt()
+        self.assertEqual("simplicio.fast.engine-selection/v1", receipt["schema"])
+        self.assertEqual("python", receipt["requested"])
+        self.assertEqual("python", receipt["selected_engine"])
+        self.assertEqual(python_manifest()["version"], receipt["version"])
+        self.assertIn("context", receipt["capabilities"])
+        self.assertIsNone(receipt["conformance_digest"])
+        self.assertIsNone(receipt["timings"]["probe_ms"])
+
+    def test_rust_receipt_contains_conformance_digest_and_probe_timing(self) -> None:
+        manifest = {
+            "schema": "simplicio.fast.engine-manifest/v1",
+            "engine": "rust",
+            "version": "3.0.0",
+            "status": "available",
+            "capabilities": ["query", "context"],
+            "conformance": {"passed": True, "digest": "sha256:test"},
+        }
+        with patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"), patch(
+            "simplicio_fast.engine.subprocess.run"
+        ) as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = json.dumps(manifest)
+            run.return_value.stderr = ""
+            receipt = select_engine(" RUST ").receipt()
+        self.assertEqual("rust", receipt["requested"])
+        self.assertEqual("rust", receipt["selected"])
+        self.assertEqual("3.0.0", receipt["version"])
+        self.assertEqual(["query", "context"], receipt["capabilities"])
+        self.assertEqual("sha256:test", receipt["conformance_digest"])
+        self.assertGreaterEqual(receipt["timings"]["probe_ms"], 0)
+        run.assert_called_once()
+
+    def test_auto_receipt_records_measured_conformance_fallback(self) -> None:
+        manifest = {
+            "schema": "simplicio.fast.engine-manifest/v1",
+            "engine": "rust",
+            "version": "3.0.0",
+            "status": "available",
+            "conformance": {"passed": False},
+        }
+        with patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"), patch(
+            "simplicio_fast.engine.subprocess.run"
+        ) as run:
+            run.return_value.returncode = 0
+            run.return_value.stdout = json.dumps(manifest)
+            run.return_value.stderr = ""
+            receipt = select_engine("auto").receipt()
+        self.assertEqual("python", receipt["selected"])
+        self.assertEqual("rust_conformance_missing", receipt["reason"])
+        self.assertGreaterEqual(receipt["timings"]["probe_ms"], 0)
+
+    def test_explicit_rust_error_contains_complete_receipt(self) -> None:
+        with patch("simplicio_fast.engine._rust_executable", return_value=None):
+            with self.assertRaises(EngineSelectionError) as raised:
+                select_engine("rust")
+        receipt = raised.exception.receipt
+        self.assertEqual("rust", receipt["requested_engine"])
+        self.assertEqual("unavailable", receipt["selected"])
+        self.assertIsNone(receipt["version"])
+        self.assertIsNone(receipt["conformance_digest"])
+        self.assertIn("probe_ms", receipt["timings"])
