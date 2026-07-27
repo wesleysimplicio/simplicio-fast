@@ -28,9 +28,20 @@ class ConformanceHarnessTest(unittest.TestCase):
             "relations": 3,
             "sections": ["symbols", "files"],
             "generation": "SFAST001:abc",
+            "source_hashes": {"a": "1", "b": "2"},
+            "budgets": {"max_bytes": 24000},
+            "truncations": {"context": False},
+            "reason_codes": ["budget", "partial"],
         }
-        rust = {**python, "format_version": 2, "sections": ["files", "symbols"]}
+        rust = {**python, "format_version": 2, "sections": ["files", "symbols"], "source_hashes": {"b": "2", "a": "1"}, "reason_codes": ["partial", "budget"]}
         self.assertEqual(normalize(python), normalize(rust))
+
+    def test_normalize_preserves_missing_optional_fields_as_null(self) -> None:
+        normalized = normalize({"version": 2, "bytes": 0, "files": 0, "symbols": 0, "relations": 0, "sections": [], "generation": "g"})
+        self.assertIsNone(normalized["source_hashes"])
+        self.assertIsNone(normalized["budgets"])
+        self.assertIsNone(normalized["truncations"])
+        self.assertIsNone(normalized["reason_codes"])
 
     def test_normalize_preserves_drift_for_the_gate(self) -> None:
         python = {

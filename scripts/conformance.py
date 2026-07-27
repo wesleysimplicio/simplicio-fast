@@ -182,6 +182,18 @@ def _rust_context(
     return spans
 
 
+def _normalize_mapping(value: Any) -> Any:
+    if not isinstance(value, dict):
+        return value
+    return {key: value[key] for key in sorted(value)}
+
+
+def _normalize_reason_codes(value: Any) -> Any:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        return value
+    return sorted(value)
+
+
 def normalize(stats: dict[str, Any]) -> dict[str, Any]:
     return {
         "format_version": stats.get("format_version", stats.get("version")),
@@ -191,6 +203,10 @@ def normalize(stats: dict[str, Any]) -> dict[str, Any]:
         "relations": stats.get("relations"),
         "sections": sorted(stats.get("sections", [])),
         "generation": stats.get("generation"),
+        "source_hashes": _normalize_mapping(stats.get("source_hashes")),
+        "budgets": _normalize_mapping(stats.get("budgets")),
+        "truncations": _normalize_mapping(stats.get("truncations")),
+        "reason_codes": _normalize_reason_codes(stats.get("reason_codes")),
     }
 
 
