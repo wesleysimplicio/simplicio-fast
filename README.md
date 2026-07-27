@@ -312,8 +312,9 @@ the remaining gates for issue #60.
 generation-scoped working set. It enforces byte/page budgets, validates page digests,
 deduplicates concurrent loads with single-flight, supports leases, deterministic LRU
 eviction, bounded prefetch and selective invalidation. It reports observable cache
-metrics, but does not claim Rust mmap page-in, RSS/page-fault telemetry, Runtime quotas
-or 20/100-slot E2E behavior; those remain gates for issue #61.
+metrics. The Rust reader now opens SFAST files through a read-only mmap, but semantic
+page-in, RSS/page-fault telemetry, Runtime quotas and 20/100-slot E2E behavior remain
+gates for issue #61.
 
 ### Delivery ledger reference
 
