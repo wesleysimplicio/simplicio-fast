@@ -177,3 +177,81 @@ def run_dev_cli_changeset(
         "status": "executed",
         "result": result,
     }
+
+
+def run_runtime_effect_transaction(
+    root: Path, transaction: dict[str, Any]
+) -> dict[str, Any]:
+    """Submit a coordinator-issued EffectTransaction to Runtime.
+
+    Fast never issues authorization or applies a Full effect itself.  It only
+    reconstructs the typed Runtime context from the coordinator payload and
+    delegates the effect to the real RuntimeEffectSink.
+    """
+    if transaction.get("schema") != "simplicio.effect-transaction/v1":
+        raise ValueError("unsupported Runtime effect transaction schema")
+    effect_payload = transaction.get("effect")
+    plan_payload = transaction.get("plan")
+    causal = transaction.get("causal")
+    authorization_payload = transaction.get("authorization")
+    validation_payload = transaction.get("validation_plan", [])
+    if not isinstance(effect_payload, dict):
+        raise ValueError("Runtime transaction effect must be an object")
+    if not isinstance(plan_payload, dict):
+        raise ValueError("Runtime transaction plan must be an object")
+    if not isinstance(causal, dict):
+        raise ValueError("Runtime transaction causal data must be an object")
+    if not isinstance(authorization_payload, dict):
+        raise ValueError("Runtime transaction authorization must be an object")
+    if not isinstance(validation_payload, list) or not all(
+        isinstance(item, dict) for item in validation_payload
+    ):
+        raise ValueError("Runtime transaction validation_plan must be a list of objects")
+
+    from simplicio.plan_compiler.authority import EffectAuthorization
+    from simplicio.plan_compiler.effect_sink import EffectDispatchContext
+    from simplicio.plan_compiler.models import EffectPlan, PlanDAG, VerificationPlan
+    from simplicio.plan_compiler.runtime_effect_sink import RuntimeEffectSink
+
+    effect = EffectPlan.from_dict(effect_payload)
+    plan = PlanDAG.from_dict(plan_payload)
+    node = next((item for item in plan.nodes if item.node_id == effect.plan_node_id), None)
+    if node is None:
+        raise ValueError("Runtime transaction effect references an unknown plan node")
+    verifications = [VerificationPlan.from_dict(item) for item in validation_payload]
+    authorization = EffectAuthorization.from_dict(authorization_payload)
+    if causal.get("effect_id") != effect.effect_id:
+        raise ValueError("Runtime transaction effect_id does not match effect")
+    if causal.get("plan_node_id") != effect.plan_node_id:
+        raise ValueError("Runtime transaction plan_node_id does not match effect")
+    if causal.get("plan_id") != plan.plan_id or causal.get("goal_id") != plan.goal_id:
+        raise ValueError("Runtime transaction causal plan identity does not match plan")
+    if transaction.get("write_set") != node.write_set:
+        raise ValueError("Runtime transaction write_set does not match plan node")
+    if transaction.get("acceptance_criteria_refs") != node.acceptance_criteria_refs:
+        raise ValueError("Runtime transaction acceptance criteria do not match plan node")
+    plan.validate(effects=[effect], verifications=verifications)
+
+    context = EffectDispatchContext(
+        plan_id=plan.plan_id,
+        goal_id=plan.goal_id,
+        plan_node=node,
+        verifications=verifications,
+        coordinator_kind=str(causal.get("coordinator_kind", "")),
+        coordinator_id=str(causal.get("coordinator_id", "")),
+        session_id=str(causal.get("session_id", "")),
+        turn_id=str(causal.get("turn_id", "")),
+        attempt=int(causal.get("attempt", 1)),
+        subworkflow_id=str(causal.get("subworkflow_id", "")),
+        deadline=transaction.get("deadline"),
+        policy_revision=str(transaction.get("policy_revision", "")),
+        base_hash=str(transaction.get("base_hash", "")),
+        source_hash=str(transaction.get("source_hash", "")),
+        context_handle=str(causal.get("context_handle", effect.context_handle)),
+        lease_id=authorization.lease_id,
+        fencing_token=authorization.fencing_token,
+        authorization=authorization,
+        plan=plan,
+    )
+    outcome = RuntimeEffectSink.from_environment(root=root).submit(effect, context)
+    return outcome.to_dict()

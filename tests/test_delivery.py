@@ -6,7 +6,9 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import sys
+import time
 from pathlib import Path
 from unittest.mock import patch
 
@@ -172,3 +174,153 @@ class DeliveryEngineTest(unittest.TestCase):
             self.assertEqual("blocked", receipt["status"])
             self.assertIn("runtime_authorization_required", receipt["reason_codes"])
             self.assertIn("return True", source.read_text(encoding="utf-8"))
+
+    def test_full_write_delegates_to_coordinator_authorized_runtime_transaction(self) -> None:
+        from simplicio.plan_compiler.authority import EffectAuthorization, build_change_proposal
+        from simplicio.plan_compiler.effect_sink import EffectDispatchContext
+        from simplicio.plan_compiler.models import EffectPlan, PlanDAG, PlanNode, VerificationPlan
+        from simplicio.plan_compiler.runtime_effect_sink import OfflineRuntimeTransport, RuntimeEffectSink
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "service.py"
+            source.write_text("def ping():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            original = source.read_bytes()
+            expected = hashlib.sha256(original).hexdigest()
+            normalized_source_hash = hashlib.sha256(
+                "def ping():\n    return True\n".encode("utf-8")
+            ).hexdigest()
+            range_text = "    return True\n"
+            artifact = {
+                "schema": "simplicio.mechanical-edit/v1",
+                "touched_files": ["service.py"],
+                "operations": [
+                    {
+                        "op": "replace_range",
+                        "path": "service.py",
+                        "start_line": 2,
+                        "end_line": 2,
+                        "text": "    return False\n",
+                        "file_sha256": normalized_source_hash,
+                        "range_sha256": hashlib.sha256(range_text.encode("utf-8")).hexdigest(),
+                    }
+                ],
+            }
+            artifact_path = root / "effect.json"
+            artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+            node = PlanNode(
+                node_id="node-1",
+                capability="file.write",
+                read_set=["service.py"],
+                write_set=["service.py"],
+                risk="high",
+                acceptance_criteria_refs=["ac-1"],
+                requires_gate=True,
+                rollback_strategy="restore_source",
+            )
+            plan = PlanDAG(
+                plan_id="plan-1",
+                goal_id="goal-1",
+                context_snapshot_id="snapshot-1",
+                revision="1",
+                nodes=[node],
+                consumer_id="simplicio-runtime",
+                context_handle="ctx-1",
+            )
+            effect = EffectPlan(
+                effect_id="effect-1",
+                plan_node_id="node-1",
+                kind="write",
+                authority_required="file.write",
+                idempotency_key="effect-idempotency-1",
+                preconditions=["source_hash_matches"],
+                artifact_ref="effect.json",
+                context_handle="ctx-1",
+            )
+            verification = VerificationPlan(
+                verification_id="verify-1",
+                plan_node_id="node-1",
+                verifier="pytest",
+                command_or_capability="python -m pytest",
+                timeout_s=30,
+                acceptance_criteria_refs=["ac-1"],
+            )
+            context = EffectDispatchContext(
+                plan_id="plan-1",
+                goal_id="goal-1",
+                plan_node=node,
+                verifications=[verification],
+                coordinator_kind="simplicio-loop",
+                coordinator_id="coordinator-1",
+                session_id="session-1",
+                turn_id="turn-1",
+                policy_revision="policy-1",
+                base_hash="base-1",
+                source_hash=expected,
+                context_handle="ctx-1",
+                lease_id="lease-1",
+                fencing_token="fence-1",
+                plan=plan,
+            )
+            proposal = build_change_proposal(effect, context)
+            authorization = EffectAuthorization.issue(
+                proposal,
+                authority="simplicio-runtime",
+                issuer="simplicio-loop",
+                human_gate_receipt="gate-1",
+                now=time.time(),
+                ttl_s=60.0,
+            )
+            context = EffectDispatchContext(**{**context.__dict__, "authorization": authorization})
+            transaction = RuntimeEffectSink(
+                OfflineRuntimeTransport(root=root), root=root
+            )._transaction(effect, context)
+            changeset = {
+                "schema": "simplicio.fast.changeset/v2",
+                "changes": [
+                    {
+                        "path": "service.py",
+                        "expected_sha256": expected,
+                        "replacements": [
+                            {"start_line": 2, "end_line": 2, "content": "    return False"}
+                        ],
+                    }
+                ],
+            }
+            engine = DeliveryEngine(root, snapshot)
+            with patch.dict(os.environ, {"SIMPLICIO_RUNTIME_OFFLINE": "1"}, clear=False):
+                receipt = engine.deliver(
+                    changeset,
+                    profile="full",
+                    engine_receipt=select_engine("python").receipt(),
+                    write=True,
+                    runtime_transaction=transaction,
+                )
+            self.assertEqual("applied", receipt["status"])
+            self.assertEqual("completed", receipt["runtime"]["state"])
+            self.assertTrue(receipt["ownership"]["mutation_applied"])
+            self.assertIn("return False", source.read_text(encoding="utf-8"))
+
+    def test_full_write_ignores_legacy_boolean_authority_bypass(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "service.py"
+            source.write_text("def ping():\n    return True\n", encoding="utf-8")
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            expected = hashlib.sha256(source.read_bytes()).hexdigest()
+            changeset = {
+                "schema": "simplicio.fast.changeset/v2",
+                "changes": [{"path": "service.py", "expected_sha256": expected, "replacements": []}],
+            }
+            receipt = DeliveryEngine(root, snapshot).deliver(
+                changeset,
+                profile="full",
+                engine_receipt=select_engine("python").receipt(),
+                write=True,
+                runtime_authorized=True,
+            )
+            self.assertEqual("blocked", receipt["status"])
+            self.assertIn("runtime_authorization_required", receipt["reason_codes"])
