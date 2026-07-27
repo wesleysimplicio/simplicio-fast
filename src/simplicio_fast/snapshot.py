@@ -48,6 +48,7 @@ def _atomic_publish(temporary: Path, destination: Path) -> None:
 
 DEFAULT_MAX_SOURCE_FILE_BYTES = 8 * 1024 * 1024
 DEFAULT_BUILD_TIMEOUT_SECONDS = 180.0
+VALIDATION_CACHE_SCHEMA = "simplicio.fast.validation-cache/v1"
 # v1 is deliberately frozen.  Do not change these structs: old snapshots must
 # remain readable after a v2 writer is installed.
 LEGACY_HEADER = struct.Struct("<8s7I")
@@ -110,6 +111,8 @@ class BuildMetrics:
     reused_paths: tuple[str, ...] = ()
     changed_paths: tuple[str, ...] = ()
     reason_codes: tuple[str, ...] = ()
+    metadata_reused_files: int = 0
+    phase_timings_ms: dict[str, float] | None = None
 
 @dataclass(frozen=True, slots=True)
 class ContextSpan:
@@ -280,6 +283,8 @@ class SnapshotBuildTimeout(TimeoutError):
         reused_files: int,
         elapsed_ms: float,
         previous_snapshot_preserved: bool,
+        metadata_reused_files: int = 0,
+        phase_timings_ms: dict[str, float] | None = None,
     ) -> None:
         self.timeout_seconds = timeout_seconds
         self.progress = {
@@ -290,6 +295,8 @@ class SnapshotBuildTimeout(TimeoutError):
             "reused_files": reused_files,
             "elapsed_ms": round(elapsed_ms, 3),
             "previous_snapshot_preserved": previous_snapshot_preserved,
+            "metadata_reused_files": metadata_reused_files,
+            "phase_timings_ms": phase_timings_ms or {},
         }
         super().__init__(
             f"snapshot build exceeded {timeout_seconds:g}s before publishing; "
@@ -506,6 +513,88 @@ def _build_v2(entries: list[tuple[str, bytes, int, list[Symbol]]], relations: li
     return total_size, checksum.hex()
 
 
+def _validation_cache_path(output: Path) -> Path:
+    return output.with_name(f"{output.name}.validation.json")
+
+
+def _file_identity(stat: os.stat_result) -> dict[str, int]:
+    return {
+        "size": stat.st_size,
+        "mtime_ns": stat.st_mtime_ns,
+        "ctime_ns": stat.st_ctime_ns,
+    }
+
+
+def _load_validation_cache(
+    output: Path,
+    *,
+    snapshot_checksum: str,
+    expected_paths: set[str],
+) -> dict[str, dict[str, int | str]]:
+    path = _validation_cache_path(output)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        files = payload["files"]
+        if (
+            payload.get("schema") != VALIDATION_CACHE_SCHEMA
+            or payload.get("snapshot_checksum") != snapshot_checksum
+            or not isinstance(files, dict)
+            or set(files) != expected_paths
+        ):
+            return {}
+        for relative, row in files.items():
+            if (
+                not isinstance(relative, str)
+                or not isinstance(row, dict)
+                or not isinstance(row.get("size"), int)
+                or not isinstance(row.get("mtime_ns"), int)
+                or not isinstance(row.get("ctime_ns"), int)
+                or not isinstance(row.get("sha256"), str)
+                or len(row["sha256"]) != 64
+            ):
+                return {}
+        return files
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _write_validation_cache(
+    output: Path,
+    *,
+    snapshot_checksum: str,
+    files: dict[str, dict[str, int | str]],
+) -> None:
+    path = _validation_cache_path(output)
+    payload = json.dumps(
+        {
+            "schema": VALIDATION_CACHE_SCHEMA,
+            "snapshot_checksum": snapshot_checksum,
+            "files": files,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8") + b"\n"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_name: str | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=f".{path.name}.{os.getpid()}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_name = temporary.name
+            temporary.write(payload)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_name, path)
+        temporary_name = None
+    finally:
+        if temporary_name is not None:
+            Path(temporary_name).unlink(missing_ok=True)
+
+
 def build_snapshot(
     root: Path,
     output: Path,
@@ -515,6 +604,13 @@ def build_snapshot(
 ) -> BuildMetrics:
     wall_start = time.perf_counter()
     cpu_start = time.process_time()
+    phase_timings = {
+        "previous_snapshot_load": 0.0,
+        "discovery": 0.0,
+        "unchanged_validation": 0.0,
+        "parsing": 0.0,
+        "publication": 0.0,
+    }
 
     if max_file_bytes < 1:
         raise ValueError("max_file_bytes must be positive")
@@ -523,68 +619,113 @@ def build_snapshot(
     previous: dict[str, tuple[bytes, list[Symbol]]] = {}
     previous_relations: list[Relation] = []
     previous_symbol_files: dict[str, str] = {}
+    previous_checksum = ""
     previous_valid = False
+    previous_start = time.perf_counter()
     if output.exists():
         try:
             with Snapshot(output) as snapshot:
                 previous = snapshot.grouped()
                 previous_relations = snapshot.relations()
-                previous_symbol_files = {symbol.qualified_name: symbol.file for symbol in snapshot.symbols()}
+                previous_symbol_files = {
+                    symbol.qualified_name: symbol.file for symbol in snapshot.symbols()
+                }
+                previous_checksum = snapshot.content_checksum
                 previous_valid = True
         except (OSError, ValueError):
-            # A snapshot is disposable derived state. Ignore invalid/truncated
-            # cache bytes and rebuild from authoritative source files. _build_v2
-            # keeps the existing path untouched until its replacement validates.
             previous = {}
             previous_relations = []
             previous_symbol_files = {}
+    phase_timings["previous_snapshot_load"] = (time.perf_counter() - previous_start) * 1000
+
+    discovery_start = time.perf_counter()
+    paths = source_files(root)
+    relatives = [path.relative_to(root).as_posix() for path in paths]
+    phase_timings["discovery"] = (time.perf_counter() - discovery_start) * 1000
+    validation_cache = (
+        _load_validation_cache(
+            output,
+            snapshot_checksum=previous_checksum,
+            expected_paths=set(relatives),
+        )
+        if previous_valid
+        else {}
+    )
 
     entries: list[tuple[str, bytes, int, list[Symbol]]] = []
     relations: list[Relation] = []
     parsed_paths: list[str] = []
     reused_paths: list[str] = []
+    metadata_reused_files = 0
+    next_validation: dict[str, dict[str, int | str]] = {}
     deadline = None if timeout_seconds is None else wall_start + timeout_seconds
-    paths = source_files(root)
-    for index, path in enumerate(paths):
-        if deadline is not None and time.perf_counter() >= deadline:
-            raise SnapshotBuildTimeout(
-                timeout_seconds=timeout_seconds,
-                files_total=len(paths),
-                files_processed=len(entries),
-                parsed_files=len(parsed_paths),
-                reused_files=len(reused_paths),
-                elapsed_ms=(time.perf_counter() - wall_start) * 1000,
-                previous_snapshot_preserved=output.exists(),
-            )
 
+    def current_timings() -> dict[str, float]:
+        return {name: round(value, 3) for name, value in phase_timings.items()}
+
+    def raise_timeout() -> None:
+        assert timeout_seconds is not None
+        raise SnapshotBuildTimeout(
+            timeout_seconds=timeout_seconds,
+            files_total=len(paths),
+            files_processed=len(entries),
+            parsed_files=len(parsed_paths),
+            reused_files=len(reused_paths),
+            elapsed_ms=(time.perf_counter() - wall_start) * 1000,
+            previous_snapshot_preserved=output.exists(),
+            metadata_reused_files=metadata_reused_files,
+            phase_timings_ms=current_timings(),
+        )
+
+    for path, relative in zip(paths, relatives, strict=True):
+        if deadline is not None and time.perf_counter() >= deadline:
+            raise_timeout()
+        validation_start = time.perf_counter()
         try:
-            file_size = path.stat().st_size
+            stat = path.stat()
         except OSError as error:
             raise OSError(f"could not stat source file {path}: {error}") from error
-        if file_size > max_file_bytes:
-            raise SourceFileTooLarge(path, file_size, max_file_bytes)
-        relative = path.relative_to(root).as_posix()
-        contents = path.read_bytes()
-        digest = hashlib.sha256(contents).digest()
+        if stat.st_size > max_file_bytes:
+            raise SourceFileTooLarge(path, stat.st_size, max_file_bytes)
+        identity = _file_identity(stat)
         cached = previous.get(relative)
-        if cached and cached[0] == digest:
+        row = validation_cache.get(relative)
+        metadata_hit = bool(
+            cached
+            and row
+            and all(row.get(key) == value for key, value in identity.items())
+            and row.get("sha256") == cached[0].hex()
+        )
+        if metadata_hit:
+            digest = cached[0]
             symbols = cached[1]
             reused_paths.append(relative)
+            metadata_reused_files += 1
+            phase_timings["unchanged_validation"] += (
+                time.perf_counter() - validation_start
+            ) * 1000
         else:
-            symbols, found_relations = _parse_file(path, relative, repository)
-            relations.extend(found_relations)
-            parsed_paths.append(relative)
-        entries.append((relative, digest, len(contents), symbols))
+            contents = path.read_bytes()
+            digest = hashlib.sha256(contents).digest()
+            phase_timings["unchanged_validation"] += (
+                time.perf_counter() - validation_start
+            ) * 1000
+            if cached and cached[0] == digest:
+                symbols = cached[1]
+                reused_paths.append(relative)
+            else:
+                parse_start = time.perf_counter()
+                symbols, found_relations = _parse_file(path, relative, repository)
+                phase_timings["parsing"] += (time.perf_counter() - parse_start) * 1000
+                relations.extend(found_relations)
+                parsed_paths.append(relative)
+        next_validation[relative] = {
+            **identity,
+            "sha256": digest.hex(),
+        }
+        entries.append((relative, digest, stat.st_size, symbols))
         if deadline is not None and time.perf_counter() >= deadline:
-            raise SnapshotBuildTimeout(
-                timeout_seconds=timeout_seconds,
-                files_total=len(paths),
-                files_processed=index + 1,
-                parsed_files=len(parsed_paths),
-                reused_files=len(reused_paths),
-                elapsed_ms=(time.perf_counter() - wall_start) * 1000,
-                previous_snapshot_preserved=output.exists(),
-            )
+            raise_timeout()
 
     current_digests = {path: digest for path, digest, _, _ in entries}
     current_paths = set(current_digests)
@@ -592,16 +733,22 @@ def build_snapshot(
     added_paths = sorted(current_paths - previous_paths)
     deleted_paths = sorted(previous_paths - current_paths)
     modified_paths = sorted(
-        path for path in current_paths & previous_paths if previous[path][0] != current_digests[path]
+        path
+        for path in current_paths & previous_paths
+        if previous[path][0] != current_digests[path]
     )
     if previous_valid:
         changed_paths = tuple(sorted({*added_paths, *deleted_paths, *modified_paths}))
         reason_codes = tuple(
-            [code for code, present in (
-                ("source_changed", bool(modified_paths)),
-                ("source_added", bool(added_paths)),
-                ("source_deleted", bool(deleted_paths)),
-            ) if present]
+            [
+                code
+                for code, present in (
+                    ("source_changed", bool(modified_paths)),
+                    ("source_added", bool(added_paths)),
+                    ("source_deleted", bool(deleted_paths)),
+                )
+                if present
+            ]
             or ["no_change"]
         )
     elif output.exists():
@@ -620,16 +767,18 @@ def build_snapshot(
             and previous_symbol_files.get(relation.origin) not in invalidated_paths
         ] + relations
     if deadline is not None and time.perf_counter() >= deadline:
-        raise SnapshotBuildTimeout(
-            timeout_seconds=timeout_seconds,
-            files_total=len(paths),
-            files_processed=len(entries),
-            parsed_files=len(parsed_paths),
-            reused_files=len(reused_paths),
-            elapsed_ms=(time.perf_counter() - wall_start) * 1000,
-            previous_snapshot_preserved=output.exists(),
-        )
+        raise_timeout()
+    publication_start = time.perf_counter()
     total_size, checksum = _build_v2(entries, relations, output)
+    try:
+        _write_validation_cache(
+            output,
+            snapshot_checksum=checksum,
+            files=next_validation,
+        )
+    except OSError:
+        pass
+    phase_timings["publication"] = (time.perf_counter() - publication_start) * 1000
     return BuildMetrics(
         files=len(entries),
         symbols=sum(len(found) for _, _, _, found in entries),
@@ -644,6 +793,8 @@ def build_snapshot(
         reused_paths=tuple(reused_paths),
         changed_paths=changed_paths,
         reason_codes=reason_codes,
+        metadata_reused_files=metadata_reused_files,
+        phase_timings_ms=current_timings(),
     )
 
 class Snapshot:
@@ -731,6 +882,7 @@ class Snapshot:
             raise ValueError("overlapping snapshot sections")
         self.format_version = VERSION
         self._header_generation = f"{generation:016x}"
+        self._content_checksum = checksum.hex()
         self._sections = sections
         if sections["files"][1] % FILE_RECORD.size or sections["symbols"][1] % SYMBOL_RECORD.size:
             raise ValueError("section length is not a whole number of records")
@@ -786,6 +938,13 @@ class Snapshot:
 
     def __exit__(self, *_: object) -> None:
         self.close()
+
+    @property
+    def content_checksum(self) -> str:
+        """Return the validated checksum stored in the v2 header."""
+        if self.format_version != VERSION:
+            return self.sha256
+        return self._content_checksum
 
     @property
     def sha256(self) -> str:

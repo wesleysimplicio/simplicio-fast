@@ -301,5 +301,85 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual("no_changed_symbols", missing["reason_code"])
 
 
+    def test_validation_cache_skips_source_reads_and_emits_phase_timings(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "sample.rs"
+            source.write_text("pub fn sample() -> bool { true }\n", encoding="utf-8")
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            original_read_bytes = Path.read_bytes
+            source_reads = []
+
+            def tracked_read_bytes(path):
+                if path == source:
+                    source_reads.append(path)
+                return original_read_bytes(path)
+
+            with patch.object(Path, "read_bytes", tracked_read_bytes):
+                metrics = build_snapshot(root, output)
+
+            self.assertEqual([], source_reads)
+            self.assertEqual(1, metrics.metadata_reused_files)
+            self.assertEqual(0, metrics.parsed_files)
+            self.assertEqual(
+                {
+                    "previous_snapshot_load",
+                    "discovery",
+                    "unchanged_validation",
+                    "parsing",
+                    "publication",
+                },
+                set(metrics.phase_timings_ms),
+            )
+            self.assertTrue(all(value >= 0 for value in metrics.phase_timings_ms.values()))
+
+    def test_validation_cache_rehashes_same_size_change_and_invalid_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "sample.rs"
+            source.write_text("pub fn value() -> i32 { 1 }\n", encoding="utf-8")
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            source.write_text("pub fn value() -> i32 { 2 }\n", encoding="utf-8")
+
+            changed = build_snapshot(root, output)
+
+            self.assertEqual(("sample.rs",), changed.parsed_paths)
+            cache = output.with_name(f"{output.name}.validation.json")
+            cache.write_text("{broken", encoding="utf-8")
+            original_read_bytes = Path.read_bytes
+            source_reads = []
+
+            def tracked_read_bytes(path):
+                if path == source:
+                    source_reads.append(path)
+                return original_read_bytes(path)
+
+            with patch.object(Path, "read_bytes", tracked_read_bytes):
+                recovered = build_snapshot(root, output)
+
+            self.assertEqual([source], source_reads)
+            self.assertEqual(0, recovered.metadata_reused_files)
+            self.assertEqual(1, recovered.reused_files)
+
+    def test_timeout_receipt_includes_phase_timings_with_previous_snapshot(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "sample.rs"
+            source.write_text("pub fn before() {}\n", encoding="utf-8")
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            before = output.read_bytes()
+            source.write_text("pub fn after_() {}\n", encoding="utf-8")
+
+            with self.assertRaises(SnapshotBuildTimeout) as raised:
+                build_snapshot(root, output, timeout_seconds=0)
+
+            self.assertTrue(raised.exception.progress["previous_snapshot_preserved"])
+            self.assertIn("phase_timings_ms", raised.exception.progress)
+            self.assertEqual(before, output.read_bytes())
+
+
 if __name__ == "__main__":
     unittest.main()
