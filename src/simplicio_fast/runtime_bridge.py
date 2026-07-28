@@ -1,136 +1,134 @@
-"""Runtime-first native engine bridge — never invokes cargo/rustc locally (#215)."""
+"""Deprecated, strict shim over :mod:`simplicio_fast.runtime_backend`.
+
+The former bridge trusted any executable found in ``PATH`` and even treated
+``/bin/echo`` as a native backend.  Compatibility names remain, but admission,
+handshake, execution and reason codes now have exactly one owner:
+``runtime_backend``.
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
 import os
-import platform
-import shutil
-import subprocess
-from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
-from .native_backend import ABI, PythonBackend
+from .runtime_backend import (
+    READ_ONLY_OPERATIONS,
+    RuntimeBackendError,
+    RuntimeSelection,
+    runtime_artifact_from_environment,
+    select_runtime_backend,
+)
 
-BRIDGE_SCHEMA = "simplicio.fast.runtime-bridge/v1"
-
-
-class RuntimeBridgeError(RuntimeError):
-    def __init__(self, reason_code: str, detail: str = "") -> None:
-        self.reason_code = reason_code
-        super().__init__(f"{reason_code}: {detail}" if detail else reason_code)
+BRIDGE_SCHEMA = "simplicio.fast.runtime-bridge/v2"
 
 
-def _sha_file(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+class RuntimeBridgeError(RuntimeBackendError):
+    """Compatibility error carrying a canonical Runtime reason code."""
 
 
-def discover_native_binary() -> dict[str, Any]:
-    """Locate a prebuilt native binary without cargo/rustc."""
-    # Explicit env wins.
-    configured = os.environ.get("SIMPLICIO_FAST_NATIVE_BIN") or os.environ.get("SIMPLICIO_FAST_RUST")
-    candidates: list[Path] = []
-    if configured:
-        candidates.append(Path(configured))
-    which = shutil.which("simplicio-fast-rs")
-    if which:
-        candidates.append(Path(which))
-    cache = os.environ.get("SIMPLICIO_FAST_NATIVE_CACHE")
-    if cache:
-        candidates.append(Path(cache) / "simplicio-fast-rs")
-        if platform.system() == "Windows":
-            candidates.append(Path(cache) / "simplicio-fast-rs.exe")
-
-    for path in candidates:
-        if path.is_file():
-            return {
-                "schema": BRIDGE_SCHEMA,
-                "status": "found",
-                "path": str(path),
-                "sha256": _sha_file(path),
-                "abi": ABI,
-                "platform": platform.system(),
-                "machine": platform.machine(),
-                "backend": "rust",
-                "cargo_used": False,
-            }
-    return {
-        "schema": BRIDGE_SCHEMA,
-        "status": "missing",
-        "path": None,
-        "sha256": None,
-        "abi": ABI,
-        "platform": platform.system(),
-        "machine": platform.machine(),
-        "backend": "python",
-        "reason_code": "RUST_UNAVAILABLE",
-        "cargo_used": False,
-    }
-
-
-def execute_via_bridge(request: Mapping[str, Any], *, timeout_s: float = 5.0) -> dict[str, Any]:
-    """Prefer Runtime-provided native binary; otherwise deterministic Python fallback."""
-    discovery = discover_native_binary()
-    if discovery["status"] != "found":
-        # Pure Python fallback — never call cargo.
-        py = PythonBackend()
-        payload = dict(request)
-        result = {
-            "schema": BRIDGE_SCHEMA,
-            "status": "fallback",
-            "backend": "python",
-            "reason_code": discovery.get("reason_code", "RUST_UNAVAILABLE"),
-            "request_hash": hashlib.sha256(
-                json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest(),
-            "result": {"echo": payload.get("op", "noop"), "sha": py.sha256(b"ok")},
-            "cargo_used": False,
-            "discovery": discovery,
-        }
-        return result
-
-    path = Path(discovery["path"])
-    try:
-        completed = subprocess.run(
-            [str(path), "--capabilities"],
-            capture_output=True,
-            text=True,
-            timeout=timeout_s,
-            check=False,
+def _verified_runtime(
+    *,
+    environment: Mapping[str, str] | None,
+    timeout_s: float,
+    required_capabilities: Sequence[str],
+) -> RuntimeSelection:
+    artifact = runtime_artifact_from_environment(
+        os.environ if environment is None else environment
+    )
+    if artifact is None:
+        raise RuntimeBridgeError(
+            "RUNTIME_MISSING", "SIMPLICIO_RUNTIME_BIN and manifest are required"
         )
-    except (OSError, subprocess.TimeoutExpired) as exc:
+    try:
+        return select_runtime_backend(
+            "rust",
+            artifact=artifact,
+            required_capabilities=required_capabilities,
+            timeout_seconds=timeout_s,
+        )
+    except RuntimeBackendError as error:
+        raise RuntimeBridgeError(error.reason_code, error.detail) from error
+
+
+def discover_native_binary(
+    *,
+    environment: Mapping[str, str] | None = None,
+    timeout_s: float = 5.0,
+) -> dict[str, Any]:
+    """Return only a manifest-verified, ABI-compatible, handshaken Runtime."""
+    try:
+        selected = _verified_runtime(
+            environment=environment,
+            timeout_s=timeout_s,
+            required_capabilities=tuple(READ_ONLY_OPERATIONS),
+        )
+    except RuntimeBridgeError as error:
         return {
             "schema": BRIDGE_SCHEMA,
-            "status": "fallback",
-            "backend": "python",
-            "reason_code": type(exc).__name__,
+            "status": "rejected",
+            "backend": "off",
+            "reason_code": error.reason_code,
+            "detail": error.detail,
             "cargo_used": False,
-            "discovery": discovery,
-            "result": {"echo": request.get("op", "noop")},
         }
-    if completed.returncode != 0:
-        return {
-            "schema": BRIDGE_SCHEMA,
-            "status": "fallback",
-            "backend": "python",
-            "reason_code": f"native_rc:{completed.returncode}",
-            "cargo_used": False,
-            "discovery": discovery,
-            "result": {"echo": request.get("op", "noop")},
-        }
+    receipt = selected.receipt()
     return {
         "schema": BRIDGE_SCHEMA,
-        "status": "native",
+        "status": "verified",
         "backend": "rust",
-        "capabilities": (completed.stdout or "").strip()[:500],
-        "artifact_sha256": discovery["sha256"],
-        "abi": ABI,
+        "path": str(selected.backend.artifact.executable),
+        "artifact_sha256": receipt["backend_artifact_hash"],
+        "abi": receipt["abi"],
+        "version": receipt["runtime_version"],
+        "platform": receipt["runtime_platform"],
+        "handshake": receipt,
         "cargo_used": False,
-        "discovery": discovery,
-        "result": {"op": request.get("op", "capabilities")},
     }
+
+
+def execute_via_bridge(
+    request: Mapping[str, Any],
+    *,
+    timeout_s: float = 5.0,
+    environment: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Execute a read-only HBP operation after the canonical handshake.
+
+    This compatibility API is deliberately fail-closed: it never echoes a
+    request and never silently substitutes a Python backend.
+    """
+    if not isinstance(request, Mapping):
+        raise RuntimeBridgeError("PROTOCOL_ERROR", "request must be a mapping")
+    operation = request.get("op")
+    if not isinstance(operation, str) or operation not in READ_ONLY_OPERATIONS:
+        raise RuntimeBridgeError(
+            "PROTOCOL_ERROR", f"unsupported operation={operation!r}"
+        )
+    payload = request.get("payload", {})
+    if not isinstance(payload, Mapping):
+        raise RuntimeBridgeError("PROTOCOL_ERROR", "payload must be a mapping")
+    selected = _verified_runtime(
+        environment=environment,
+        timeout_s=timeout_s,
+        required_capabilities=(operation,),
+    )
+    try:
+        result = selected.execute(operation, payload)
+    except RuntimeBackendError as error:
+        raise RuntimeBridgeError(error.reason_code, error.detail) from error
+    return {
+        "schema": BRIDGE_SCHEMA,
+        "status": "verified",
+        "backend": "rust",
+        "handshake": selected.receipt(),
+        "result": result,
+        "cargo_used": False,
+    }
+
+
+__all__ = [
+    "BRIDGE_SCHEMA",
+    "RuntimeBridgeError",
+    "discover_native_binary",
+    "execute_via_bridge",
+]

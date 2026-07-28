@@ -322,6 +322,7 @@ def test_manifest_and_environment_discovery(tmp_path):
     artifact = _fake_runtime(tmp_path)
     manifest = {
         "sha256": artifact.sha256,
+        "abi": RUNTIME_FAST_ABI,
         "runtime": {
             "version": artifact.version,
             "target": artifact.platform,
