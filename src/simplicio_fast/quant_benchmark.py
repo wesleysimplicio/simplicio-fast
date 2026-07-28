@@ -19,6 +19,7 @@ import platform
 import random
 import statistics
 import struct
+import subprocess
 import tempfile
 import time
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -53,6 +54,7 @@ REASON_CODES = frozenset(
         "RUNTIME_FAST_QUANT_CAPABILITY_UNAVAILABLE",
         "SIMULATION_NOT_RUN",
         "RSS_CURRENT_UNAVAILABLE",
+        "SOURCE_TREE_UNAVAILABLE",
     }
 )
 
@@ -568,23 +570,71 @@ def build_fixture(
 
 
 def repository_corpus_receipt(root: str | Path) -> dict[str, Any]:
-    """Hash the real repository text corpus without embedding or copying it."""
+    """Hash only text blobs reachable from the repository's ``HEAD`` tree."""
     base = Path(root).resolve()
     suffixes = {".py", ".md", ".toml", ".json", ".yaml", ".yml"}
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=base,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        tree = subprocess.run(
+            ["git", "rev-parse", "HEAD^{tree}"],
+            cwd=base,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        entries = subprocess.run(
+            ["git", "ls-tree", "-r", "-z", "HEAD"],
+            cwd=base,
+            check=True,
+            capture_output=True,
+            timeout=10,
+        ).stdout
+    except (OSError, subprocess.SubprocessError) as error:
+        raise QuantBenchmarkError(
+            "SOURCE_TREE_UNAVAILABLE", type(error).__name__
+        ) from error
     source_hashes: dict[str, str] = {}
-    for path in sorted(base.rglob("*")):
-        relative = path.relative_to(base)
+    for entry in entries.split(b"\0"):
+        if not entry:
+            continue
+        metadata, encoded_relative = entry.split(b"\t", 1)
+        _, kind, object_id = metadata.decode("ascii").split()
+        relative = Path(encoded_relative.decode("utf-8", "surrogateescape"))
         if (
-            not path.is_file()
-            or path.suffix.lower() not in suffixes
-            or any(part in {".git", ".simplicio", "__pycache__"} for part in relative.parts)
+            kind != "blob"
+            or relative.suffix.lower() not in suffixes
             or relative.parts[:2]
             in {("benchmarks", "results"), ("benchmarks", "reports")}
         ):
             continue
-        source_hashes[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+        try:
+            payload = subprocess.run(
+                ["git", "cat-file", "blob", object_id],
+                cwd=base,
+                check=True,
+                capture_output=True,
+                timeout=10,
+            ).stdout
+        except (OSError, subprocess.SubprocessError) as error:
+            raise QuantBenchmarkError(
+                "SOURCE_TREE_UNAVAILABLE",
+                f"{relative.as_posix()}:{type(error).__name__}",
+            ) from error
+        source_hashes[relative.as_posix()] = hashlib.sha256(payload).hexdigest()
     return {
         "kind": "real-repository-corpus",
+        "source": "git-head-tree",
+        "source_commit": commit,
+        "source_tree": tree,
+        "tracked_only": True,
         "files": len(source_hashes),
         "corpus_hash": digest(source_hashes),
         "source_hashes": source_hashes,
