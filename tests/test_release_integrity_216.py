@@ -2,11 +2,24 @@ import copy
 import json
 from pathlib import Path
 import shutil
+import tomllib
 
 from scripts.check_release_integrity import SCHEMA, evaluate, main
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PROJECT_VERSION = tomllib.loads(
+    (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+)["project"]["version"]
+DRIFT_VERSION = "999.0.0"
+
+
+def _replace_once(path: Path, expected: str, replacement: str) -> None:
+    before = path.read_text(encoding="utf-8")
+    assert expected in before, f"fixture mutation target missing: {expected!r}"
+    after = before.replace(expected, replacement, 1)
+    assert after != before, "fixture mutation must change the content"
+    path.write_text(after, encoding="utf-8")
 
 
 def _fixture(tmp_path: Path) -> Path:
@@ -30,7 +43,7 @@ def test_repository_release_metadata_is_consistent():
     receipt = evaluate(ROOT)
     assert receipt["schema"] == SCHEMA
     assert receipt["status"] == "pass", receipt
-    assert receipt["version"] == "2.0.15"
+    assert receipt["version"] == PROJECT_VERSION
     assert receipt["runtime_dependencies"] == []
     assert len(receipt["integrated_dependencies"]) == 2
 
@@ -38,7 +51,11 @@ def test_repository_release_metadata_is_consistent():
 def test_version_drift_fails_closed(tmp_path):
     root = _fixture(tmp_path)
     init = root / "src/simplicio_fast/__init__.py"
-    init.write_text(init.read_text().replace('"2.0.15"', '"9.9.9"'), encoding="utf-8")
+    _replace_once(
+        init,
+        f'__version__ = "{PROJECT_VERSION}"',
+        f'__version__ = "{DRIFT_VERSION}"',
+    )
     receipt = evaluate(root)
     assert receipt["status"] == "fail"
     assert "package_version" in receipt["failures"]
@@ -61,9 +78,10 @@ def test_dependency_badge_drift_fails_closed(tmp_path):
 def test_changelog_version_drift_fails_closed(tmp_path):
     root = _fixture(tmp_path)
     changelog = root / "CHANGELOG.md"
-    changelog.write_text(
-        changelog.read_text().replace("## 2.0.15 ", "## 9.9.9 ", 1),
-        encoding="utf-8",
+    _replace_once(
+        changelog,
+        f"## {PROJECT_VERSION} ",
+        f"## {DRIFT_VERSION} ",
     )
     receipt = evaluate(root)
     assert "changelog_version" in receipt["failures"]
