@@ -103,3 +103,17 @@ def test_overlay_escape_and_budget_are_blocked(tmp_path):
     envelope["budget"] = {"max_operations": 1}
     with pytest.raises(FastExecutorError, match="budget_exhausted"):
         executor.execute(envelope, snapshot, writes={"a": b"a", "b": b"b"})
+
+
+def test_quantization_lanes_metrics_and_rust_absence_are_explicit():
+    from simplicio_fast.slot_executor import parity_receipt, quantize, ranking_metrics
+    vector = (-1.0, -.2, .1, 1.0)
+    assert quantize(vector, "Q0") == vector
+    assert all(-127 <= item <= 127 for item in quantize(vector, "Q1"))
+    assert all(-7 <= item <= 7 for item in quantize(vector, "Q2a"))
+    metrics = ranking_metrics(["a", "b"], ["a", "x", "b"])
+    assert metrics["recall_at_10"] == 1.0
+    assert 0 < metrics["ndcg_at_10"] <= 1
+    assert metrics["mrr"] == 1.0
+    assert parity_receipt({"fixture": 1})["parity"] is None
+    assert parity_receipt({"fixture": 1})["parity_null_reason"] == "RUST_UNAVAILABLE"
