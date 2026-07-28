@@ -34,3 +34,22 @@ def test_workflow_declares_all_supported_release_targets():
         assert target in workflow
     assert "actions/upload-artifact@" in workflow
     assert "manifest.json" in workflow
+    assert "scripts/verify_native_bundle.py" in workflow
+    assert "--expected-version" in workflow
+    assert 'test "$GITHUB_REF_NAME" = "v${{ steps.package.outputs.version }}"' in workflow
+    assert workflow.count('linker: ""') == 3
+
+
+def test_build_is_ci_only_and_consumers_remain_precompiled_only():
+    workflow = Path(".github/workflows/native-release.yml").read_text()
+    policy = Path("release-policy.json").read_text()
+    assert "cargo build" in workflow
+    assert '"consumer_toolchain": "precompiled-binary-only"' in policy
+    consumer_sources = [
+        *Path("src/simplicio_fast").glob("*backend*.py"),
+        Path("src/simplicio_fast/installation.py"),
+    ]
+    for source in consumer_sources:
+        text = source.read_text(encoding="utf-8").lower()
+        assert '["cargo"' not in text
+        assert '["rustc"' not in text

@@ -8,6 +8,8 @@ import platform
 import subprocess
 from typing import Any, Mapping, Sequence
 
+from . import __version__
+
 ABI = "simplicio.fast-native/v1"
 
 
@@ -78,24 +80,45 @@ class RustBackend:
         return response.get("result")
 
 
-def select_backend(artifact: str | Path | None,
-                   manifest: Mapping[str, Any] | None) -> tuple[PythonBackend | RustBackend, str | None]:
+def select_backend(
+    artifact: str | Path | None,
+    manifest: Mapping[str, Any] | None,
+    *,
+    expected_platform: str | None = None,
+) -> tuple[PythonBackend | RustBackend, str | None]:
     if artifact is None or manifest is None:
         return PythonBackend(), "RUST_UNAVAILABLE"
     path = Path(artifact)
     if manifest.get("abi") != ABI:
         return PythonBackend(), "RUST_ABI_INCOMPATIBLE"
-    if manifest.get("platform") not in {"linux-x86_64", "linux-aarch64",
-                                        "macos-aarch64", "windows-x86_64"}:
+    supported = {"linux-x86_64", "linux-aarch64",
+                 "macos-aarch64", "windows-x86_64"}
+    manifest_platform = manifest.get("platform")
+    if manifest_platform not in supported:
         return PythonBackend(), "RUST_PLATFORM_UNSUPPORTED"
+    expected_platform = expected_platform or platform_tag()
+    if expected_platform is None or manifest_platform != expected_platform:
+        return PythonBackend(), "RUST_PLATFORM_MISMATCH"
+    if manifest.get("version") != __version__:
+        return PythonBackend(), "RUST_VERSION_MISMATCH"
+    source_commit = manifest.get("source_commit")
+    if (
+        not isinstance(source_commit, str)
+        or len(source_commit) != 40
+        or any(character not in "0123456789abcdef" for character in source_commit)
+    ):
+        return PythonBackend(), "RUST_MANIFEST_INVALID"
+    if not path.is_file():
+        return PythonBackend(), "RUST_ARTIFACT_MISSING"
     try:
-        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        content = path.read_bytes()
     except OSError:
         return PythonBackend(), "RUST_ARTIFACT_MISSING"
+    if manifest.get("size") != len(content):
+        return PythonBackend(), "RUST_ARTIFACT_SIZE_MISMATCH"
+    actual = hashlib.sha256(content).hexdigest()
     if actual != manifest.get("sha256"):
         return PythonBackend(), "RUST_ARTIFACT_HASH_MISMATCH"
-    if not path.is_file():
-        return PythonBackend(), "RUST_ARTIFACT_INVALID"
     return RustBackend(path, manifest), None
 
 
@@ -141,7 +164,7 @@ def resolve_packaged_backend(root: str | Path, *,
         return PythonBackend(), "RUST_MANIFEST_INVALID"
     manifest = dict(manifest)
     manifest.setdefault("platform", tag)
-    return select_backend(directory / filename, manifest)
+    return select_backend(directory / filename, manifest, expected_platform=tag)
 
 
 def execute_with_fallback(backend: PythonBackend | RustBackend,
