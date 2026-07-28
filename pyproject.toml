@@ -1,6 +1,6 @@
 [project]
 name = "simplicio-fast"
-version = "2.0.14"
+version = "2.0.15"
 description = "Semantic project memory and guarded change coordination for AI coding tools"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -8,7 +8,7 @@ dependencies = []
 
 [project.optional-dependencies]
 integrated = [
-  "simplicio-mapper>=0.24.2",
+  "simplicio-mapper>=0.26.0",
   "simplicio-cli>=0.16.3",
 ]
 
