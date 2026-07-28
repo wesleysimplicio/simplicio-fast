@@ -1,6 +1,6 @@
 """Simplicio Fast proof of concept. Bounded Knowledge Facade"""
 
-__version__ = "2.0.14"
+__version__ = "2.0.15"
 
 from .engine_selection import EngineSelection, EngineSelectionError, select_engine
 from .knowledge import KnowledgeFacade
