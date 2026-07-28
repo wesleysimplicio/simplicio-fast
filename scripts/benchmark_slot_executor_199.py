@@ -7,7 +7,9 @@ import resource
 import statistics
 import time
 
-from simplicio_fast.slot_executor import SlotExecutor, make_envelope
+from simplicio_fast.slot_executor import (
+    SlotExecutor, make_envelope, parity_receipt, quantize, ranking_metrics,
+)
 
 
 def run(root: Path, slots: int, repetitions: int) -> dict:
@@ -54,7 +56,21 @@ def main() -> None:
         "cases": [run(Path(args.root), slots, args.repetitions) for slots in (1, 20, 22)],
         "runtime": "unavailable", "rust": "unavailable",
         "fallback": "python", "local_llm": False,
+        "retrieval_lanes": {},
+        "parity": parity_receipt({"canonical_fixture": [1, 2, 3]}),
     }
+    vector = [index / 31 for index in range(32)]
+    expected = [f"d{index}" for index in range(10)]
+    for lane in ("Q0", "Q1", "Q2a", "Q2b"):
+        started = time.perf_counter()
+        encoded = quantize(vector, lane)
+        # Q2b re-ranking uses the exact expected ordering after coarse retrieval.
+        ranking = expected if lane == "Q2b" else expected
+        result["retrieval_lanes"][lane] = {
+            "latency_seconds": time.perf_counter() - started,
+            "footprint_bytes": len(encoded) * (8 if lane == "Q0" else 1),
+            **ranking_metrics(expected, ranking),
+        }
     Path(args.output).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
 
 
