@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.15 - 2026-07-28
+
+- Add the PRISM resident mmap arena, isolated task overlays, authority-bound
+  context views, Runtime-first backend selection, and deterministic Python
+  fallback.
+- Keep the Python core dependency-free and move Mapper/Dev CLI integration to
+  the explicit `integrated` extra.
+- Add fail-closed native artifact verification and reproducible semantic and
+  quantization benchmark receipts.
+
 ## 2.0.14 - 2026-07-27
 
 - Publish the current master line with accelerated incremental refresh and the
