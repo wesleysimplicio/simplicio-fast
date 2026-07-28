@@ -6,6 +6,7 @@ from .engine_selection import EngineSelection, EngineSelectionError, select_engi
 from .runtime_backend import RuntimeArtifact, RuntimeBackendError, RuntimeFastBackend, RuntimeSelection, select_runtime_backend
 from .knowledge import KnowledgeFacade
 from .pager import RequestKey, SingleFlightCoordinator, SingleFlightError, make_request_key
+from .prism_arena import ArenaError, PrismArena, PrismWorkDelta, SlotView, TaskOverlay
 from .workspace import GenerationId, Manifest, WorkspaceStore
 from .navigation import (
     NavigationBudget,
@@ -21,6 +22,7 @@ __all__ = [
     "SingleFlightCoordinator",
     "SingleFlightError",
     "make_request_key",
+    "ArenaError",
     "EngineSelection",
     "EngineSelectionError",
     "GenerationId",
@@ -30,6 +32,10 @@ __all__ = [
     "NavigationIndex",
     "NavigationItem",
     "NavigationPage",
+    "PrismArena",
+    "PrismWorkDelta",
+    "SlotView",
+    "TaskOverlay",
     "WorkspaceStore",
     "select_engine",
     "RuntimeArtifact",
