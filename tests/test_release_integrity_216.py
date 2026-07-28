@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _fixture(tmp_path: Path) -> Path:
     for relative in (
+        "src/simplicio_fast/release_policy.json",
         "release-policy.json",
         "pyproject.toml",
         "README.md",
@@ -29,7 +30,8 @@ def test_repository_release_metadata_is_consistent():
     assert receipt["schema"] == SCHEMA
     assert receipt["status"] == "pass", receipt
     assert receipt["version"] == "2.0.14"
-    assert len(receipt["runtime_dependencies"]) == 2
+    assert receipt["runtime_dependencies"] == []
+    assert len(receipt["integrated_dependencies"]) == 2
 
 
 def test_version_drift_fails_closed(tmp_path):
@@ -45,7 +47,10 @@ def test_dependency_badge_drift_fails_closed(tmp_path):
     root = _fixture(tmp_path)
     readme = root / "README.md"
     readme.write_text(
-        readme.read_text().replace("runtime_dependencies-2-", "runtime_dependencies-0-"),
+        readme.read_text().replace(
+            "integrated_extra_dependencies-2-",
+            "integrated_extra_dependencies-0-",
+        ),
         encoding="utf-8",
     )
     receipt = evaluate(root)
@@ -54,7 +59,7 @@ def test_dependency_badge_drift_fails_closed(tmp_path):
 
 def test_native_ownership_and_platform_drift_fail_closed(tmp_path):
     root = _fixture(tmp_path)
-    policy_path = root / "release-policy.json"
+    policy_path = root / "src/simplicio_fast/release_policy.json"
     policy = json.loads(policy_path.read_text())
     policy["native_execution_owner"] = "simplicio-fast"
     policy["supported_native_platforms"].append("plan9-mips")

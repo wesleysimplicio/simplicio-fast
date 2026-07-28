@@ -33,5 +33,6 @@ closed. Corrupt, incompatible, timed-out, cancelled or crashed Runtime
 processes never become successful receipts. Inputs are immutable values and
 the adapter exposes no write operation.
 
-The canonical policy is `release-policy.json`; `pyproject.toml` is the sole
-source of package version and dependency metadata.
+The installed canonical policy is
+`simplicio_fast/release_policy.json`; `pyproject.toml` is the sole source of
+package version and dependency metadata.

@@ -58,10 +58,17 @@ def evaluate(root: Path) -> dict[str, Any]:
     root = root.resolve()
     checks: list[dict[str, Any]] = []
     try:
-        policy = json.loads((root / "release-policy.json").read_text(encoding="utf-8"))
+        policy = json.loads(
+            (root / "src/simplicio_fast/release_policy.json").read_text(encoding="utf-8")
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         policy = {}
     _check(checks, "policy_schema", policy.get("schema") == POLICY_SCHEMA)
+    try:
+        root_policy = json.loads((root / "release-policy.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        root_policy = None
+    _check(checks, "policy_mirror", root_policy == policy)
     _check(
         checks,
         "canonical_sources",
@@ -76,6 +83,13 @@ def evaluate(root: Path) -> dict[str, Any]:
     version = project.get("version")
     dependencies = project.get("dependencies")
     dependencies = dependencies if isinstance(dependencies, list) else []
+    optional = project.get("optional-dependencies")
+    optional = optional if isinstance(optional, dict) else {}
+    integration_extra = policy.get("integration_extra")
+    integrated_dependencies = optional.get(integration_extra, []) if isinstance(integration_extra, str) else []
+    integrated_dependencies = (
+        integrated_dependencies if isinstance(integrated_dependencies, list) else []
+    )
     package_version = _package_version(root / "src/simplicio_fast/__init__.py")
     _check(
         checks,
@@ -99,12 +113,15 @@ def evaluate(root: Path) -> dict[str, Any]:
         expected=version,
     )
     dependency_count = len(dependencies)
+    integrated_count = len(integrated_dependencies)
     _check(
         checks,
         "readme_dependencies",
-        f"runtime_dependencies-{dependency_count}-" in readme
-        and f"{dependency_count} declared runtime dependencies" in readme,
-        expected=dependency_count,
+        f"core_runtime_dependencies-{dependency_count}-" in readme
+        and f"{dependency_count} core runtime dependencies" in readme
+        and f"integrated_extra_dependencies-{integrated_count}-" in readme
+        and f"{integrated_count} integrated extra dependencies" in readme,
+        expected={"core": dependency_count, "integrated": integrated_count},
     )
 
     native_owner = policy.get("native_execution_owner")
@@ -166,6 +183,7 @@ def evaluate(root: Path) -> dict[str, Any]:
         "root": str(root),
         "version": version,
         "runtime_dependencies": dependencies,
+        "integrated_dependencies": integrated_dependencies,
         "checks": checks,
         "failures": failures,
     }

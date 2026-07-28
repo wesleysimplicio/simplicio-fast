@@ -12,7 +12,8 @@
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.14-22c55e?style=for-the-badge" alt="Version 2.0.14"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+"></a>
   <a href="https://github.com/wesleysimplicio/simplicio-fast/issues"><img src="https://img.shields.io/github/issues/wesleysimplicio/simplicio-fast?style=for-the-badge" alt="Open issues"></a>
-  <img src="https://img.shields.io/badge/runtime_dependencies-2-111827?style=for-the-badge" alt="2 declared runtime dependencies">
+  <img src="https://img.shields.io/badge/core_runtime_dependencies-0-111827?style=for-the-badge" alt="0 core runtime dependencies">
+  <img src="https://img.shields.io/badge/integrated_extra_dependencies-2-334155?style=for-the-badge" alt="2 integrated extra dependencies">
 </p>
 
 <p align="center">
@@ -127,7 +128,15 @@ cd simplicio-fast
 python -m pip install -e .
 ```
 
-The integrated install includes `simplicio-mapper` and `simplicio-cli`.
+The base install is dependency-free and keeps the complete Python fallback.
+For the production Mapper/Dev CLI adapters, install the explicit profile:
+
+```bash
+python -m pip install -e '.[integrated]'
+```
+
+Loop installs Mapper, Dev CLI, and Fast from its pinned submodules, so it does
+not need Fast to pull their transitive stacks into every isolated slot.
 
 ### Offline installation verification
 
@@ -424,6 +433,12 @@ python -m compileall -q src tests benchmarks
 python benchmarks/run.py
 python scripts/check_release_integrity.py --check --json
 ```
+
+The wheel carries `simplicio_fast/release_policy.json`, so an installed
+consumer can inspect branch, dependency, native ownership, platform, and
+precompiled-only policy without access to the source checkout. The root
+`release-policy.json` is a checked mirror, and the integrity gate rejects drift
+between the two.
 
 Version 2.0.14 covers:
 

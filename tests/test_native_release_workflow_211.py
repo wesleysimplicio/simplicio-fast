@@ -42,7 +42,7 @@ def test_workflow_declares_all_supported_release_targets():
 
 def test_build_is_ci_only_and_consumers_remain_precompiled_only():
     workflow = Path(".github/workflows/native-release.yml").read_text()
-    policy = Path("release-policy.json").read_text()
+    policy = Path("src/simplicio_fast/release_policy.json").read_text()
     assert "cargo build" in workflow
     assert '"consumer_toolchain": "precompiled-binary-only"' in policy
     consumer_sources = [

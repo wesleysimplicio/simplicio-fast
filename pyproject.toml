@@ -4,7 +4,10 @@ version = "2.0.14"
 description = "Semantic project memory and guarded change coordination for AI coding tools"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
+dependencies = []
+
+[project.optional-dependencies]
+integrated = [
   "simplicio-mapper>=0.24.2",
   "simplicio-cli>=0.16.3",
 ]
@@ -15,6 +18,9 @@ simplicio-fast = "simplicio_fast.cli:main"
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[tool.setuptools.package-data]
+simplicio_fast = ["release_policy.json"]
 
 [build-system]
 requires = ["setuptools>=68"]
