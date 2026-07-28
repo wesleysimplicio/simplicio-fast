@@ -11,6 +11,7 @@ from typing import Any, Mapping, Sequence
 from . import __version__
 
 ABI = "simplicio.fast-native/v1"
+MAX_NATIVE_ARTIFACT_BYTES = 256 * 1024 * 1024
 
 
 class NativeBackendError(RuntimeError):
@@ -22,6 +23,18 @@ class NativeBackendError(RuntimeError):
 def canonical(value: Any) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"),
                       ensure_ascii=True).encode()
+
+
+def _file_sha256(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            size += len(block)
+            if size > MAX_NATIVE_ARTIFACT_BYTES:
+                raise NativeBackendError("native_artifact_too_large", str(size))
+            digest.update(block)
+    return digest.hexdigest(), size
 
 
 class PythonBackend:
@@ -111,12 +124,13 @@ def select_backend(
     if not path.is_file():
         return PythonBackend(), "RUST_ARTIFACT_MISSING"
     try:
-        content = path.read_bytes()
+        actual, actual_size = _file_sha256(path)
+    except NativeBackendError:
+        return PythonBackend(), "RUST_ARTIFACT_TOO_LARGE"
     except OSError:
         return PythonBackend(), "RUST_ARTIFACT_MISSING"
-    if manifest.get("size") != len(content):
+    if manifest.get("size") != actual_size:
         return PythonBackend(), "RUST_ARTIFACT_SIZE_MISMATCH"
-    actual = hashlib.sha256(content).hexdigest()
     if actual != manifest.get("sha256"):
         return PythonBackend(), "RUST_ARTIFACT_HASH_MISMATCH"
     return RustBackend(path, manifest), None

@@ -120,3 +120,26 @@ def test_packaged_resolver_validates_manifest_and_sha_without_toolchain(tmp_path
 def test_platform_aliases_are_canonical_and_unknown_is_rejected():
     assert platform_tag(system="Darwin", machine="arm64") == "macos-aarch64"
     assert platform_tag(system="plan9", machine="mips") is None
+
+
+def test_artifact_hashing_is_streamed_and_size_bounded(tmp_path, monkeypatch):
+    artifact = tmp_path / "fast-native"
+    artifact.write_bytes(b"streamed-artifact")
+    manifest = {
+        "abi": ABI,
+        "platform": "linux-x86_64",
+        "version": __version__,
+        "source_commit": "a" * 40,
+        "size": artifact.stat().st_size,
+        "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+    }
+    monkeypatch.setattr(Path, "read_bytes", lambda _path: (_ for _ in ()).throw(
+        AssertionError("whole-file read is forbidden")
+    ))
+    backend, reason = select_backend(artifact, manifest)
+    assert isinstance(backend, RustBackend)
+    assert reason is None
+    monkeypatch.setattr("simplicio_fast.native_backend.MAX_NATIVE_ARTIFACT_BYTES", 4)
+    backend, reason = select_backend(artifact, manifest)
+    assert isinstance(backend, PythonBackend)
+    assert reason == "RUST_ARTIFACT_TOO_LARGE"

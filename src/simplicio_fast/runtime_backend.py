@@ -52,6 +52,20 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _file_sha256(path: Path, *, max_bytes: int) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            size += len(block)
+            if size > max_bytes:
+                raise RuntimeBackendError(
+                    "HASH_MISMATCH", f"artifact exceeds {max_bytes} bytes"
+                )
+            digest.update(block)
+    return digest.hexdigest(), size
+
+
 def platform_tag(
     *, system: str | None = None, machine: str | None = None
 ) -> str | None:
@@ -90,6 +104,7 @@ class RuntimeArtifact:
     source_commit: str | None = None
     signature: str | None = None
     signature_required: bool = False
+    size: int | None = None
 
     @classmethod
     def from_manifest(
@@ -114,6 +129,11 @@ class RuntimeArtifact:
                 str(manifest["signature"]) if manifest.get("signature") else None
             ),
             signature_required=bool(manifest.get("signature_required", False)),
+            size=(
+                int(manifest["size"])
+                if isinstance(manifest.get("size"), int)
+                else None
+            ),
         )
 
 
@@ -158,17 +178,21 @@ class RuntimeFastBackend:
         required_capabilities: Sequence[str] = tuple(READ_ONLY_OPERATIONS),
         timeout_seconds: float = 5.0,
         max_response_bytes: int = 4 * 1024 * 1024,
+        max_artifact_bytes: int = 256 * 1024 * 1024,
         signature_verifier: SignatureVerifier | None = None,
     ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         if max_response_bytes < 1024:
             raise ValueError("max_response_bytes must be at least 1024")
+        if max_artifact_bytes < 1024:
+            raise ValueError("max_artifact_bytes must be at least 1024")
         self.artifact = artifact
         self.launcher = tuple(launcher)
         self.required_capabilities = frozenset(required_capabilities)
         self.timeout_seconds = timeout_seconds
         self.max_response_bytes = max_response_bytes
+        self.max_artifact_bytes = max_artifact_bytes
         self.signature_verifier = signature_verifier
         self._handshake: RuntimeHandshake | None = None
 
@@ -201,9 +225,16 @@ class RuntimeFastBackend:
         if not self.artifact.version:
             raise RuntimeBackendError("VERSION_MISMATCH", "manifest version missing")
         try:
-            actual_hash = _sha256(path.read_bytes())
+            actual_hash, actual_size = _file_sha256(
+                path, max_bytes=self.max_artifact_bytes
+            )
         except OSError as error:
             raise RuntimeBackendError("RUNTIME_MISSING", type(error).__name__) from error
+        if self.artifact.size is not None and actual_size != self.artifact.size:
+            raise RuntimeBackendError(
+                "HASH_MISMATCH",
+                f"size manifest={self.artifact.size} actual={actual_size}",
+            )
         if (
             len(self.artifact.sha256) != 64
             or not hmac.compare_digest(actual_hash, self.artifact.sha256)
@@ -219,6 +250,7 @@ class RuntimeFastBackend:
                 raise RuntimeBackendError("SIGNATURE_MISMATCH", "verification failed")
         return {
             "artifact_sha256": actual_hash,
+            "artifact_size": actual_size,
             "artifact_version": self.artifact.version,
             "artifact_platform": self.artifact.platform,
             "artifact_abi": self.artifact.abi,

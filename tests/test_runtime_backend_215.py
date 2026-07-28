@@ -250,6 +250,30 @@ def test_artifact_is_verified_before_process_spawn(tmp_path, monkeypatch, mutato
     assert spawned is False
 
 
+def test_runtime_artifact_hashing_streams_and_enforces_size_bound(tmp_path, monkeypatch):
+    artifact = _fake_runtime(tmp_path)
+    sized = RuntimeArtifact(
+        executable=artifact.executable,
+        sha256=artifact.sha256,
+        version=artifact.version,
+        platform=artifact.platform,
+        source_commit=artifact.source_commit,
+        size=artifact.executable.stat().st_size,
+    )
+    monkeypatch.setattr(
+        Path,
+        "read_bytes",
+        lambda _path: (_ for _ in ()).throw(
+            AssertionError("whole-file read is forbidden")
+        ),
+    )
+    receipt = RuntimeFastBackend(sized).verify_artifact()
+    assert receipt["artifact_size"] == sized.size
+    with pytest.raises(RuntimeBackendError) as raised:
+        RuntimeFastBackend(sized, max_artifact_bytes=1024).verify_artifact()
+    assert raised.value.reason_code == "HASH_MISMATCH"
+
+
 def test_signature_policy_fails_closed_and_accepts_verified_signature(tmp_path):
     unsigned = _fake_runtime(tmp_path)
     signed = RuntimeArtifact(
