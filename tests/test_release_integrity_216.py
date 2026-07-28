@@ -29,7 +29,7 @@ def test_repository_release_metadata_is_consistent():
     receipt = evaluate(ROOT)
     assert receipt["schema"] == SCHEMA
     assert receipt["status"] == "pass", receipt
-    assert receipt["version"] == "2.0.14"
+    assert receipt["version"] == "2.0.15"
     assert receipt["runtime_dependencies"] == []
     assert len(receipt["integrated_dependencies"]) == 2
 
@@ -37,7 +37,7 @@ def test_repository_release_metadata_is_consistent():
 def test_version_drift_fails_closed(tmp_path):
     root = _fixture(tmp_path)
     init = root / "src/simplicio_fast/__init__.py"
-    init.write_text(init.read_text().replace('"2.0.14"', '"9.9.9"'), encoding="utf-8")
+    init.write_text(init.read_text().replace('"2.0.15"', '"9.9.9"'), encoding="utf-8")
     receipt = evaluate(root)
     assert receipt["status"] == "fail"
     assert "package_version" in receipt["failures"]

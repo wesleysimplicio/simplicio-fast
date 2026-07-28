@@ -29,7 +29,7 @@ def test_package_import_does_not_load_heavy_implementations():
         "'loaded':sorted(name for name in sys.modules "
         "if name.startswith('simplicio_fast.'))}))"
     )
-    assert receipt == {"version": "2.0.14", "loaded": []}
+    assert receipt == {"version": "2.0.15", "loaded": []}
 
 
 @pytest.mark.parametrize(
