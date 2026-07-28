@@ -53,6 +53,39 @@ def validate_envelope(value: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
+def consume_context_packet(packet: Mapping[str, Any], *,
+                           expected_generation: str | None = None) -> dict[str, Any]:
+    """Validate Mapper's public packet and expose opaque page handles to a slot."""
+    if packet.get("schema") != "simplicio.context-packet/v1":
+        raise FastExecutorError("packet_schema_invalid", "")
+    unsigned = dict(packet)
+    unsigned.pop("encoded_bytes", None)
+    supplied = unsigned.pop("packet_hash", "")
+    if supplied != digest(unsigned):
+        raise FastExecutorError("packet_corrupt", supplied)
+    if expected_generation is not None and packet.get("generation") != expected_generation:
+        raise FastExecutorError("packet_generation_stale", str(packet.get("generation")))
+    handles = []
+    seen = set()
+    for item in packet.get("items", []):
+        handle = item.get("handle", "")
+        content_hash = item.get("content_sha256", "")
+        expected_prefix = f"fast://context/{packet.get('graph_digest')}/"
+        if not handle.startswith(expected_prefix) or not content_hash:
+            raise FastExecutorError("packet_handle_invalid", handle)
+        if content_hash in seen:
+            raise FastExecutorError("packet_duplicate_content", content_hash)
+        seen.add(content_hash)
+        handles.append(handle)
+    return {
+        "schema": "simplicio.fast-context-consumption/v1",
+        "packet_hash": supplied, "generation": packet.get("generation"),
+        "handles": handles, "coverage": packet.get("coverage"),
+        "truncated": bool(packet.get("truncated")),
+        "completion_authority": "LOOP_ONLY",
+    }
+
+
 @dataclass(frozen=True)
 class Snapshot:
     root: Path
