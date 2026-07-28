@@ -363,6 +363,31 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(0, recovered.metadata_reused_files)
             self.assertEqual(1, recovered.reused_files)
 
+    def test_fresh_validation_cache_rehashes_when_metadata_clock_is_frozen(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "sample.rs"
+            source.write_text("pub fn value() -> i32 { 1 }\n", encoding="utf-8")
+            output = root / "project.sfast"
+            frozen_identity = {
+                "size": source.stat().st_size,
+                "mtime_ns": 1,
+                "ctime_ns": 1,
+            }
+            with patch(
+                "simplicio_fast.snapshot._file_identity",
+                return_value=frozen_identity,
+            ):
+                build_snapshot(root, output)
+                source.write_text(
+                    "pub fn value() -> i32 { 2 }\n",
+                    encoding="utf-8",
+                )
+                changed = build_snapshot(root, output)
+
+            self.assertEqual(("sample.rs",), changed.parsed_paths)
+            self.assertEqual(0, changed.metadata_reused_files)
+
     def test_timeout_receipt_includes_phase_timings_with_previous_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
