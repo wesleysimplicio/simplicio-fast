@@ -1,10 +1,12 @@
 # Quant benchmark Q0/Q1/Q2 — issue #198
 
 - Classification: `MEASURED`
-- Source commit: `620e1a3632a60cddecb41bbeb7a13fd477d5f930`
-- Config hash: `95728254b2721f25c66f8e2fb9d3fe6f89a32fa3e88ea0eaa6f92df5e4fca0a7`
-- Generation: `53a79e0b4e29880a691a39a3f64f55460d06a28cad4bbebb69556ca826a2529a`
-- Reproduction: `PYTHONPATH=src python benchmarks/quant_benchmark_198.py --repetitions 10 --max-vectors 10000`
+- Source commit: `d0744b1db349f159c95c6d74937b1267c1552922`
+- Source tree: `064aaaf7141e522fde714683d1514b99f03daf7f`
+- Reproducible clean tree: `True`
+- Config hash: `5c8c6711592e4d4487c634318040f0af47e27eb725db99539ccb158896fb1944`
+- Generation: `634e7db3c342dabaff4f5d6fc7b2c3df9fedc61eda878ea21a512b6731aacdc9`
+- Reproduction: `PYTHONPATH=src python benchmarks/quant_benchmark_198.py --repetitions 10 --sizes 10000,100000,1000000 --max-vectors 10000 --dimension 16 --candidate-k 80 --result-k 20 --seed 198`
 - Rust parity: `null` (`RUNTIME_FAST_QUANT_CAPABILITY_UNAVAILABLE`); no Rust compilation was attempted.
 
 ![Measured size, latency and quality trade-off](quant-benchmark-198.svg)
@@ -19,14 +21,15 @@ Dataset: `62e2e7a1315727c2aae27db671e84e355d5c8bd2282a6eceb9dff51ecc585802`
 Corpus: `8f95e8baeb10573468a7b148a6c4fc267c833ff62253b0412046d5175d47df4e`
 
 Queries: `d861029d45904f180de799ddebe177ae51c51bda8a390bf128bfe83afaae6526`
+
 Embeddings: `31c6cbcec7046af37ad7110e28de4f5bcfefbab507cbd7f94b240e46ef136ad3`
 
-| Lane | Index bytes | Reduction | Query p50 ms | Query p95 ms | Recall@10 | nDCG@10 | Rerank p50 ms |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Q0 | 1,410,016 | 0.00% | 41.530 | 49.756 | 1.0000 | 1.0000 | 0.000 |
-| Q1 | 330,016 | 76.59% | 34.419 | 45.835 | 0.9812 | 0.9871 | 0.000 |
-| Q2a | 250,024 | 82.27% | 37.068 | 45.819 | 0.0688 | 0.0618 | 0.000 |
-| Q2b | 250,024 | 82.27% | 38.732 | 50.903 | 0.3438 | 0.4817 | 0.374 |
+| Lane | Index bytes | Total bytes | Gate memory bytes | Reduction | Query p50 ms | Query p95 ms | Recall@10 | nDCG@10 | Rerank p50 ms |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Q0 | 1,410,016 | 1,410,016 | 1,410,016 | 0.00% | 42.181 | 56.382 | 1.0000 | 1.0000 | 0.000 |
+| Q1 | 330,016 | 1,610,016 | 1,610,016 | 76.59% | 33.112 | 43.200 | 0.9812 | 0.9871 | 0.000 |
+| Q2a | 250,024 | 1,530,024 | 1,530,024 | 82.27% | 37.522 | 45.506 | 0.0688 | 0.0618 | 0.000 |
+| Q2b | 250,024 | 1,530,024 | 1,530,024 | 82.27% | 40.162 | 54.965 | 0.3438 | 0.4817 | 0.388 |
 
 Promotion gate: **REJECT** (fail-closed).
 
@@ -35,7 +38,7 @@ Promotion gate: **REJECT** (fail-closed).
   "checks": {
     "latency": true,
     "measured_only": true,
-    "memory_index": true,
+    "memory_policy": false,
     "quality_ndcg": false,
     "quality_recall": false,
     "rerank_present": true
@@ -45,8 +48,15 @@ Promotion gate: **REJECT** (fail-closed).
   "observed": {
     "index_reduction": 0.8226800263259424,
     "ndcg_at_10_regression": 0.518311222064248,
-    "query_p95_latency_ratio": 1.0230410202751516,
-    "recall_at_10_regression": 0.65625
+    "policy_memory_reduction": -0.08511109093797509,
+    "promotion_memory_bytes": {
+      "q0": 1410016,
+      "q2b": 1530024
+    },
+    "query_p95_latency_ratio": 0.9748618159154268,
+    "recall_at_10_regression": 0.65625,
+    "storage_policy": "dedicated-end-to-end",
+    "total_storage_reduction": -0.08511109093797509
   },
   "schema": "simplicio.fast.quant-promotion-gate/v1",
   "thresholds": {
@@ -60,7 +70,7 @@ Promotion gate: **REJECT** (fail-closed).
 
 ## Unavailable sizes
 
-Unexecuted sizes have `null` values and stable reasons; no projection is substituted for a measurement.
+Unexecuted sizes are classified `BLOCKED`, have `null` values and stable reasons; no projection is substituted for a measurement.
 
 | Vectors | Value | Reason |
 |---:|---:|---|

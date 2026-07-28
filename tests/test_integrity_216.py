@@ -21,4 +21,31 @@ def test_integrity_check_script_runs(capsys):
     code = mod.main(["--check"])
     out = capsys.readouterr().out
     assert code == 0, out
-    assert "OK: no integrity drift" in out
+    assert "pass: release integrity" in out
+
+
+def test_legacy_script_delegates_to_canonical_gate(monkeypatch):
+    mod = _load_integrity_module()
+    observed = []
+
+    def canonical(argv):
+        observed.append(argv)
+        return 7
+
+    monkeypatch.setattr(mod._CANONICAL, "main", canonical)
+    assert mod.main(["--check", "--json"]) == 7
+    assert observed == [
+        ["--check", "--json", "--root", str(ROOT)]
+    ]
+
+
+def test_legacy_evaluate_is_the_canonical_receipt():
+    mod = _load_integrity_module()
+    receipt = mod.evaluate(ROOT)
+    assert receipt["schema"] == mod.SCHEMA
+    assert receipt["status"] == "pass"
+    assert {check["name"] for check in receipt["checks"]} >= {
+        "policy_schema",
+        "native_ownership",
+        "default_branch_policy",
+    }

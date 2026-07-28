@@ -112,6 +112,16 @@ def evaluate(root: Path) -> dict[str, Any]:
         and f"Version {version}" in readme,
         expected=version,
     )
+    try:
+        changelog = (root / "CHANGELOG.md").read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        changelog = ""
+    _check(
+        checks,
+        "changelog_version",
+        isinstance(version, str) and f"## {version} " in changelog,
+        expected=version,
+    )
     dependency_count = len(dependencies)
     integrated_count = len(integrated_dependencies)
     _check(

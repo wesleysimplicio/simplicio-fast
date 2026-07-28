@@ -119,7 +119,10 @@ class RuntimeArtifact:
             platform=str(
                 manifest.get("platform") or runtime_data.get("target") or ""
             ),
-            abi=str(manifest.get("abi") or RUNTIME_FAST_ABI),
+            # The ABI must be asserted by the signed/released manifest.  A
+            # compatibility caller must never turn an arbitrary executable
+            # into a Runtime artifact by relying on an implicit default.
+            abi=str(manifest.get("abi") or ""),
             source_commit=(
                 str(manifest.get("source_commit") or runtime_data.get("commit"))
                 if manifest.get("source_commit") or runtime_data.get("commit")

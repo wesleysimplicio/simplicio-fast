@@ -24,6 +24,8 @@ def render_report(receipt: dict[str, Any]) -> str:
         "",
         f"- Classification: `{receipt['classification']}`",
         f"- Source commit: `{receipt['source_commit']}`",
+        f"- Source tree: `{receipt['source_tree']}`",
+        f"- Reproducible clean tree: `{receipt['source_state']['reproducible']}`",
         f"- Config hash: `{receipt['config_hash']}`",
         f"- Generation: `{receipt['generation']}`",
         f"- Reproduction: `{receipt['command']}`",
@@ -41,19 +43,25 @@ def render_report(receipt: dict[str, Any]) -> str:
             [
                 f"## {case['vectors']:,} vectors",
                 "",
-                f"Dataset: `{case['dataset']['dataset_hash']}`  ",
-                f"Corpus: `{case['dataset']['corpus_hash']}`  ",
-                f"Queries: `{case['dataset']['query_hash']}`  ",
+                f"Dataset: `{case['dataset']['dataset_hash']}`",
+                "",
+                f"Corpus: `{case['dataset']['corpus_hash']}`",
+                "",
+                f"Queries: `{case['dataset']['query_hash']}`",
+                "",
                 f"Embeddings: `{case['dataset']['embedding']['sha256']}`",
                 "",
-                "| Lane | Index bytes | Reduction | Query p50 ms | Query p95 ms | "
-                "Recall@10 | nDCG@10 | Rerank p50 ms |",
-                "|---|---:|---:|---:|---:|---:|---:|---:|",
+                "| Lane | Index bytes | Total bytes | Gate memory bytes | "
+                "Reduction | Query p50 ms | Query p95 ms | Recall@10 | "
+                "nDCG@10 | Rerank p50 ms |",
+                "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
             ]
         )
         for lane_name, lane in case["lanes"].items():
             lines.append(
                 f"| {lane_name} | {lane['index_bytes']:,} | "
+                f"{lane['total_storage_bytes']:,} | "
+                f"{lane['promotion_memory_bytes']:,} | "
                 f"{lane['index_reduction_vs_q0'] * 100:.2f}% | "
                 f"{_number(lane['query_ms']['p50'])} | "
                 f"{_number(lane['query_ms']['p95'])} | "
@@ -78,8 +86,8 @@ def render_report(receipt: dict[str, Any]) -> str:
             [
                 "## Unavailable sizes",
                 "",
-                "Unexecuted sizes have `null` values and stable reasons; no projection is "
-                "substituted for a measurement.",
+                "Unexecuted sizes are classified `BLOCKED`, have `null` values and "
+                "stable reasons; no projection is substituted for a measurement.",
                 "",
                 "| Vectors | Value | Reason |",
                 "|---:|---:|---|",
@@ -195,6 +203,8 @@ def main() -> int:
     parser.add_argument("--dimension", type=int, default=16)
     parser.add_argument("--candidate-k", type=int, default=80)
     parser.add_argument("--result-k", type=int, default=20)
+    parser.add_argument("--seed", type=int, default=198)
+    parser.add_argument("--shared-integral-store", action="store_true")
     parser.add_argument(
         "--output",
         default=str(ROOT / "benchmarks/results/quant-benchmark-198.json"),
@@ -217,6 +227,8 @@ def main() -> int:
         dimension=args.dimension,
         candidate_k=args.candidate_k,
         result_k=args.result_k,
+        seed=args.seed,
+        shared_integral_store=args.shared_integral_store,
     )
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)

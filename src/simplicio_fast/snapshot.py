@@ -49,6 +49,11 @@ def _atomic_publish(temporary: Path, destination: Path) -> None:
 DEFAULT_MAX_SOURCE_FILE_BYTES = 8 * 1024 * 1024
 DEFAULT_BUILD_TIMEOUT_SECONDS = 180.0
 VALIDATION_CACHE_SCHEMA = "simplicio.fast.validation-cache/v1"
+# A metadata-only hit immediately after publication is unsafe on filesystems
+# whose mtime/ctime clock is coarse or frozen for a short interval. During this
+# window, verify the digest with a streaming read before reusing parsed data.
+# Older cache entries retain the fast metadata-only path.
+VALIDATION_CACHE_TIMESTAMP_GUARD_NS = 2_100_000_000
 # v1 is deliberately frozen.  Do not change these structs: old snapshots must
 # remain readable after a v2 writer is installed.
 LEGACY_HEADER = struct.Struct("<8s7I")
@@ -525,6 +530,14 @@ def _file_identity(stat: os.stat_result) -> dict[str, int]:
     }
 
 
+def _streaming_sha256(path: Path) -> bytes:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.digest()
+
+
 def _load_validation_cache(
     output: Path,
     *,
@@ -651,6 +664,21 @@ def build_snapshot(
         if previous_valid
         else {}
     )
+    validation_cache_requires_digest = False
+    if validation_cache:
+        try:
+            cache_age_ns = max(
+                0,
+                time.time_ns()
+                - _validation_cache_path(output).stat().st_mtime_ns,
+            )
+            validation_cache_requires_digest = (
+                cache_age_ns <= VALIDATION_CACHE_TIMESTAMP_GUARD_NS
+            )
+        except OSError:
+            # The cache disappeared or cannot be inspected. Fail closed by
+            # forcing normal content validation below.
+            validation_cache_requires_digest = True
 
     entries: list[tuple[str, bytes, int, list[Symbol]]] = []
     relations: list[Relation] = []
@@ -690,11 +718,19 @@ def build_snapshot(
         identity = _file_identity(stat)
         cached = previous.get(relative)
         row = validation_cache.get(relative)
-        metadata_hit = bool(
+        metadata_candidate = bool(
             cached
             and row
             and all(row.get(key) == value for key, value in identity.items())
             and row.get("sha256") == cached[0].hex()
+        )
+        probed_digest = (
+            _streaming_sha256(path)
+            if metadata_candidate and validation_cache_requires_digest
+            else None
+        )
+        metadata_hit = metadata_candidate and (
+            probed_digest is None or probed_digest == cached[0]
         )
         if metadata_hit:
             digest = cached[0]
@@ -705,8 +741,11 @@ def build_snapshot(
                 time.perf_counter() - validation_start
             ) * 1000
         else:
-            contents = path.read_bytes()
-            digest = hashlib.sha256(contents).digest()
+            if probed_digest is None:
+                contents = path.read_bytes()
+                digest = hashlib.sha256(contents).digest()
+            else:
+                digest = probed_digest
             phase_timings["unchanged_validation"] += (
                 time.perf_counter() - validation_start
             ) * 1000

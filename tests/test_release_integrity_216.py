@@ -15,6 +15,7 @@ def _fixture(tmp_path: Path) -> Path:
         "release-policy.json",
         "pyproject.toml",
         "README.md",
+        "CHANGELOG.md",
         "src/simplicio_fast/__init__.py",
         ".github/workflows/native-release.yml",
         "docs/native-backend-support.md",
@@ -55,6 +56,17 @@ def test_dependency_badge_drift_fails_closed(tmp_path):
     )
     receipt = evaluate(root)
     assert "readme_dependencies" in receipt["failures"]
+
+
+def test_changelog_version_drift_fails_closed(tmp_path):
+    root = _fixture(tmp_path)
+    changelog = root / "CHANGELOG.md"
+    changelog.write_text(
+        changelog.read_text().replace("## 2.0.15 ", "## 9.9.9 ", 1),
+        encoding="utf-8",
+    )
+    receipt = evaluate(root)
+    assert "changelog_version" in receipt["failures"]
 
 
 def test_native_ownership_and_platform_drift_fail_closed(tmp_path):
