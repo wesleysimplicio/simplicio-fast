@@ -33,6 +33,9 @@ from .turboquant import (
 )
 
 BENCHMARK_SCHEMA = "simplicio.fast.quant-benchmark/v1"
+# Compatibility alias published by PR #217. New integrations should use
+# BENCHMARK_SCHEMA and run_benchmark.
+BENCH_SCHEMA = BENCHMARK_SCHEMA
 MANIFEST_SCHEMA = "simplicio.fast.quant-index-manifest/v1"
 DATASET_SCHEMA = "simplicio.fast.quant-dataset/v1"
 LANES = ("Q0", "Q1", "Q2a", "Q2b")
@@ -664,6 +667,7 @@ def _measure_lane(
     result_k: int,
     repetitions: int,
     directory: Path,
+    shared_integral_store: bool,
 ) -> dict[str, Any]:
     # Excluded warmup: compile bytecode paths and populate Python method caches.
     warmup = QuantLaneIndex.build(
@@ -782,6 +786,18 @@ def _measure_lane(
     ]
     quality = _mean_metrics([sample["quality"] for sample in samples])
     total_query_seconds = sum(query_values) / 1000
+    integral_store_bytes = (
+        len(dataset.records) * dataset.dimension * struct.calcsize("<d")
+    )
+    index_bytes = manifests[0]["index_bytes"]
+    integral_store_shared = lane != "Q0" and shared_integral_store
+    total_storage_bytes = (
+        index_bytes if lane == "Q0" else index_bytes + integral_store_bytes
+    )
+    promotion_memory_bytes = (
+        index_bytes if lane == "Q0" or integral_store_shared
+        else total_storage_bytes
+    )
     return {
         "classification": "MEASURED",
         "lane": lane,
@@ -797,17 +813,11 @@ def _measure_lane(
             len(query_values) / total_query_seconds if total_query_seconds else None
         ),
         "quality": quality,
-        "index_bytes": manifests[0]["index_bytes"],
-        "integral_store_bytes": (
-            len(dataset.records) * dataset.dimension * struct.calcsize("<d")
-        ),
-        "integral_store_shared": lane != "Q0",
-        "total_storage_bytes": (
-            manifests[0]["index_bytes"]
-            if lane == "Q0"
-            else manifests[0]["index_bytes"]
-            + len(dataset.records) * dataset.dimension * struct.calcsize("<d")
-        ),
+        "index_bytes": index_bytes,
+        "integral_store_bytes": integral_store_bytes,
+        "integral_store_shared": integral_store_shared,
+        "total_storage_bytes": total_storage_bytes,
+        "promotion_memory_bytes": promotion_memory_bytes,
         "rss_delta_bytes": _summary(rss_deltas) if rss_deltas else None,
         "rss_null_reason": None if rss_deltas else "RSS_CURRENT_UNAVAILABLE",
         "resident_pages_after_raw": [
@@ -868,11 +878,17 @@ def _promotion_gate(
         q0["quality"]["ndcg_at_10"] - q2b["quality"]["ndcg_at_10"]
     )
     index_reduction = 1 - (q2b["index_bytes"] / q0["index_bytes"])
+    total_storage_reduction = 1 - (
+        q2b["total_storage_bytes"] / q0["total_storage_bytes"]
+    )
+    policy_memory_reduction = 1 - (
+        q2b["promotion_memory_bytes"] / q0["promotion_memory_bytes"]
+    )
     latency_ratio = q2b["query_ms"]["p95"] / q0["query_ms"]["p95"]
     checks = {
         "quality_recall": recall_regression <= max_recall_regression,
         "quality_ndcg": ndcg_regression <= max_ndcg_regression,
-        "memory_index": index_reduction >= minimum_index_reduction,
+        "memory_policy": policy_memory_reduction >= minimum_index_reduction,
         "latency": latency_ratio <= maximum_latency_ratio,
         "rerank_present": q2b["rerank_ms"]["p50"] > 0,
         "measured_only": (
@@ -889,6 +905,17 @@ def _promotion_gate(
             "recall_at_10_regression": recall_regression,
             "ndcg_at_10_regression": ndcg_regression,
             "index_reduction": index_reduction,
+            "total_storage_reduction": total_storage_reduction,
+            "policy_memory_reduction": policy_memory_reduction,
+            "promotion_memory_bytes": {
+                "q0": q0["promotion_memory_bytes"],
+                "q2b": q2b["promotion_memory_bytes"],
+            },
+            "storage_policy": (
+                "shared-integral-store"
+                if q2b["integral_store_shared"]
+                else "dedicated-end-to-end"
+            ),
             "query_p95_latency_ratio": latency_ratio,
         },
         "thresholds": {
@@ -920,6 +947,119 @@ def concurrency_receipt(
     }
 
 
+def run_quant_benchmark(
+    vectors: Sequence[Sequence[float]],
+    queries: Sequence[Sequence[float]],
+    *,
+    top_k: int = 5,
+) -> dict[str, Any]:
+    """Run the compact API published by PR #217.
+
+    The response shape and lane names remain stable for compatibility. New
+    integrations should use :func:`run_benchmark`, whose receipt includes
+    complete measurement and provenance contracts.
+    """
+    if not vectors or not queries:
+        raise ValueError("vectors and queries are required")
+    if top_k < 1:
+        raise ValueError("top_k must be positive")
+    dimension = len(vectors[0])
+    if dimension < 1 or any(len(vector) != dimension for vector in vectors):
+        raise ValueError("vectors must have one non-zero dimension")
+    if any(len(query) != dimension for query in queries):
+        raise ValueError("queries must match the vector dimension")
+    started = time.perf_counter()
+    records = tuple(
+        (f"vector-{offset:07d}", tuple(float(value) for value in vector))
+        for offset, vector in enumerate(vectors)
+    )
+    normalized_queries = tuple(
+        tuple(float(value) for value in query) for query in queries
+    )
+    corpus_hash = digest(records)
+    embedding_hash = digest(
+        {"model": "compatibility-input/v1", "records": records}
+    )
+    config_hash = digest(
+        {"api": "run_quant_benchmark", "top_k": top_k, "metric": "cosine"}
+    )
+    generation = digest(
+        {
+            "corpus_hash": corpus_hash,
+            "embedding_hash": embedding_hash,
+            "config_hash": config_hash,
+        }
+    )
+    candidate_k = max(top_k, top_k * 4)
+    lanes: dict[str, dict[str, Any]] = {}
+    for public_name, lane, bits in (
+        ("Q0_full", "Q0", None),
+        ("Q1_8bit", "Q1", 8),
+        ("Q2_turboquant_4bit", "Q2a", 4),
+    ):
+        index = QuantLaneIndex.build(
+            records,
+            lane=lane,
+            generation=generation,
+            corpus_hash=corpus_hash,
+            embedding_hash=embedding_hash,
+            config_hash=config_hash,
+            candidate_k=candidate_k,
+            result_k=top_k,
+            seed=198,
+        )
+        hits = sum(len(index.query(query)[0]) for query in normalized_queries)
+        lanes[public_name] = {
+            "hits": hits,
+            "recall_proxy": hits / (len(normalized_queries) * top_k),
+            "bits": bits,
+        }
+    return {
+        "schema": BENCH_SCHEMA,
+        "lanes": lanes,
+        "queries": len(normalized_queries),
+        "vectors": len(records),
+        "top_k": top_k,
+        "wall_ms": round((time.perf_counter() - started) * 1000, 3),
+        "cpu_ms": None,
+        "cpu_ms_null_reason": "NOT_MEASURED",
+        "rss_bytes": None,
+        "rss_bytes_null_reason": "NOT_MEASURED",
+        "deprecated": True,
+        "replacement": "run_benchmark",
+    }
+
+
+def _source_state(root: Path) -> dict[str, Any]:
+    import subprocess
+
+    def git(*args: str) -> str | None:
+        try:
+            return subprocess.run(
+                ["git", *args],
+                cwd=root,
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=3,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
+
+    commit = git("rev-parse", "HEAD")
+    tree = git("rev-parse", "HEAD^{tree}")
+    status = git("status", "--porcelain=v1", "--untracked-files=all")
+    dirty = status is None or bool(status)
+    return {
+        "schema": "simplicio.fast.benchmark-source-state/v1",
+        "commit": commit,
+        "tree": tree,
+        "dirty": dirty,
+        "reproducible": commit is not None and tree is not None and not dirty,
+        "dirty_paths": status.splitlines() if status else [],
+    }
+
+
 def run_benchmark(
     root: str | Path,
     *,
@@ -930,6 +1070,7 @@ def run_benchmark(
     candidate_k: int = 80,
     result_k: int = 20,
     seed: int = 198,
+    shared_integral_store: bool = False,
 ) -> dict[str, Any]:
     if repetitions < 10:
         raise ValueError("repetitions must be at least 10")
@@ -956,6 +1097,11 @@ def run_benchmark(
         "candidate_k": candidate_k,
         "result_k": result_k,
         "seed": seed,
+        "storage_policy": (
+            "shared-integral-store"
+            if shared_integral_store
+            else "dedicated-end-to-end"
+        ),
         "metric": "cosine",
         "warmup": "one excluded build/query per lane",
         "cache_states": ["mmap_first_touch", "mmap_warm"],
@@ -973,7 +1119,8 @@ def run_benchmark(
             if size > max_vectors:
                 unavailable.append(
                     {
-                        "classification": "MEASURED",
+                        "classification": "BLOCKED",
+                        "status": "unavailable",
                         "vectors": size,
                         "value": None,
                         "reason": "CAPACITY_LIMIT_CONFIGURED",
@@ -992,6 +1139,7 @@ def run_benchmark(
                     result_k=result_k,
                     repetitions=repetitions,
                     directory=temporary,
+                    shared_integral_store=shared_integral_store,
                 )
                 for lane in LANES
             }
@@ -1031,20 +1179,10 @@ def run_benchmark(
                     ),
                 }
             )
-    commit = "unavailable"
-    try:
-        import subprocess
-
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=Path(root),
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=2,
-        ).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        pass
+    source_state = _source_state(base)
+    commit = source_state["commit"] or "unavailable"
+    sizes_arg = ",".join(str(size) for size in sizes)
+    shared_arg = " --shared-integral-store" if shared_integral_store else ""
     return {
         "schema": BENCHMARK_SCHEMA,
         "issue": 198,
@@ -1052,12 +1190,17 @@ def run_benchmark(
         "classification": "MEASURED",
         "command": (
             "PYTHONPATH=src python benchmarks/quant_benchmark_198.py "
-            f"--repetitions {repetitions} --max-vectors {max_vectors}"
+            f"--repetitions {repetitions} --sizes {sizes_arg} "
+            f"--max-vectors {max_vectors} --dimension {dimension} "
+            f"--candidate-k {candidate_k} --result-k {result_k} "
+            f"--seed {seed}{shared_arg}"
         ),
         "configuration": configuration,
         "config_hash": config_hash,
         "generation": generation,
         "source_commit": commit,
+        "source_tree": source_state["tree"],
+        "source_state": source_state,
         "environment": {
             "python": platform.python_version(),
             "implementation": platform.python_implementation(),
@@ -1096,6 +1239,7 @@ def run_benchmark(
 
 
 __all__ = [
+    "BENCH_SCHEMA",
     "BENCHMARK_SCHEMA",
     "DATASET_SCHEMA",
     "LANES",
@@ -1112,4 +1256,5 @@ __all__ = [
     "quality_metrics",
     "repository_corpus_receipt",
     "run_benchmark",
+    "run_quant_benchmark",
 ]

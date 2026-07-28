@@ -10,7 +10,9 @@ import random
 
 import pytest
 
+import simplicio_fast.quant_benchmark as quant_benchmark
 from simplicio_fast.quant_benchmark import (
+    BENCH_SCHEMA,
     BENCHMARK_SCHEMA,
     DATASET_SCHEMA,
     MANIFEST_SCHEMA,
@@ -22,6 +24,7 @@ from simplicio_fast.quant_benchmark import (
     quality_metrics,
     repository_corpus_receipt,
     run_benchmark,
+    run_quant_benchmark,
 )
 from simplicio_fast.turboquant import exact_rerank
 from simplicio_fast.vector_index import TurboQuantIndex
@@ -43,6 +46,30 @@ def _index(tmp_path: Path, lane: str = "Q2b") -> tuple:
     )
     path = index.persist_atomic(tmp_path / f"{lane}.sfastq")
     return dataset, config_hash, index, path
+
+
+def test_pr217_compact_api_remains_compatible():
+    vectors = [
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0, 0.0],
+        [0.7, 0.7, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 0.0],
+    ]
+    queries = [[0.9, 0.1, 0.0, 0.0], [0.1, 0.9, 0.0, 0.0]]
+    first = run_quant_benchmark(vectors, queries, top_k=2)
+    second = run_quant_benchmark(vectors, queries, top_k=2)
+    assert first["schema"] == BENCH_SCHEMA == BENCHMARK_SCHEMA
+    assert set(first["lanes"]) == {
+        "Q0_full",
+        "Q1_8bit",
+        "Q2_turboquant_4bit",
+    }
+    assert first["lanes"] == second["lanes"]
+    assert first["cpu_ms"] is None
+    assert first["cpu_ms_null_reason"] == "NOT_MEASURED"
+    assert first["rss_bytes"] is None
+    assert first["deprecated"] is True
+    assert first["replacement"] == "run_benchmark"
 
 
 def test_frozen_dataset_hashes_every_input_and_embedding_contract():
@@ -379,6 +406,13 @@ def test_small_real_benchmark_has_ten_raw_repetitions_and_separate_classes(
     assert receipt["parity"]["rust_compilation_attempted"] is False
     assert len(receipt["unavailable_sizes"]) == 2
     assert {
+        item["classification"] for item in receipt["unavailable_sizes"]
+    } == {"BLOCKED"}
+    assert {
+        item["status"] for item in receipt["unavailable_sizes"]
+    } == {"unavailable"}
+    assert all(item["value"] is None for item in receipt["unavailable_sizes"])
+    assert {
         item["reason"] for item in receipt["unavailable_sizes"]
     } == {"CAPACITY_LIMIT_CONFIGURED"}
     case = receipt["measured"][0]
@@ -399,8 +433,57 @@ def test_small_real_benchmark_has_ten_raw_repetitions_and_separate_classes(
     assert set(gate["checks"]) >= {
         "quality_recall",
         "quality_ndcg",
-        "memory_index",
+        "memory_policy",
         "latency",
         "rerank_present",
         "measured_only",
     }
+
+
+def test_memory_gate_is_end_to_end_unless_shared_store_is_explicit():
+    q0 = {
+        "classification": "MEASURED",
+        "quality": {"recall_at_10": 1.0, "ndcg_at_10": 1.0},
+        "index_bytes": 100,
+        "total_storage_bytes": 100,
+        "promotion_memory_bytes": 100,
+        "integral_store_shared": False,
+        "query_ms": {"p95": 10.0},
+        "rerank_ms": {"p50": 0.0},
+    }
+    q2b = {
+        "classification": "MEASURED",
+        "quality": {"recall_at_10": 1.0, "ndcg_at_10": 1.0},
+        "index_bytes": 20,
+        "total_storage_bytes": 120,
+        "promotion_memory_bytes": 120,
+        "integral_store_shared": False,
+        "query_ms": {"p95": 10.0},
+        "rerank_ms": {"p50": 1.0},
+    }
+    dedicated = quant_benchmark._promotion_gate(
+        q0,
+        q2b,
+        max_recall_regression=0.02,
+        max_ndcg_regression=0.02,
+        minimum_index_reduction=0.50,
+        maximum_latency_ratio=1.50,
+    )
+    assert dedicated["observed"]["index_reduction"] == pytest.approx(0.80)
+    assert dedicated["observed"]["total_storage_reduction"] == pytest.approx(-0.20)
+    assert dedicated["checks"]["memory_policy"] is False
+    assert dedicated["decision"] == "REJECT"
+
+    q2b["integral_store_shared"] = True
+    q2b["promotion_memory_bytes"] = 20
+    shared = quant_benchmark._promotion_gate(
+        q0,
+        q2b,
+        max_recall_regression=0.02,
+        max_ndcg_regression=0.02,
+        minimum_index_reduction=0.50,
+        maximum_latency_ratio=1.50,
+    )
+    assert shared["observed"]["storage_policy"] == "shared-integral-store"
+    assert shared["checks"]["memory_policy"] is True
+    assert shared["decision"] == "PROMOTE"
