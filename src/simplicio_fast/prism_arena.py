@@ -6,7 +6,6 @@ import hashlib
 import json
 import mmap
 import os
-import resource
 import shutil
 import struct
 import tempfile
@@ -17,7 +16,52 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+try:
+    import resource  # Unix peak RSS; absent on Windows
+except ImportError:  # pragma: no cover - Windows
+    resource = None  # type: ignore[assignment]
+
 from .hbp_codec import GENESIS, seal_receipt, verify_chain
+
+
+def _peak_rss_kib() -> int:
+    """Best-effort peak RSS in KiB. Never raises; returns 0 if unobservable."""
+    if resource is not None:
+        return int(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)
+    if os.name == "nt":  # pragma: no cover - exercised on Windows hosts
+        try:
+            import ctypes
+            from ctypes import wintypes
+
+            class PROCESS_MEMORY_COUNTERS(ctypes.Structure):
+                _fields_ = [
+                    ("cb", wintypes.DWORD),
+                    ("PageFaultCount", wintypes.DWORD),
+                    ("PeakWorkingSetSize", ctypes.c_size_t),
+                    ("WorkingSetSize", ctypes.c_size_t),
+                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                    ("PagefileUsage", ctypes.c_size_t),
+                    ("PeakPagefileUsage", ctypes.c_size_t),
+                ]
+
+            counters = PROCESS_MEMORY_COUNTERS()
+            counters.cb = ctypes.sizeof(PROCESS_MEMORY_COUNTERS)
+            handle = ctypes.windll.kernel32.GetCurrentProcess()
+            get_mem = ctypes.windll.psapi.GetProcessMemoryInfo
+            get_mem.argtypes = [
+                wintypes.HANDLE,
+                ctypes.POINTER(PROCESS_MEMORY_COUNTERS),
+                wintypes.DWORD,
+            ]
+            get_mem.restype = wintypes.BOOL
+            if get_mem(handle, ctypes.byref(counters), counters.cb):
+                return max(1, int(counters.PeakWorkingSetSize // 1024))
+        except Exception:
+            return 0
+    return 0
 
 ARENA_SCHEMA = "simplicio.fast.prism-arena/v1"
 SLOT_SCHEMA = "simplicio.fast.prism-slot/v1"
@@ -52,7 +96,14 @@ def _safe_component(value: str, name: str) -> str:
 
 def _safe_path(value: str) -> str:
     path = Path(value)
-    if not value or path.is_absolute() or ".." in path.parts or path.as_posix() != value:
+    # Windows does not treat "/escape" as absolute; reject rooted paths explicitly.
+    if (
+        not value
+        or value.startswith(("/", "\\"))
+        or path.is_absolute()
+        or ".." in path.parts
+        or path.as_posix() != value
+    ):
         raise ArenaError("overlay_escape", value)
     return value
 
@@ -875,7 +926,7 @@ class PrismArena:
 
     def metrics(self) -> dict[str, Any]:
         self._ensure_open()
-        rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        rss = _peak_rss_kib()
         active_overlays = sum(1 for overlay in self._overlays.values() if overlay.active)
         return {
             "schema": METRICS_SCHEMA,

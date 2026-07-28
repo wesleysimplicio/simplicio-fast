@@ -552,6 +552,7 @@ class CliSeamTests(unittest.TestCase):
                 capture_output=True,
                 text=True,
                 check=False,
+                stdin=subprocess.DEVNULL,
             )
         self.assertEqual(0, completed.returncode, completed.stderr)
         receipt = json.loads(completed.stdout)

@@ -6,10 +6,14 @@ import hashlib
 import json
 import mmap
 from pathlib import Path
-import resource
 import threading
 import time
 from typing import Any, Iterable, Mapping, Sequence
+
+try:
+    import resource  # Unix peak RSS; absent on Windows
+except ImportError:  # pragma: no cover - Windows
+    resource = None  # type: ignore[assignment]
 
 ENVELOPE_SCHEMA = "simplicio.fast-slot-envelope/v1"
 RECEIPT_SCHEMA = "simplicio.fast-slot-receipt/v1"
@@ -176,7 +180,9 @@ class SlotExecutor:
             self.workers_started += 1
         started = time.perf_counter()
         cpu_started = time.process_time()
-        rss_started = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        rss_started = (
+            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource is not None else 0
+        )
         overlay = self.root / "overlays" / env["run_id"] / (
             f"{env['slot_id']}-g{env['generation']}-{env['fence']}"
         )
@@ -204,7 +210,15 @@ class SlotExecutor:
             "operations": operations, "bytes_written": bytes_written,
             "latency_ms": round((time.perf_counter() - started) * 1000, 3),
             "cpu_ms": round((time.process_time() - cpu_started) * 1000, 3),
-            "rss_kib_delta": max(0, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - rss_started),
+            "rss_kib_delta": max(
+                0,
+                (
+                    resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                    if resource is not None
+                    else 0
+                )
+                - rss_started,
+            ),
             "runtime_mode": "runtime" if runtime_available else "python_fallback",
             "runtime_null_reason": None if runtime_available else "RUNTIME_UNAVAILABLE",
             "engine": "rust" if rust_available else "python",

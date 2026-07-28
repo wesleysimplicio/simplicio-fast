@@ -40,7 +40,6 @@ def _fake_runtime(
     doctor_kind: str = "normal",
     response_kind: str = "normal",
 ) -> RuntimeArtifact:
-    path = root / "simplicio"
     host = response_platform or platform_tag() or "unsupported"
     source = f"""#!/usr/bin/env python3
 import hashlib
@@ -108,8 +107,18 @@ elif {response_kind!r} == "large":
     response["result"] = "x" * 5000
 print(json.dumps(response, sort_keys=True))
 """
-    path.write_text(source, encoding="utf-8")
-    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    script = root / "simplicio_runtime_impl.py"
+    script.write_text(source, encoding="utf-8")
+    if os.name == "nt":
+        path = root / "simplicio.cmd"
+        path.write_text(
+            f'@echo off\r\n"{sys.executable}" "{script}" %*\r\n',
+            encoding="utf-8",
+        )
+    else:
+        path = root / "simplicio"
+        path.write_text(source, encoding="utf-8")
+        path.chmod(path.stat().st_mode | stat.S_IXUSR)
     return RuntimeArtifact(
         executable=path,
         sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
@@ -164,6 +173,7 @@ assert "simplicio_fast.native_backend" not in sys.modules
         check=False,
         capture_output=True,
         text=True,
+        stdin=subprocess.DEVNULL,
         env={**dict(os.environ), "PYTHONPATH": "src"},
     )
     assert completed.returncode == 0, completed.stderr
@@ -252,13 +262,17 @@ def test_artifact_is_verified_before_process_spawn(tmp_path, monkeypatch, mutato
 
 def test_runtime_artifact_hashing_streams_and_enforces_size_bound(tmp_path, monkeypatch):
     artifact = _fake_runtime(tmp_path)
+    # Ensure the fixture exceeds the 1 KiB enforcement bound on every platform
+    # (Windows .cmd wrappers are otherwise only a few hundred bytes).
+    padded = artifact.executable
+    padded.write_bytes(padded.read_bytes() + (b"#pad\n" * 400))
     sized = RuntimeArtifact(
-        executable=artifact.executable,
-        sha256=artifact.sha256,
+        executable=padded,
+        sha256=hashlib.sha256(padded.read_bytes()).hexdigest(),
         version=artifact.version,
         platform=artifact.platform,
         source_commit=artifact.source_commit,
-        size=artifact.executable.stat().st_size,
+        size=padded.stat().st_size,
     )
     monkeypatch.setattr(
         Path,
@@ -456,8 +470,10 @@ def test_missing_runtime_auto_falls_back_and_rust_fails_closed():
 
 def test_timeout_and_cancel_are_distinct_and_source_remains_immutable(tmp_path):
     artifact = _fake_runtime(tmp_path, sleep_operation="page")
+    # Windows .cmd→python spawn is slower than 50ms; keep timeout << sleep(5).
+    short_timeout = 0.05 if os.name != "nt" else 0.4
     backend = RuntimeFastBackend(
-        artifact, required_capabilities=("page",), timeout_seconds=0.05
+        artifact, required_capabilities=("page",), timeout_seconds=short_timeout
     )
     backend.handshake()
     payload = {"hex": b"immutable".hex(), "offset": 0, "limit": 4}
