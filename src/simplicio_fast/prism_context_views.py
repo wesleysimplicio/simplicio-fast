@@ -43,6 +43,33 @@ def _require_authority(authority: ContextAuthority | None) -> ContextAuthority:
     return authority
 
 
+def _compatibility_span(item: Mapping[str, Any]) -> dict[str, Any]:
+    provenance = item.get("provenance")
+    if not isinstance(provenance, list):
+        raise ContextViewError("compatibility_binding_invalid")
+    fields: dict[str, Any] = {}
+    for entry in provenance:
+        if not isinstance(entry, str) or not entry.startswith("compat:"):
+            continue
+        key, separator, encoded = entry[7:].partition(":")
+        if separator and key in {"start", "end"}:
+            try:
+                fields[key] = json.loads(encoded)
+            except json.JSONDecodeError as error:
+                raise ContextViewError(
+                    "compatibility_binding_invalid", key
+                ) from error
+    if set(fields) != {"start", "end"}:
+        raise ContextViewError("compatibility_binding_invalid")
+    return {
+        "path": item["path"],
+        "start": fields["start"],
+        "end": fields["end"],
+        "text_hash": item["source_sha256"],
+        "tokens": item["token_count"],
+    }
+
+
 def _request_from_record(value: object) -> ContextViewRequest:
     if not isinstance(value, Mapping):
         raise ContextViewError("request_invalid")
@@ -134,7 +161,17 @@ def build_context_view(
             base_generation=generation_id,
             token_count=tokens,
             path=path,
-            provenance=("prism_context_views:compatibility",),
+            provenance=(
+                "prism_context_views:compatibility",
+                "compat:start:"
+                + json.dumps(
+                    span.get("start"), separators=(",", ":"), ensure_ascii=True
+                ),
+                "compat:end:"
+                + json.dumps(
+                    span.get("end"), separators=(",", ":"), ensure_ascii=True
+                ),
+            ),
         )
         items.append(item)
         metadata[handle] = {
@@ -233,21 +270,23 @@ def validate_context_view(
     selected_by_handle = {
         item["handle"]: item for item in deep["selected"]
     }
-    expected_spans = []
-    for span in value.get("spans", []):
-        if not isinstance(span, Mapping):
-            raise ContextViewError("compatibility_binding_invalid")
-        matches = [
-            item
-            for item in selected_by_handle.values()
-            if item["path"] == span.get("path")
-            and item["source_sha256"] == span.get("text_hash")
-            and item["token_count"] == span.get("tokens")
-        ]
-        if len(matches) != 1:
-            raise ContextViewError("compatibility_binding_invalid")
-        expected_spans.append(dict(span))
-    if len(expected_spans) != len(deep["selected"]):
+    expected_spans = [
+        _compatibility_span(item) for item in selected_by_handle.values()
+    ]
+    if value.get("spans") != expected_spans:
+        raise ContextViewError("compatibility_binding_invalid")
+    expected_hashes = {
+        span["path"]: span["text_hash"]
+        for span in expected_spans
+        if span["path"]
+    }
+    if value.get("source_hashes") != dict(sorted(expected_hashes.items())):
+        raise ContextViewError("compatibility_binding_invalid")
+    if value.get("budget_tokens") != request.budget.max_tokens:
+        raise ContextViewError("compatibility_binding_invalid")
+    if value.get("truncated") is not (
+        deep["quality"]["budget_rejections"] > 0
+    ):
         raise ContextViewError("compatibility_binding_invalid")
     return {**value, "view_hash": supplied_hash}
 
