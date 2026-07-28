@@ -468,7 +468,8 @@ Ready in Fast 2.0.14:
 - CRUD, tests and benchmark;
 - Mapper/Dev CLI readiness checks with explicit fallback receipts;
 - canonical base generations, isolated worktree overlays, leases and refresh;
-- provenance, apply and rollout receipts for shadow, canary, integrated and rollback states.
+- provenance, apply and rollout receipts for shadow, canary, integrated and rollback states;
+- optional Runtime-first semantic scoring with a complete deterministic offline fallback, documented in [semantic scoring](docs/semantic-scoring.md).
 
 External boundaries and follow-ups:
 

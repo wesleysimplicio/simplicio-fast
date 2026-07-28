@@ -22,6 +22,12 @@ from .engine import EngineSelection, EngineSelectionError, select_engine
 from .delivery import DeliveryEngine
 from .query_planner import plan_query
 from .navigation import DIRECTIONS, RELATIONS, NavigationBudget, NavigationIndex
+from .semantic_scoring import (
+    SemanticBudgets,
+    SemanticScorer,
+    SourceDocument,
+    semantic_capabilities,
+)
 from .users.http import serve
 from .users.repository import JsonUserRepository
 from .users.service import UserService
@@ -398,6 +404,23 @@ def build_parser() -> argparse.ArgumentParser:
     merge.add_argument("--overlay-generation")
     merge.add_argument("--max-results", type=int, default=50)
 
+    semantic = commands.add_parser(
+        "semantic-score",
+        help="rank bounded candidates with optional Runtime inference and deterministic fallback",
+        description=(
+            "Read canonical candidate handles/text from JSON and emit semantic-score/v1 rows. "
+            "The CLI offline path never downloads a model and remains fully deterministic."
+        ),
+    )
+    semantic.add_argument("query")
+    semantic.add_argument("--generation", required=True)
+    semantic.add_argument("--candidates", required=True, help="JSON list of canonical_id/text records")
+    semantic.add_argument("--max-candidates", type=int, default=128)
+    semantic.add_argument("--max-results", type=int, default=10)
+    semantic.add_argument("--max-request-bytes", type=int, default=256_000)
+    semantic.add_argument("--max-tokens", type=int, default=8_000)
+    json_option(semantic)
+
     commands.add_parser("capabilities", help="report parser capability negotiation")
 
     pin = commands.add_parser("pin", help="acquire a lease protecting a generation from GC")
@@ -740,12 +763,55 @@ def main() -> None:
                     "overlay_generation": view.overlay_generation,
                     "matches": [asdict(item) for item in matches],
                 })
+        elif args.command == "semantic-score":
+            raw_candidates = json.loads(Path(args.candidates).read_text(encoding="utf-8"))
+            if not isinstance(raw_candidates, list):
+                raise ValueError("--candidates must contain a JSON list")
+            candidates = []
+            for raw in raw_candidates:
+                if not isinstance(raw, dict):
+                    raise ValueError("each semantic candidate must be an object")
+                text = raw.get("text")
+                canonical_id = raw.get("canonical_id")
+                if not isinstance(text, str) or not isinstance(canonical_id, str):
+                    raise ValueError("semantic candidates require canonical_id and text")
+                if raw.get("source_sha256") is None:
+                    candidates.append(
+                        SourceDocument.create(
+                            canonical_id,
+                            text,
+                            structural_score=float(raw.get("structural_score", 0.0)),
+                        )
+                    )
+                else:
+                    candidates.append(
+                        SourceDocument(
+                            canonical_id,
+                            text,
+                            raw["source_sha256"],
+                            float(raw.get("structural_score", 0.0)),
+                        )
+                    )
+            budgets = SemanticBudgets(
+                max_candidates=args.max_candidates,
+                max_selected=args.max_results,
+                max_request_bytes=args.max_request_bytes,
+                max_selected_tokens=args.max_tokens,
+            )
+            emit(
+                SemanticScorer(budgets=budgets).score(
+                    generation=args.generation,
+                    query=args.query,
+                    candidates=tuple(candidates),
+                )
+            )
         elif args.command == "capabilities":
             emit({
                 "schema": "simplicio.fast.capabilities/v1",
                 "engine": selection.receipt(),
                 "engine_manifest": selection.manifest,
                 "capabilities": [asdict(item) for item in capability_report()],
+                "semantic_scoring": semantic_capabilities(),
             })
         elif args.command == "pin":
             lease = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).pin(args.generation, args.owner, args.ttl)
