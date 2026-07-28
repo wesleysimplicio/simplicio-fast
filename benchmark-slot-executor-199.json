@@ -1,0 +1,139 @@
+{
+  "cases": [
+    {
+      "mean_wall_seconds": 0.00033285099925706163,
+      "repetitions": 3,
+      "samples": [
+        {
+          "cache_hits": 0,
+          "cpu_seconds": 0.0003425490000000045,
+          "envelopes": 1,
+          "io_bytes": 2,
+          "rss_kib_delta": 0,
+          "tokens": null,
+          "tokens_null_reason": "NO_LLM_USED",
+          "wall_seconds": 0.00034152699663536623,
+          "workers_avoided": 0,
+          "workers_materialized": 1
+        },
+        {
+          "cache_hits": 0,
+          "cpu_seconds": 0.0003698999999999994,
+          "envelopes": 1,
+          "io_bytes": 2,
+          "rss_kib_delta": 0,
+          "tokens": null,
+          "tokens_null_reason": "NO_LLM_USED",
+          "wall_seconds": 0.0003689279983518645,
+          "workers_avoided": 0,
+          "workers_materialized": 1
+        },
+        {
+          "cache_hits": 0,
+          "cpu_seconds": 0.0002888890000000005,
+          "envelopes": 1,
+          "io_bytes": 2,
+          "rss_kib_delta": 0,
+          "tokens": null,
+          "tokens_null_reason": "NO_LLM_USED",
+          "wall_seconds": 0.00028809800278395414,
+          "workers_avoided": 0,
+          "workers_materialized": 1
+        }
+      ],
+      "slots": 1
+    },
+    {
+      "mean_wall_seconds": 0.003873005000059493,
+      "repetitions": 3,
+      "samples": [
+        {
+          "cache_hits": 0,
+          "cpu_seconds": 0.003829955000000003,
+          "envelopes": 20,
+          "io_bytes": 40,
+          "rss_kib_delta": 0,
+          "tokens": null,
+          "tokens_null_reason": "NO_LLM_USED",
+          "wall_seconds": 0.0038292030003503896,
+          "workers_avoided": 0,
+          "workers_materialized": 20
+        },
+        {
+          "cache_hits": 0,
+          "cpu_seconds": 0.003944025000000004,
+          "envelopes": 20,
+          "io_bytes": 40,
+          "rss_kib_delta": 0,
+          "tokens": null,
+          "tokens_null_reason": "NO_LLM_USED",
+          "wall_seconds": 0.0039432929988834076,
+          "workers_avoided": 0,
+          "workers_materialized": 20
+        },
+        {
+          "cache_hits": 0,
+          "cpu_seconds": 0.0038471200000000025,
+          "envelopes": 20,
+          "io_bytes": 40,
+          "rss_kib_delta": 0,
+          "tokens": null,
+          "tokens_null_reason": "NO_LLM_USED",
+          "wall_seconds": 0.0038465190009446815,
+          "workers_avoided": 0,
+          "workers_materialized": 20
+        }
+      ],
+      "slots": 20
+    },
+    {
+      "mean_wall_seconds": 0.004473758669822321,
+      "repetitions": 3,
+      "samples": [
+        {
+          "cache_hits": 0,
+          "cpu_seconds": 0.004422776999999996,
+          "envelopes": 22,
+          "io_bytes": 44,
+          "rss_kib_delta": 0,
+          "tokens": null,
+          "tokens_null_reason": "NO_LLM_USED",
+          "wall_seconds": 0.004421985002409201,
+          "workers_avoided": 0,
+          "workers_materialized": 22
+        },
+        {
+          "cache_hits": 0,
+          "cpu_seconds": 0.004536344999999997,
+          "envelopes": 22,
+          "io_bytes": 44,
+          "rss_kib_delta": 0,
+          "tokens": null,
+          "tokens_null_reason": "NO_LLM_USED",
+          "wall_seconds": 0.004535644002316985,
+          "workers_avoided": 0,
+          "workers_materialized": 22
+        },
+        {
+          "cache_hits": 0,
+          "cpu_seconds": 0.004464329000000003,
+          "envelopes": 22,
+          "io_bytes": 44,
+          "rss_kib_delta": 0,
+          "tokens": null,
+          "tokens_null_reason": "NO_LLM_USED",
+          "wall_seconds": 0.004463647004740778,
+          "workers_avoided": 0,
+          "workers_materialized": 22
+        }
+      ],
+      "slots": 22
+    }
+  ],
+  "classification": "MEASURED_LOCAL",
+  "fallback": "python",
+  "local_llm": false,
+  "runtime": "unavailable",
+  "rust": "unavailable",
+  "schema": "simplicio.fast-slot-benchmark/v1"
+}
