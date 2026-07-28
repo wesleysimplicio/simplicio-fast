@@ -7,6 +7,7 @@ import json
 import math
 from pathlib import Path
 import random
+import subprocess
 
 import pytest
 
@@ -380,10 +381,63 @@ def test_direct_parallel_queries_have_identical_golden_results(tmp_path):
 def test_real_repository_corpus_is_content_addressed_without_embedding():
     receipt = repository_corpus_receipt(Path(__file__).parents[1])
     assert receipt["kind"] == "real-repository-corpus"
+    assert receipt["source"] == "git-head-tree"
+    assert receipt["tracked_only"] is True
+    assert len(receipt["source_commit"]) == 40
+    assert len(receipt["source_tree"]) == 40
     assert receipt["files"] > 0
     assert len(receipt["corpus_hash"]) == 64
     assert receipt["embedded"] is False
     assert receipt["embedded_null_reason"]
+
+
+def test_real_corpus_is_identical_in_clean_clone_and_excludes_transients(
+    tmp_path,
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / ".gitignore").write_text(
+        ".pytest_cache/\n*.scratch.json\n",
+        encoding="utf-8",
+    )
+    (source / "README.md").write_text("tracked\n", encoding="utf-8")
+    tracked = source / "src" / "example.py"
+    tracked.parent.mkdir()
+    tracked.write_text("VALUE = 1\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", source], check=True)
+    subprocess.run(["git", "-C", source, "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            source,
+            "-c",
+            "user.name=Quant Fixture",
+            "-c",
+            "user.email=quant@example.invalid",
+            "commit",
+            "-qm",
+            "fixture",
+        ],
+        check=True,
+    )
+    cache = source / ".pytest_cache" / "README.md"
+    cache.parent.mkdir()
+    cache.write_text("ignored cache\n", encoding="utf-8")
+    (source / "untracked.json").write_text("{}", encoding="utf-8")
+    (source / "ignored.scratch.json").write_text("{}", encoding="utf-8")
+
+    original = repository_corpus_receipt(source)
+    clone = tmp_path / "clone"
+    subprocess.run(["git", "clone", "-q", source, clone], check=True)
+    cloned = repository_corpus_receipt(clone)
+
+    assert original == cloned
+    assert set(original["source_hashes"]) == {"README.md", "src/example.py"}
+    assert all(
+        ".pytest_cache" not in path and "untracked" not in path
+        for path in original["source_hashes"]
+    )
 
 
 def test_small_real_benchmark_has_ten_raw_repetitions_and_separate_classes(
