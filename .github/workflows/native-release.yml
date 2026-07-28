@@ -1,0 +1,96 @@
+name: Native release artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x86_64
+            filename: simplicio-fast-native
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            platform: linux-aarch64
+            filename: simplicio-fast-native
+            linker: aarch64-linux-gnu-gcc
+          - os: macos-14
+            target: aarch64-apple-darwin
+            platform: macos-aarch64
+            filename: simplicio-fast-native
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            platform: windows-x86_64
+            filename: simplicio-fast-native.exe
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - name: Install Linux ARM64 linker
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: sudo apt-get update && sudo apt-get install -y gcc-aarch64-linux-gnu
+      - name: Configure cross linker
+        if: matrix.linker != ''
+        shell: bash
+        run: |
+          target_key="$(echo '${{ matrix.target }}' | tr '[:lower:]-' '[:upper:]_')"
+          echo "CARGO_TARGET_${target_key}_LINKER=${{ matrix.linker }}" >> "$GITHUB_ENV"
+      - name: Build native CLI
+        run: cargo build --manifest-path native/fast-native/Cargo.toml --release --target ${{ matrix.target }}
+      - name: Stage artifact
+        shell: bash
+        run: |
+          abi_dir="simplicio.fast-native_v1"
+          output="dist/${{ matrix.platform }}/${abi_dir}"
+          mkdir -p "$output"
+          cp "native/fast-native/target/${{ matrix.target }}/release/${{ matrix.filename }}" "$output/${{ matrix.filename }}"
+          python scripts/build_native_manifest.py \
+            --binary "$output/${{ matrix.filename }}" \
+            --platform "${{ matrix.platform }}" \
+            --version "${GITHUB_REF_NAME:-snapshot}" \
+            --source-commit "$GITHUB_SHA" \
+            --toolchain "$(rustc --version)" \
+            --output "$output/manifest.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: simplicio-fast-native-${{ matrix.platform }}
+          path: dist/${{ matrix.platform }}/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: simplicio-fast-native-*
+          path: release-assets
+      - name: Package release assets
+        run: |
+          find release-assets -mindepth 1 -maxdepth 1 -type d -print0 |
+            while IFS= read -r -d '' directory; do
+              archive="${directory}.tar.gz"
+              tar -C "$directory" -czf "$archive" .
+            done
+      - name: Publish assets on tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" ||
+            gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes
+          gh release upload "$GITHUB_REF_NAME" release-assets/*.tar.gz --clobber
