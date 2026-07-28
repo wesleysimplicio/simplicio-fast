@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+
 import pytest
 
 from simplicio_fast.prism_context_views import (
@@ -103,3 +106,28 @@ def test_path_escape_and_root_bypass_are_rejected():
             authority=authority(roots=("a.py",)),
         )
     assert denied.value.reason_code == "path_denied"
+
+
+def test_rehashed_legacy_alias_cannot_override_deep_receipt():
+    current_authority = authority(roots=("a.py",))
+    view = build_context_view(
+        agent_id="a",
+        stage_id="s",
+        task_id="t",
+        generation_id="g",
+        spans=[{"path": "a.py", "start": 1, "end": 2, "text": "x", "tokens": 1}],
+        authority=current_authority,
+    )
+    view["spans"][0]["start"] = -999
+    unsigned = {key: value for key, value in view.items() if key != "view_hash"}
+    view["view_hash"] = hashlib.sha256(
+        json.dumps(
+            unsigned,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    with pytest.raises(ContextViewError) as raised:
+        validate_context_view(view, authority=current_authority)
+    assert raised.value.reason_code == "compatibility_binding_invalid"
