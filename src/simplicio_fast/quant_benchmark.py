@@ -37,6 +37,34 @@ from .turboquant import (
     quantize as turboquant_quantize,
 )
 
+
+def _run_git(
+    args: Sequence[str],
+    *,
+    cwd: Path | str,
+    timeout: float,
+    text: bool = False,
+) -> subprocess.CompletedProcess[Any]:
+    """Run a git subprocess without inheriting redirected stdio on Windows.
+
+    pytest and other hosts redirect handles; on Windows, ``capture_output``
+    then fails with ``OSError: [WinError 6] Identificador inválido`` /
+    ``WinError 50`` when duplicating inherited pipes. Explicit DEVNULL stdin
+    and ``close_fds=False`` keep the call portable.
+    """
+    return subprocess.run(
+        ["git", *args],
+        cwd=str(cwd),
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=text,
+        timeout=timeout,
+        close_fds=False,
+    )
+
+
 BENCHMARK_SCHEMA = "simplicio.fast.quant-benchmark/v1"
 # Compatibility alias published by PR #217. New integrations should use
 # BENCHMARK_SCHEMA and run_benchmark.
@@ -574,29 +602,11 @@ def repository_corpus_receipt(root: str | Path) -> dict[str, Any]:
     base = Path(root).resolve()
     suffixes = {".py", ".md", ".toml", ".json", ".yaml", ".yml"}
     try:
-        commit = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            cwd=base,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
+        commit = _run_git(["rev-parse", "HEAD"], cwd=base, timeout=5, text=True).stdout.strip()
+        tree = _run_git(
+            ["rev-parse", "HEAD^{tree}"], cwd=base, timeout=5, text=True
         ).stdout.strip()
-        tree = subprocess.run(
-            ["git", "rev-parse", "HEAD^{tree}"],
-            cwd=base,
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        ).stdout.strip()
-        entries = subprocess.run(
-            ["git", "ls-tree", "-r", "-z", "HEAD"],
-            cwd=base,
-            check=True,
-            capture_output=True,
-            timeout=10,
-        ).stdout
+        entries = _run_git(["ls-tree", "-r", "-z", "HEAD"], cwd=base, timeout=10).stdout
     except (OSError, subprocess.SubprocessError) as error:
         raise QuantBenchmarkError(
             "SOURCE_TREE_UNAVAILABLE", type(error).__name__
@@ -616,13 +626,7 @@ def repository_corpus_receipt(root: str | Path) -> dict[str, Any]:
         ):
             continue
         try:
-            payload = subprocess.run(
-                ["git", "cat-file", "blob", object_id],
-                cwd=base,
-                check=True,
-                capture_output=True,
-                timeout=10,
-            ).stdout
+            payload = _run_git(["cat-file", "blob", object_id], cwd=base, timeout=10).stdout
         except (OSError, subprocess.SubprocessError) as error:
             raise QuantBenchmarkError(
                 "SOURCE_TREE_UNAVAILABLE",
@@ -1100,18 +1104,9 @@ def run_quant_benchmark(
 
 
 def _source_state(root: Path) -> dict[str, Any]:
-    import subprocess
-
     def git(*args: str) -> str | None:
         try:
-            return subprocess.run(
-                ["git", *args],
-                cwd=root,
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=3,
-            ).stdout.strip()
+            return _run_git(list(args), cwd=root, timeout=3, text=True).stdout.strip()
         except (OSError, subprocess.SubprocessError):
             return None
 
