@@ -10,6 +10,9 @@
     "classification",
     "config_hash",
     "generation",
+    "source_commit",
+    "source_tree",
+    "source_state",
     "environment",
     "corpora",
     "measured",
@@ -36,6 +39,44 @@
     },
     "generation": {
       "$ref": "#/$defs/sha256"
+    },
+    "source_commit": {
+      "$ref": "#/$defs/git-object"
+    },
+    "source_tree": {
+      "$ref": "#/$defs/git-object"
+    },
+    "source_state": {
+      "type": "object",
+      "required": [
+        "schema",
+        "commit",
+        "tree",
+        "dirty",
+        "reproducible",
+        "dirty_paths"
+      ],
+      "properties": {
+        "schema": {
+          "const": "simplicio.fast.benchmark-source-state/v1"
+        },
+        "commit": {
+          "$ref": "#/$defs/git-object"
+        },
+        "tree": {
+          "$ref": "#/$defs/git-object"
+        },
+        "dirty": {
+          "const": false
+        },
+        "reproducible": {
+          "const": true
+        },
+        "dirty_paths": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
     },
     "measured": {
       "type": "array",
@@ -74,13 +115,17 @@
         "type": "object",
         "required": [
           "classification",
+          "status",
           "vectors",
           "value",
           "reason"
         ],
         "properties": {
           "classification": {
-            "const": "MEASURED"
+            "const": "BLOCKED"
+          },
+          "status": {
+            "const": "unavailable"
           },
           "value": {
             "type": "null"
@@ -115,6 +160,10 @@
     "sha256": {
       "type": "string",
       "pattern": "^[0-9a-f]{64}$"
+    },
+    "git-object": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
     }
   },
   "additionalProperties": true
