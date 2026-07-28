@@ -3,6 +3,7 @@
 __version__ = "2.0.14"
 
 from .engine_selection import EngineSelection, EngineSelectionError, select_engine
+from .runtime_backend import RuntimeArtifact, RuntimeBackendError, RuntimeFastBackend, RuntimeSelection, select_runtime_backend
 from .knowledge import KnowledgeFacade
 from .pager import RequestKey, SingleFlightCoordinator, SingleFlightError, make_request_key
 from .workspace import GenerationId, Manifest, WorkspaceStore
@@ -31,6 +32,11 @@ __all__ = [
     "NavigationPage",
     "WorkspaceStore",
     "select_engine",
+    "RuntimeArtifact",
+    "RuntimeBackendError",
+    "RuntimeFastBackend",
+    "RuntimeSelection",
+    "select_runtime_backend",
     "KnowledgeFacade",
     "__version__",
     "navigate",
