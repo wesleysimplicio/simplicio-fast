@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.16 - 2026-07-28
+
+- Harden Runtime-first bridges after the PRISM deep implementation: fail-closed admission, forged-manifest rejection, and Windows-safe spawn/stdio handling.
+- Tighten quant benchmark contracts so unavailable sizes stay BLOCKED (never false MEASURED) and integrity/release gates stay aligned with package metadata.
+- Close the V3 epic path on master: PrismArena, content-addressed context views, native precompiled bundle path, semantic/LiteRT scoring, and integrity sync.
+
 ## 2.0.15 - 2026-07-28
 
 - Add the PRISM resident mmap arena, isolated task overlays, authority-bound
