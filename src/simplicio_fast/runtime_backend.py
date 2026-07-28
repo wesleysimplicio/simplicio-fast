@@ -295,12 +295,13 @@ class RuntimeFastBackend:
         started = time.monotonic()
         try:
             with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
+                # Windows forbids close_fds=True while redirecting stdio.
                 process = subprocess.Popen(
                     self.command,
                     stdin=subprocess.PIPE,
                     stdout=stdout,
                     stderr=stderr,
-                    close_fds=True,
+                    close_fds=(os.name != "nt"),
                 )
                 assert process.stdin is not None
                 process.stdin.write(request)

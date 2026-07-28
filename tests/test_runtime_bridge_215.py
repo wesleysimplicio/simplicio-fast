@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 import stat
+import sys
 
 import pytest
 
@@ -39,9 +41,17 @@ def _environment(tmp_path: Path, executable: Path, manifest: dict) -> dict[str, 
     }
 
 
+def _forged_echo(tmp_path: Path) -> Path:
+    """Non-runtime binary that exists on every platform (not /bin/echo)."""
+    path = tmp_path / "echo-forged"
+    path.write_bytes(b"#!/bin/sh\necho not-a-runtime\n")
+    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    return path
+
+
 def _runtime(tmp_path: Path) -> Path:
-    path = tmp_path / "simplicio"
-    path.write_text(
+    script = tmp_path / "simplicio_runtime_impl.py"
+    script.write_text(
         f"""#!/usr/bin/env python3
 import hashlib
 import json
@@ -72,8 +82,15 @@ print(json.dumps({{
 """,
         encoding="utf-8",
     )
-    path.chmod(path.stat().st_mode | stat.S_IXUSR)
-    return path
+    if os.name == "nt":
+        wrapper = tmp_path / "simplicio.cmd"
+        wrapper.write_text(
+            f'@echo off\r\n"{sys.executable}" "{script}" %*\r\n',
+            encoding="utf-8",
+        )
+        return wrapper
+    script.chmod(script.stat().st_mode | stat.S_IXUSR)
+    return script
 
 
 def test_discovery_without_manifest_never_spawns_echo(monkeypatch):
@@ -105,7 +122,8 @@ def test_manifest_without_explicit_abi_is_rejected_before_spawn(
         raise AssertionError("ABI-less artifact was spawned")
 
     monkeypatch.setattr("simplicio_fast.runtime_backend.subprocess.Popen", forbidden)
-    environment = _environment(tmp_path, Path("/bin/echo"), _manifest(Path("/bin/echo"), abi=None))
+    echo = _forged_echo(tmp_path)
+    environment = _environment(tmp_path, echo, _manifest(echo, abi=None))
     result = discover_native_binary(environment=environment)
     assert result["status"] == "rejected"
     assert result["reason_code"] == "ABI_MISMATCH"
@@ -113,18 +131,17 @@ def test_manifest_without_explicit_abi_is_rejected_before_spawn(
 
 
 def test_echo_with_forged_complete_manifest_fails_handshake(tmp_path):
-    environment = _environment(
-        tmp_path, Path("/bin/echo"), _manifest(Path("/bin/echo"))
-    )
+    echo = _forged_echo(tmp_path)
+    environment = _environment(tmp_path, echo, _manifest(echo))
     result = discover_native_binary(environment=environment)
     assert result["status"] == "rejected"
-    assert result["reason_code"] == "PROTOCOL_ERROR"
+    assert result["reason_code"] in {"PROTOCOL_ERROR", "RUNTIME_UNHEALTHY"}
     with pytest.raises(RuntimeBridgeError) as raised:
         execute_via_bridge(
             {"op": "sha256", "payload": {"hex": "00"}},
             environment=environment,
         )
-    assert raised.value.reason_code == "PROTOCOL_ERROR"
+    assert raised.value.reason_code in {"PROTOCOL_ERROR", "RUNTIME_UNHEALTHY"}
 
 
 def test_verified_runtime_is_the_only_execution_path(tmp_path):

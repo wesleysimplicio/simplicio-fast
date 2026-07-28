@@ -17,12 +17,16 @@ import os
 from pathlib import Path
 import platform
 import random
-import resource
 import statistics
 import struct
 import tempfile
 import time
 from typing import Any, Callable, Iterable, Mapping, Sequence
+
+try:
+    import resource  # Unix peak RSS / rusage; absent on Windows
+except ImportError:  # pragma: no cover - Windows
+    resource = None  # type: ignore[assignment]
 
 from .slot_executor import quantize as slot_quantize
 from .turboquant import (
@@ -630,16 +634,31 @@ def _mean_metrics(samples: Sequence[Mapping[str, float]]) -> dict[str, float]:
     }
 
 
+def _page_size() -> int:
+    try:
+        return int(os.sysconf("SC_PAGE_SIZE"))
+    except (AttributeError, ValueError, OSError):
+        return 4096
+
+
 def _current_rss_bytes() -> tuple[int | None, str | None]:
     statm = Path("/proc/self/statm")
     try:
         pages = int(statm.read_text(encoding="ascii").split()[1])
-        return pages * os.sysconf("SC_PAGE_SIZE"), None
+        return pages * _page_size(), None
     except (OSError, ValueError, IndexError):
         return None, "RSS_CURRENT_UNAVAILABLE"
 
 
 def _usage() -> dict[str, int]:
+    if resource is None:
+        return {
+            "minor_page_faults": 0,
+            "major_page_faults": 0,
+            "input_blocks": 0,
+            "output_blocks": 0,
+            "peak_rss_kib": 0,
+        }
     observed = resource.getrusage(resource.RUSAGE_SELF)
     return {
         "minor_page_faults": int(observed.ru_minflt),
@@ -745,12 +764,12 @@ def _measure_lane(
             "rss_before_bytes": rss_before,
             "rss_after_bytes": rss_after,
             "resident_pages_before": (
-                rss_before // os.sysconf("SC_PAGE_SIZE")
+                rss_before // _page_size()
                 if rss_before is not None
                 else None
             ),
             "resident_pages_after": (
-                rss_after // os.sysconf("SC_PAGE_SIZE")
+                rss_after // _page_size()
                 if rss_after is not None
                 else None
             ),
@@ -1208,7 +1227,7 @@ def run_benchmark(
             "machine": platform.machine(),
             "processor": platform.processor() or None,
             "cpu_count": os.cpu_count(),
-            "page_size": os.sysconf("SC_PAGE_SIZE"),
+            "page_size": _page_size(),
         },
         "corpora": {
             "real": repository_corpus_receipt(root),
