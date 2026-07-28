@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 from pathlib import Path
+import platform
 import subprocess
 from typing import Any, Mapping, Sequence
 
@@ -96,6 +97,51 @@ def select_backend(artifact: str | Path | None,
     if not path.is_file():
         return PythonBackend(), "RUST_ARTIFACT_INVALID"
     return RustBackend(path, manifest), None
+
+
+def platform_tag(*, system: str | None = None,
+                 machine: str | None = None) -> str | None:
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    aliases = {
+        ("linux", "x86_64"): "linux-x86_64",
+        ("linux", "amd64"): "linux-x86_64",
+        ("linux", "aarch64"): "linux-aarch64",
+        ("linux", "arm64"): "linux-aarch64",
+        ("darwin", "arm64"): "macos-aarch64",
+        ("windows", "amd64"): "windows-x86_64",
+        ("windows", "x86_64"): "windows-x86_64",
+    }
+    return aliases.get((system, machine))
+
+
+def resolve_packaged_backend(root: str | Path, *,
+                             system: str | None = None,
+                             machine: str | None = None
+                             ) -> tuple[PythonBackend | RustBackend, str | None]:
+    """Resolve `artifacts/<platform>/<ABI>/manifest.json` without a toolchain.
+
+    Absence is a normal, explicit Python fallback. This function never invokes
+    cargo or rustc; only a manifest-bound executable can be selected.
+    """
+    tag = platform_tag(system=system, machine=machine)
+    if tag is None:
+        return PythonBackend(), "RUST_PLATFORM_UNSUPPORTED"
+    abi_dir = ABI.replace("/", "_")
+    directory = Path(root) / "artifacts" / tag / abi_dir
+    manifest_path = directory / "manifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return PythonBackend(), "RUST_ARTIFACT_MISSING"
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return PythonBackend(), "RUST_MANIFEST_INVALID"
+    filename = manifest.get("filename")
+    if not isinstance(filename, str) or not filename or Path(filename).name != filename:
+        return PythonBackend(), "RUST_MANIFEST_INVALID"
+    manifest = dict(manifest)
+    manifest.setdefault("platform", tag)
+    return select_backend(directory / filename, manifest)
 
 
 def execute_with_fallback(backend: PythonBackend | RustBackend,
