@@ -3,7 +3,8 @@ from pathlib import Path
 import pytest
 from simplicio_fast.native_backend import (
     ABI, PythonBackend, RustBackend, backend_receipt_fields,
-    execute_with_fallback, select_backend,
+    execute_with_fallback, platform_tag, resolve_packaged_backend,
+    select_backend,
 )
 
 
@@ -74,3 +75,35 @@ def test_selected_backend_is_serializable_in_generation_receipt():
         "backend": "python", "backend_artifact_hash": None,
         "fallback_reason": "RUST_UNAVAILABLE",
     }
+
+
+def test_packaged_resolver_is_explicit_when_no_precompiled_binary_exists(tmp_path):
+    backend, reason = resolve_packaged_backend(
+        tmp_path, system="Linux", machine="x86_64")
+    assert isinstance(backend, PythonBackend)
+    assert reason == "RUST_ARTIFACT_MISSING"
+
+
+def test_packaged_resolver_validates_manifest_and_sha_without_toolchain(tmp_path):
+    directory = tmp_path / "artifacts" / "linux-x86_64" / ABI.replace("/", "_")
+    directory.mkdir(parents=True)
+    artifact = directory / "simplicio-fast-native"
+    artifact.write_bytes(b"precompiled-fixture")
+    (directory / "manifest.json").write_text(
+        '{"abi":"simplicio.fast-native/v1","filename":"simplicio-fast-native",'
+        '"platform":"linux-x86_64","sha256":"'
+        + hashlib.sha256(artifact.read_bytes()).hexdigest() + '"}',
+        encoding="utf-8")
+    backend, reason = resolve_packaged_backend(
+        tmp_path, system="linux", machine="amd64")
+    assert isinstance(backend, RustBackend) and reason is None
+    artifact.write_bytes(b"tampered")
+    backend, reason = resolve_packaged_backend(
+        tmp_path, system="linux", machine="x86_64")
+    assert isinstance(backend, PythonBackend)
+    assert reason == "RUST_ARTIFACT_HASH_MISMATCH"
+
+
+def test_platform_aliases_are_canonical_and_unknown_is_rejected():
+    assert platform_tag(system="Darwin", machine="arm64") == "macos-aarch64"
+    assert platform_tag(system="plan9", machine="mips") is None
