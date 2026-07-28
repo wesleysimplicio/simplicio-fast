@@ -1,8 +1,8 @@
 # Quant benchmark Q0/Q1/Q2 — issue #198
 
 - Classification: `MEASURED`
-- Source commit: `5ec1284af830991d4ee03c915a707dc0c9b81e3e`
-- Source tree: `318dd6b718b2f5d85136d592229eca7edbc4dcc0`
+- Source commit: `d0744b1db349f159c95c6d74937b1267c1552922`
+- Source tree: `064aaaf7141e522fde714683d1514b99f03daf7f`
 - Reproducible clean tree: `True`
 - Config hash: `5c8c6711592e4d4487c634318040f0af47e27eb725db99539ccb158896fb1944`
 - Generation: `634e7db3c342dabaff4f5d6fc7b2c3df9fedc61eda878ea21a512b6731aacdc9`
