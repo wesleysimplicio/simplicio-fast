@@ -112,6 +112,8 @@ Reproduce it instead of trusting the table:
 python benchmarks/run.py
 ```
 
+For the quality-first Q0/Q1/Q2 vector matrix, run `PYTHONPATH=src python benchmarks/quant_benchmark_198.py`; it publishes raw measured samples and keeps simulated or capacity-blocked sizes explicitly `null`. See [the quant benchmark contract](docs/quant-benchmark-198.md).
+
 The command records wall time, CPU time, peak RSS (or `null` plus an explicit reason when the host does not expose it), cold build, warm query, no-change rebuild, one-file rebuild and whether the changed symbol became visible. It also measures the shared-base overlay path at 1, 5 and 20 slots with ten repetitions per row. Use identical hardware/configuration when comparing integrations.
 
 Peak RSS is reported in KiB using POSIX `resource.getrusage` or Windows
