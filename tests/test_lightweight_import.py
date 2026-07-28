@@ -2,11 +2,15 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import tomllib
 
 import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PROJECT_VERSION = tomllib.loads(
+    (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+)["project"]["version"]
 
 
 def _probe(expression: str) -> dict[str, object]:
@@ -29,7 +33,7 @@ def test_package_import_does_not_load_heavy_implementations():
         "'loaded':sorted(name for name in sys.modules "
         "if name.startswith('simplicio_fast.'))}))"
     )
-    assert receipt == {"version": "2.0.15", "loaded": []}
+    assert receipt == {"version": PROJECT_VERSION, "loaded": []}
 
 
 @pytest.mark.parametrize(
