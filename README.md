@@ -12,7 +12,8 @@
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.15-22c55e?style=for-the-badge" alt="Version 2.0.15"></a>
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.11%2B-3776ab?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11+"></a>
   <a href="https://github.com/wesleysimplicio/simplicio-fast/issues"><img src="https://img.shields.io/github/issues/wesleysimplicio/simplicio-fast?style=for-the-badge" alt="Open issues"></a>
-  <img src="https://img.shields.io/badge/runtime_dependencies-0-111827?style=for-the-badge" alt="Zero runtime dependencies">
+  <img src="https://img.shields.io/badge/core_runtime_dependencies-0-111827?style=for-the-badge" alt="0 core runtime dependencies">
+  <img src="https://img.shields.io/badge/integrated_extra_dependencies-2-334155?style=for-the-badge" alt="2 integrated extra dependencies">
 </p>
 
 <p align="center">
@@ -111,6 +112,8 @@ Reproduce it instead of trusting the table:
 python benchmarks/run.py
 ```
 
+For the quality-first Q0/Q1/Q2 vector matrix, run `PYTHONPATH=src python benchmarks/quant_benchmark_198.py`; it publishes raw measured samples and keeps simulated or capacity-blocked sizes explicitly `null`. See [the quant benchmark contract](docs/quant-benchmark-198.md).
+
 The command records wall time, CPU time, peak RSS (or `null` plus an explicit reason when the host does not expose it), cold build, warm query, no-change rebuild, one-file rebuild and whether the changed symbol became visible. It also measures the shared-base overlay path at 1, 5 and 20 slots with ten repetitions per row. Use identical hardware/configuration when comparing integrations.
 
 Peak RSS is reported in KiB using POSIX `resource.getrusage` or Windows
@@ -127,7 +130,15 @@ cd simplicio-fast
 python -m pip install -e .
 ```
 
-The integrated install includes `simplicio-mapper` and `simplicio-cli`.
+The base install is dependency-free and keeps the complete Python fallback.
+For the production Mapper/Dev CLI adapters, install the explicit profile:
+
+```bash
+python -m pip install -e '.[integrated]'
+```
+
+Loop installs Mapper, Dev CLI, and Fast from its pinned submodules, so it does
+not need Fast to pull their transitive stacks into every isolated slot.
 
 ### Offline installation verification
 
@@ -277,7 +288,7 @@ make the decision from those spans, and return a versioned changeset for guarded
 7. Runtime authorizes effects and Loop validates/converges.
 8. Fast incrementally refreshes changed files.
 
-Version 2.0.4 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
+Version 2.0.14 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
 `query` and the CRUD proof. Internal mapping/editing remain bootstrap fallbacks when integrations
 are absent; `doctor` identifies whether the complete integrated path is ready.
 The `build`, `query`, direct-index `search`, bounded `context`, typed `impact`, `stats` and
@@ -422,9 +433,16 @@ refresh leaves the previous complete snapshot untouched.
 PYTHONPATH=src python -m unittest discover -s tests -v
 python -m compileall -q src tests benchmarks
 python benchmarks/run.py
+python scripts/check_release_integrity.py --check --json
 ```
 
-Version 2.0.4 covers:
+The wheel carries `simplicio_fast/release_policy.json`, so an installed
+consumer can inspect branch, dependency, native ownership, platform, and
+precompiled-only policy without access to the source checkout. The root
+`release-policy.json` is a checked mirror, and the integrity gate rejects drift
+between the two.
+
+Version 2.0.14 covers:
 
 - complete user CRUD and later status change;
 - normalized-email conflict;
@@ -441,7 +459,7 @@ are emitted as `null`, never estimated.
 
 ## Current scope
 
-Ready in Fast 2.0.4:
+Ready in Fast 2.0.14:
 
 - Python 3.11+;
 - Python AST classes, functions and async functions;
@@ -452,7 +470,8 @@ Ready in Fast 2.0.4:
 - CRUD, tests and benchmark;
 - Mapper/Dev CLI readiness checks with explicit fallback receipts;
 - canonical base generations, isolated worktree overlays, leases and refresh;
-- provenance, apply and rollout receipts for shadow, canary, integrated and rollback states.
+- provenance, apply and rollout receipts for shadow, canary, integrated and rollback states;
+- optional Runtime-first semantic scoring with a complete deterministic offline fallback, documented in [semantic scoring](docs/semantic-scoring.md).
 
 External boundaries and follow-ups:
 
@@ -484,12 +503,12 @@ retries. The source tree remains authoritative; snapshots are derived state.
 - **Full:** Mapper → Fast → Dev CLI, coordinated by Loop and governed by Runtime.
 - **Loop standalone:** Loop → Fast, with Mapper and Dev CLI adapters encapsulated; Runtime,
   Agent and Code are optional.
-- **Engines:** Python remains the reference/fallback; Rust is selected by \`auto\` only after
-  health, schema and conformance gates pass. A healthy Rust fast path does not load Python.
-- **Rust bridge:** when Rust is selected, \`stats\`, \`query\` and bounded \`context\` are
-  delegated through the versioned JSON CLI contract (\`--stats\`, \`--query\`, \`--context\`).
-  Build, refresh and mutation commands remain on the Python/Dev CLI path until their native
-  contracts are implemented; malformed, timed-out or schema-mismatched Rust output fails closed.
+- **Engines:** Python remains the complete reference/fallback. Runtime owns native execution;
+  `auto` selects its verified binary adapter only after hash, platform, ABI, version, capability,
+  and health gates pass. `rust` fails closed, while `python` and `off` never load a native path.
+- **Compatibility bridge:** CI may publish the legacy `simplicio.fast-native/v1` executable for
+  migration and rollback. Consumers only use the precompiled artifact; local Cargo/rustc discovery
+  is forbidden. The Runtime adapter supersedes this bridge as its capability becomes available.
 
 See [ADR-0001](docs/ADR-0001-fast-v3-ownership.md) and the
 [contract matrix](docs/fast-v3-contract-matrix.md). The executable delivery-engine work is
@@ -513,5 +532,5 @@ See the granular cross-repository plan:
 
 ## License and status
 
-Version 2.0.4 includes the Windows Python 3.14 subprocess and receipt stabilization. Review [CHANGELOG.md](CHANGELOG.md),
+Version 2.0.14 is governed by the local release-integrity gate. Review [CHANGELOG.md](CHANGELOG.md),
 `AGENTS.md` and open issues before making it mandatory across the entire Simplicio ecosystem.

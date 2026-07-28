@@ -1,6 +1,7 @@
 import hashlib
 from pathlib import Path
 import pytest
+from simplicio_fast import __version__
 from simplicio_fast.native_backend import (
     ABI, PythonBackend, RustBackend, backend_receipt_fields,
     execute_with_fallback, platform_tag, resolve_packaged_backend,
@@ -24,15 +25,26 @@ def test_python_standalone_hot_paths(operation, payload):
 def test_incompatible_or_tampered_artifact_is_never_used(tmp_path):
     artifact = tmp_path / "fast-native"
     artifact.write_bytes(b"binary")
+    valid = {
+        "abi": ABI, "platform": "linux-x86_64",
+        "version": __version__, "source_commit": "a" * 40,
+        "size": len(b"binary"),
+        "sha256": hashlib.sha256(b"binary").hexdigest(),
+    }
     backend, reason = select_backend(artifact, {
         "abi": "old", "platform": "linux-x86_64",
         "sha256": hashlib.sha256(b"binary").hexdigest()})
     assert isinstance(backend, PythonBackend)
     assert reason == "RUST_ABI_INCOMPATIBLE"
-    backend, reason = select_backend(artifact, {
-        "abi": ABI, "platform": "linux-x86_64", "sha256": "0" * 64})
+    backend, reason = select_backend(artifact, {**valid, "sha256": "0" * 64})
     assert isinstance(backend, PythonBackend)
     assert reason == "RUST_ARTIFACT_HASH_MISMATCH"
+    backend, reason = select_backend(artifact, {**valid, "version": "0.0.0"})
+    assert isinstance(backend, PythonBackend)
+    assert reason == "RUST_VERSION_MISMATCH"
+    backend, reason = select_backend(artifact, {**valid, "size": 999})
+    assert isinstance(backend, PythonBackend)
+    assert reason == "RUST_ARTIFACT_SIZE_MISMATCH"
 
 
 class GoldenRust(RustBackend):
@@ -91,13 +103,14 @@ def test_packaged_resolver_validates_manifest_and_sha_without_toolchain(tmp_path
     artifact.write_bytes(b"precompiled-fixture")
     (directory / "manifest.json").write_text(
         '{"abi":"simplicio.fast-native/v1","filename":"simplicio-fast-native",'
-        '"platform":"linux-x86_64","sha256":"'
+        f'"platform":"linux-x86_64","version":"{__version__}",'
+        '"source_commit":"' + ("a" * 40) + '","size":19,"sha256":"'
         + hashlib.sha256(artifact.read_bytes()).hexdigest() + '"}',
         encoding="utf-8")
     backend, reason = resolve_packaged_backend(
         tmp_path, system="linux", machine="amd64")
     assert isinstance(backend, RustBackend) and reason is None
-    artifact.write_bytes(b"tampered")
+    artifact.write_bytes(b"x" * len(b"precompiled-fixture"))
     backend, reason = resolve_packaged_backend(
         tmp_path, system="linux", machine="x86_64")
     assert isinstance(backend, PythonBackend)
@@ -107,3 +120,26 @@ def test_packaged_resolver_validates_manifest_and_sha_without_toolchain(tmp_path
 def test_platform_aliases_are_canonical_and_unknown_is_rejected():
     assert platform_tag(system="Darwin", machine="arm64") == "macos-aarch64"
     assert platform_tag(system="plan9", machine="mips") is None
+
+
+def test_artifact_hashing_is_streamed_and_size_bounded(tmp_path, monkeypatch):
+    artifact = tmp_path / "fast-native"
+    artifact.write_bytes(b"streamed-artifact")
+    manifest = {
+        "abi": ABI,
+        "platform": "linux-x86_64",
+        "version": __version__,
+        "source_commit": "a" * 40,
+        "size": artifact.stat().st_size,
+        "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+    }
+    monkeypatch.setattr(Path, "read_bytes", lambda _path: (_ for _ in ()).throw(
+        AssertionError("whole-file read is forbidden")
+    ))
+    backend, reason = select_backend(artifact, manifest)
+    assert isinstance(backend, RustBackend)
+    assert reason is None
+    monkeypatch.setattr("simplicio_fast.native_backend.MAX_NATIVE_ARTIFACT_BYTES", 4)
+    backend, reason = select_backend(artifact, manifest)
+    assert isinstance(backend, PythonBackend)
+    assert reason == "RUST_ARTIFACT_TOO_LARGE"

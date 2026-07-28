@@ -1,15 +1,14 @@
 # Fast V3 engine selection contract
 
-This slice covers the policy boundary for issues #39 and #42. It does not claim
-that a Rust core exists: the current repository remains Python-only until the
-Rust implementation and conformance harness land.
+ADR-0003 supersedes the direct Rust-engine assumption in this document. Rust is
+owned and released by `simplicio-runtime`; Fast uses the narrow
+`RuntimeFastBackend` HBP adapter and retains a complete Python reference path.
 
-select_engine() accepts a completed Rust health/capability probe and a separate
-conformance result. In auto, Rust is selected only when both are true; Python
-is selected only with an explicit, machine-readable fallback reason. An
-explicit rust request raises EngineSelectionError instead of silently loading
-Python. off selects no engine.
+`select_runtime_backend()` implements `auto|rust|python|off`. `auto` records a
+stable reason when it selects Python, explicit `rust` fails closed, `python`
+does not probe Runtime, and `off` selects no backend. Runtime is admitted only
+after SHA-256/platform/ABI/version/doctor/capability/conformance verification.
 
-The function is pure and does not import either runtime. A future CLI/router
-must call it before loading engine modules and persist
-simplicio.fast.engine-selection/v1 alongside the normal generation receipt.
+The older pure `select_engine()` policy helper remains a compatibility API.
+New consumers should persist `simplicio.fast.runtime-selection/v1` from
+`RuntimeSelection.receipt()`.

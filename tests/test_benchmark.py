@@ -22,12 +22,10 @@ class _FakeFunction:
 
     def __call__(self, _process, counters, _size) -> bool:
         if self.result:
-            # PeakWorkingSetSize follows the two DWORD fields in the Windows
-            # PROCESS_MEMORY_COUNTERS layout.  Use the pointer passed by ctypes
-            # so this fake exercises the same ABI boundary as the real API.
-            base = ctypes.cast(counters, ctypes.POINTER(ctypes.c_byte))
-            address = ctypes.addressof(base.contents) + 8
-            ctypes.cast(address, ctypes.POINTER(ctypes.c_size_t)).contents.value = 8192
+            # ``ctypes.wintypes.DWORD`` follows the host C ABI when a Windows
+            # path is simulated on Linux, so a hard-coded byte offset is not
+            # portable. Assign through the exact structure passed by byref.
+            counters._obj.PeakWorkingSetSize = 8192
         return self.result
 
 
