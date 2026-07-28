@@ -221,5 +221,40 @@ def make_envelope(slot: int, *, run_id: str = "run", generation: int = 1, fence:
     return value
 
 
-__all__ = ["FastExecutorError", "SlotExecutor", "Snapshot", "make_envelope",
+def quantize(vector: Sequence[float], lane: str) -> tuple[float | int, ...]:
+    """Reference Q0/Q1/Q2 encoding used by the reproducible ranking fixture."""
+    if lane == "Q0":
+        return tuple(float(item) for item in vector)
+    if lane == "Q1":
+        scale = max(max(abs(item) for item in vector), 1e-12) / 127
+        return tuple(max(-127, min(127, round(item / scale))) for item in vector)
+    if lane in {"Q2a", "Q2b"}:
+        scale = max(max(abs(item) for item in vector), 1e-12) / 7
+        return tuple(max(-7, min(7, round(item / scale))) for item in vector)
+    raise FastExecutorError("quantization_lane_unknown", lane)
+
+
+def ranking_metrics(expected: Sequence[str], actual: Sequence[str], *, k: int = 10) -> dict[str, float]:
+    expected_set = set(expected[:k])
+    top = list(actual[:k])
+    hits = [1 if item in expected_set else 0 for item in top]
+    recall = sum(hits) / len(expected_set) if expected_set else 1.0
+    dcg = sum(hit / __import__("math").log2(index + 2) for index, hit in enumerate(hits))
+    ideal = sum(1 / __import__("math").log2(index + 2) for index in range(min(len(expected_set), k)))
+    reciprocal = next((1 / (index + 1) for index, hit in enumerate(hits) if hit), 0.0)
+    return {"recall_at_10": recall, "ndcg_at_10": dcg / ideal if ideal else 1.0, "mrr": reciprocal}
+
+
+def parity_receipt(payload: Any, rust_digest: str | None = None) -> dict[str, Any]:
+    python_digest = digest(payload)
+    return {
+        "python_digest": python_digest,
+        "rust_digest": rust_digest,
+        "parity": rust_digest == python_digest if rust_digest is not None else None,
+        "parity_null_reason": None if rust_digest is not None else "RUST_UNAVAILABLE",
+    }
+
+
+__all__ = ["FastExecutorError", "SlotExecutor", "Snapshot", "make_envelope", "quantize",
+           "ranking_metrics", "parity_receipt",
            "validate_envelope", "digest", "ENVELOPE_SCHEMA", "RECEIPT_SCHEMA"]
