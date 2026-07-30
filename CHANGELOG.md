@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.19 - 2026-07-30
+
+- Align the verified Rust snapshot engine version with the Python package so
+  installation health checks can select the native engine without degrading.
+- Add a release-integrity gate that rejects Python/Rust version drift.
+
 ## 2.0.18 - 2026-07-30
 
 - Align the integrated Python dependency floor with Mapper 0.26.1 and Dev CLI
