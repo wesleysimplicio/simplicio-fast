@@ -8,12 +8,12 @@ from simplicio_fast.integrations import integration_status
 
 class IntegrationStatusTest(unittest.TestCase):
     @staticmethod
-    def _status(available: dict[str, str], version: str = "0.16.3") -> dict[str, object]:
+    def _status(available: dict[str, str], version: str = "0.18.1") -> dict[str, object]:
         def executable(*names: str) -> str | None:
             return next((available[name] for name in names if name in available), None)
 
         def distribution(name: str) -> str | None:
-            return {"simplicio-mapper": "0.24.2", "simplicio-cli": version}.get(name)
+            return {"simplicio-mapper": "0.26.1", "simplicio-cli": version}.get(name)
 
         with patch("simplicio_fast.integrations._distribution_version", side_effect=distribution), patch(
             "simplicio_fast.integrations._executable", side_effect=executable
@@ -45,7 +45,7 @@ class IntegrationStatusTest(unittest.TestCase):
         )
         self.assertFalse(status["integrated_ready"])
         self.assertFalse(status["dev_cli"]["compatible"])
-        self.assertEqual("0.16.3", status["dev_cli"]["minimum"])
+        self.assertEqual("0.18.1", status["dev_cli"]["minimum"])
 
 
 if __name__ == "__main__":

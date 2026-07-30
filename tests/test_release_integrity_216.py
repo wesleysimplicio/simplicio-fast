@@ -65,7 +65,7 @@ def test_dependency_badge_drift_fails_closed(tmp_path):
     root = _fixture(tmp_path)
     readme = root / "README.md"
     readme.write_text(
-        readme.read_text().replace(
+        readme.read_text(encoding="utf-8").replace(
             "integrated_extra_dependencies-2-",
             "integrated_extra_dependencies-0-",
         ),

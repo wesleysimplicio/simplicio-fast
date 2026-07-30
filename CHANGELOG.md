@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.18 - 2026-07-30
+
+- Align the integrated Python dependency floor with Mapper 0.26.1 and Dev CLI
+  0.18.1 while preserving the Rust-free Python engine.
+
 ## 2.0.16 - 2026-07-28
 
 - Harden Runtime-first bridges after the PRISM deep implementation: fail-closed admission, forged-manifest rejection, and Windows-safe spawn/stdio handling.
