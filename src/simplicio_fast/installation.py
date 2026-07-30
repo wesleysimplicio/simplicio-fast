@@ -204,7 +204,11 @@ def python_smoke() -> dict[str, Any]:
         snapshot = root / "project.sfast"
         environment = os.environ.copy()
         environment["SIMPLICIO_FAST_RUST"] = str(root / "missing-rust-engine.exe")
-        source_root = str(Path(__file__).resolve().parents[2])
+        # The module fallback must import the checkout currently under test.
+        # `installation.py` lives at ``src/simplicio_fast/``; exporting the
+        # repository root here only works by accident when an older global
+        # wheel is installed.
+        source_root = str(Path(__file__).resolve().parents[1])
         existing_pythonpath = environment.get("PYTHONPATH")
         environment["PYTHONPATH"] = source_root + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
 

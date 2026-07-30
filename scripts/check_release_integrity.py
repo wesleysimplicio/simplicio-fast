@@ -98,6 +98,19 @@ def evaluate(root: Path) -> dict[str, Any]:
         expected=version,
         observed=package_version,
     )
+    try:
+        rust_core = tomllib.loads(
+            (root / "rust" / "simplicio-fast-core" / "Cargo.toml").read_text(encoding="utf-8")
+        )["package"]["version"]
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError, KeyError, TypeError):
+        rust_core = None
+    _check(
+        checks,
+        "rust_core_version",
+        isinstance(version, str) and version == rust_core,
+        expected=version,
+        observed=rust_core,
+    )
 
     try:
         readme = (root / "README.md").read_text(encoding="utf-8")
