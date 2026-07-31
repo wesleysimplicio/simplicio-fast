@@ -35,6 +35,9 @@ def test_workflow_declares_all_supported_release_targets():
     assert "actions/upload-artifact@" in workflow
     assert "manifest.json" in workflow
     assert "scripts/verify_native_bundle.py" in workflow
+    assert "scripts/verify_fast_core_bundle.py" in workflow
+    assert "rust/simplicio-fast-core/Cargo.toml" in workflow
+    assert "simplicio-fast-rs" in workflow
     assert "--expected-version" in workflow
     assert 'test "$GITHUB_REF_NAME" = "v${{ steps.package.outputs.version }}"' in workflow
     assert workflow.count('linker: ""') == 3

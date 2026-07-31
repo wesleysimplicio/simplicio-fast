@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.20 - 2026-07-30
+
+- Publish the executable Rust snapshot core alongside the legacy compatibility
+  artifact for every supported platform, with a versioned engine-handshake
+  receipt verified in CI before release assets are uploaded.
+
 ## 2.0.19 - 2026-07-30
 
 - Align the verified Rust snapshot engine version with the Python package so

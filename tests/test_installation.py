@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from simplicio_fast.installation import report
+from simplicio_fast.installation import _smoke_step, report
 from simplicio_fast import __version__
 from simplicio_fast.installation import python_smoke
 
@@ -25,7 +26,21 @@ class InstallationReportTest(unittest.TestCase):
 
     def test_python_cli_smoke_is_bounded_and_fail_closed_for_rust(self) -> None:
         payload = python_smoke()
-        self.assertIn(payload["status"], {"pass", "partial"})
+        failures = [
+            {
+                "engine": step["engine"],
+                "reason": step.get("reason_code"),
+                "error": step.get("error"),
+                "returncode": step.get("returncode"),
+            }
+            for step in payload["steps"]
+            if step["status"] != "pass"
+        ]
+        self.assertIn(
+            payload["status"],
+            {"pass", "partial"},
+            msg=f"launcher={payload['launcher']} reasons={payload['reason_codes']} failures={failures}",
+        )
         self.assertEqual("simplicio.fast.python-smoke/v1", payload["schema"])
         self.assertEqual({"auto": "python", "python": "python", "off": "off"}, payload["engine_selection"])
         self.assertTrue(payload["rust_probe"]["forced_unavailable"])
@@ -100,6 +115,27 @@ class InstallationReportTest(unittest.TestCase):
         self.assertEqual("manifest_schema_mismatch", check["reason"])
         self.assertEqual("python", payload["resolution"]["selected_engine"])
         self.assertEqual("rust_artifact_unusable:manifest_schema_mismatch", payload["resolution"]["reason_code"])
+
+    def test_smoke_retries_windows_invalid_handle_without_inheriting_handles(self) -> None:
+        invalid_handle = OSError("invalid handle")
+        invalid_handle.winerror = 6
+        completed = subprocess.CompletedProcess(
+            ["python"], 0, '{"schema":"fixture"}', ""
+        )
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "simplicio_fast.installation.subprocess.run",
+            side_effect=[invalid_handle, completed],
+        ) as run:
+            result = _smoke_step(
+                ["python"],
+                "python",
+                ["capabilities"],
+                root=Path(directory),
+                environment={},
+            )
+        self.assertEqual("pass", result["status"])
+        self.assertEqual(2, run.call_count)
+        self.assertFalse(run.call_args_list[1].kwargs["close_fds"])
 
 
 def test_source_and_package_versions_match() -> None:
