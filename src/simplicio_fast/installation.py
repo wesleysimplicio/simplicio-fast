@@ -117,16 +117,18 @@ def report() -> dict[str, Any]:
     }
 
 
-def _smoke_launcher() -> tuple[list[str], str, str | None]:
+def _smoke_launcher(environment: dict[str, str]) -> tuple[list[str], str, str | None]:
     candidate = shutil.which("simplicio-fast")
     if candidate:
         try:
             version = subprocess.run(
                 [candidate, "--version"],
-                capture_output=True,
-                text=True,
+            capture_output=True,
+            text=True,
                 check=False,
                 timeout=5,
+                env=environment,
+                stdin=subprocess.DEVNULL,
             )
         except (OSError, subprocess.TimeoutExpired):
             version = None
@@ -157,13 +159,44 @@ def _smoke_step(
             text=True,
             check=False,
             timeout=30,
+            stdin=subprocess.DEVNULL,
         )
-    except (OSError, subprocess.TimeoutExpired) as error:
+    except OSError:
+        # Windows can intermittently reject process startup during dense
+        # test/release bursts (including WinError 6). Retry once without
+        # handle inheritance; a persistent error remains fail-closed.
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=root,
+                env=environment,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+                close_fds=False,
+                stdin=subprocess.DEVNULL,
+            )
+        except (OSError, subprocess.TimeoutExpired) as retry_error:
+            error = retry_error
+        else:
+            error = None
+        if error is not None:
+            return {
+                "status": "fail",
+                "engine": engine,
+                "command": command,
+                "reason_code": type(error).__name__,
+                "error": str(error),
+                "wall_ms": (time.perf_counter_ns() - started) / 1_000_000,
+            }
+    except subprocess.TimeoutExpired as error:
         return {
             "status": "fail",
             "engine": engine,
             "command": command,
             "reason_code": type(error).__name__,
+            "error": str(error),
             "wall_ms": (time.perf_counter_ns() - started) / 1_000_000,
         }
     raw = completed.stdout.strip()
@@ -195,22 +228,22 @@ def _smoke_step(
 
 def python_smoke() -> dict[str, Any]:
     """Exercise the installed Python CLI on a disposable fixture."""
-    launcher, launcher_kind, launcher_reason = _smoke_launcher()
+    environment = os.environ.copy()
+    # Run an installed console entry point against this exact package tree.
+    # This prevents a stale globally installed CLI from invalidating a source
+    # checkout or a just-built wheel during the release gate.
+    source_root = str(Path(__file__).resolve().parents[1])
+    existing_pythonpath = environment.get("PYTHONPATH")
+    environment["PYTHONPATH"] = source_root + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+    launcher, launcher_kind, launcher_reason = _smoke_launcher(environment)
     steps: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="simplicio-fast-python-smoke-") as directory:
         root = Path(directory)
         source = root / "greetings.py"
         source.write_text("def greeting(name: str) -> str:\n    return f'hello {name}'\n", encoding="utf-8")
         snapshot = root / "project.sfast"
-        environment = os.environ.copy()
+        environment = environment.copy()
         environment["SIMPLICIO_FAST_RUST"] = str(root / "missing-rust-engine.exe")
-        # The module fallback must import the checkout currently under test.
-        # `installation.py` lives at ``src/simplicio_fast/``; exporting the
-        # repository root here only works by accident when an older global
-        # wheel is installed.
-        source_root = str(Path(__file__).resolve().parents[1])
-        existing_pythonpath = environment.get("PYTHONPATH")
-        environment["PYTHONPATH"] = source_root + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
 
         for engine in ("auto", "python", "off"):
             steps.append(_smoke_step(launcher, engine, ["capabilities"], root=root, environment=environment))

@@ -6,9 +6,12 @@ on:
     paths:
       - ".github/workflows/native-release.yml"
       - "native/fast-native/**"
+      - "rust/simplicio-fast-core/**"
       - "scripts/build_native_manifest.py"
+      - "scripts/verify_fast_core_bundle.py"
       - "scripts/verify_native_bundle.py"
       - "tests/test_native_bundle_211.py"
+      - "tests/test_fast_core_bundle.py"
       - "tests/test_native_release_workflow_211.py"
       - "pyproject.toml"
   push:
@@ -30,7 +33,7 @@ jobs:
       - name: Install contract test runner
         run: python -m pip install pytest
       - name: Validate manifest and workflow contracts
-        run: python -m pytest -q tests/test_native_bundle_211.py tests/test_native_release_workflow_211.py
+        run: python -m pytest -q tests/test_native_bundle_211.py tests/test_fast_core_bundle.py tests/test_native_release_workflow_211.py
 
   build:
     name: Build ${{ matrix.platform }}
@@ -42,22 +45,26 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             platform: linux-x86_64
-            filename: simplicio-fast-native
+            compatibility_filename: simplicio-fast-native
+            core_filename: simplicio-fast-rs
             linker: ""
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             platform: linux-aarch64
-            filename: simplicio-fast-native
+            compatibility_filename: simplicio-fast-native
+            core_filename: simplicio-fast-rs
             linker: aarch64-linux-gnu-gcc
           - os: macos-14
             target: aarch64-apple-darwin
             platform: macos-aarch64
-            filename: simplicio-fast-native
+            compatibility_filename: simplicio-fast-native
+            core_filename: simplicio-fast-rs
             linker: ""
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             platform: windows-x86_64
-            filename: simplicio-fast-native.exe
+            compatibility_filename: simplicio-fast-native.exe
+            core_filename: simplicio-fast-rs.exe
             linker: ""
     runs-on: ${{ matrix.os }}
     steps:
@@ -87,30 +94,40 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: test "$GITHUB_REF_NAME" = "v${{ steps.package.outputs.version }}"
-      - name: Build native CLI in CI
+      - name: Build compatibility CLI in CI
         run: cargo build --manifest-path native/fast-native/Cargo.toml --release --target ${{ matrix.target }}
+      - name: Build Rust-core CLI in CI
+        run: cargo build --manifest-path rust/simplicio-fast-core/Cargo.toml --release --target ${{ matrix.target }}
       - name: Stage and verify precompiled artifact
         shell: bash
         run: |
-          abi_dir="simplicio.fast-native_v1"
+          compatibility_abi_dir="simplicio.fast-native_v1"
+          core_abi_dir="simplicio.fast-core_v1"
           output="dist/${{ matrix.platform }}"
-          mkdir -p "$output/$abi_dir"
-          cp "native/fast-native/target/${{ matrix.target }}/release/${{ matrix.filename }}" "$output/$abi_dir/${{ matrix.filename }}"
+          mkdir -p "$output/$compatibility_abi_dir" "$output/$core_abi_dir"
+          cp "native/fast-native/target/${{ matrix.target }}/release/${{ matrix.compatibility_filename }}" "$output/$compatibility_abi_dir/${{ matrix.compatibility_filename }}"
+          cp "rust/simplicio-fast-core/target/${{ matrix.target }}/release/${{ matrix.core_filename }}" "$output/$core_abi_dir/${{ matrix.core_filename }}"
           python scripts/build_native_manifest.py \
-            --binary "$output/$abi_dir/${{ matrix.filename }}" \
+            --binary "$output/$compatibility_abi_dir/${{ matrix.compatibility_filename }}" \
             --platform "${{ matrix.platform }}" \
             --version "${{ steps.package.outputs.version }}" \
             --source-commit "$GITHUB_SHA" \
             --toolchain "$(rustc --version)" \
-            --output "$output/$abi_dir/manifest.json"
+            --output "$output/$compatibility_abi_dir/manifest.json"
           python scripts/verify_native_bundle.py \
             --root "$output" \
             --expected-platform "${{ matrix.platform }}" \
             --expected-version "${{ steps.package.outputs.version }}" \
             --json
+          cargo run --quiet --manifest-path rust/simplicio-fast-core/Cargo.toml -- --version --json > "$output/$core_abi_dir/engine-manifest.json"
+          python scripts/verify_fast_core_bundle.py \
+            --binary "$output/$core_abi_dir/${{ matrix.core_filename }}" \
+            --manifest "$output/$core_abi_dir/engine-manifest.json" \
+            --expected-version "${{ steps.package.outputs.version }}" \
+            --json
       - uses: actions/upload-artifact@v4
         with:
-          name: simplicio-fast-native-${{ matrix.platform }}
+          name: simplicio-fast-engines-${{ matrix.platform }}
           path: dist/${{ matrix.platform }}/
           if-no-files-found: error
           retention-days: 30
@@ -125,7 +142,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: simplicio-fast-native-*
+          pattern: simplicio-fast-engines-*
           path: release-assets
       - name: Package release assets
         run: |

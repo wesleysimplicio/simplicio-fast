@@ -8,6 +8,13 @@ Fast ABI is `simplicio.runtime.fast/v1`. Python remains complete and portable.
 Runtime artifacts are selected only when signature policy, ABI, version,
 platform, SHA-256, doctor, capability and conformance bindings pass.
 
+The Rust reader is released as the precompiled `simplicio-fast-rs` core under
+`simplicio.fast-core/v1`. The release archive contains its hashable executable
+and `engine-manifest.json`; after extracting the platform archive, set
+`SIMPLICIO_FAST_RUST` to that executable. Fast verifies its versioned engine
+handshake before selecting it. The archive is produced only in CI; consumers
+never need Cargo or rustc.
+
 The older `simplicio.fast-native/v1` resolver from PR #212 remains a
 time-bounded compatibility surface. It is not a second permanent Rust engine
 and new Loop consumers must use `RuntimeFastBackend`.
