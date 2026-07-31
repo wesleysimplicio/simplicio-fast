@@ -19,7 +19,7 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable, Iterator
 
 from .adapters import capability_report, parse_path
 from .snapshot import ContextSpan, Snapshot, StaleSnapshotError, Symbol, build_snapshot, source_files
@@ -28,6 +28,7 @@ MANIFEST_SCHEMA = "simplicio.fast.manifest/v1"
 OVERLAY_SCHEMA = "simplicio.fast.overlay/v1"
 LEASE_SCHEMA = "simplicio.fast.lease/v1"
 RECEIPT_SCHEMA = "simplicio.fast.receipt/v1"
+DELTA_STORAGE = "deltas"
 
 
 def _canonical_json(value: object) -> bytes:
@@ -58,6 +59,8 @@ class Manifest:
     source_hashes: dict[str, str]
     snapshot: str
     created_at: str
+    snapshot_sha256: str = ""
+    source_tree_sha256: str = ""
 
     def __post_init__(self) -> None:
         GenerationId(self.generation_id)
@@ -76,6 +79,8 @@ class Manifest:
             parser_versions={str(k): str(v) for k, v in dict(value["parser_versions"]).items()},
             source_hashes={str(k): str(v) for k, v in dict(value["source_hashes"]).items()},
             snapshot=str(value["snapshot"]), created_at=str(value["created_at"]),
+            snapshot_sha256=str(value.get("snapshot_sha256", "")),
+            source_tree_sha256=str(value.get("source_tree_sha256", "")),
         )
 
 
@@ -158,6 +163,7 @@ class WorkspaceStore:
         self.overlay_dir = self.storage / "overlays"
         self.lease_dir = self.storage / "leases"
         self.receipt_dir = self.storage / "receipts"
+        self.delta_dir = self.storage / DELTA_STORAGE
 
     def _manifest_path(self, generation: str) -> Path:
         return self.base_dir / generation / "manifest.json"
@@ -180,11 +186,13 @@ class WorkspaceStore:
         config = config or {}
         files = source_files(self.root)
         source_hashes = {path.relative_to(self.root).as_posix(): _hash_source(path) for path in files}
+        source_tree_sha256 = hashlib.sha256(_canonical_json(source_hashes)).hexdigest()
         parser_versions = {item.language: f"{item.parser}:1" for item in capability_report()}
         config_fingerprint = hashlib.sha256(_canonical_json(config)).hexdigest()
         identity = {
             "kind": "base", "commit": _commit(self.root), "config_fingerprint": config_fingerprint,
             "parser_versions": parser_versions, "source_hashes": source_hashes,
+            "source_tree_sha256": source_tree_sha256,
         }
         generation = hashlib.sha256(_canonical_json(identity)).hexdigest()
         directory = self.base_dir / generation
@@ -196,10 +204,11 @@ class WorkspaceStore:
             _atomic_json(self.storage / "current.json", existing.to_dict())
             return existing
         build_snapshot(self.root, snapshot_path)
+        snapshot_sha256 = _hash_source(snapshot_path)
         manifest = Manifest(
             MANIFEST_SCHEMA, generation, "base", identity["commit"], str(self.root),
             config_fingerprint, parser_versions, source_hashes, "project.sfast",
-            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), snapshot_sha256, source_tree_sha256,
         )
         _atomic_json(manifest_path, manifest.to_dict())
         _atomic_json(self.storage / "current.json", manifest.to_dict())
@@ -230,6 +239,21 @@ class WorkspaceStore:
                                    "worktree_id": worktree_id, "changed_files": sorted(changed)})
         return overlay
 
+    def create_delta(self, base_generation: str, worktree_id: str, changed_paths: Iterable[str] | None = None, *, config_fingerprint: str | None = None):
+        from .delta import create_delta
+        return create_delta(self, base_generation, worktree_id, changed_paths, config_fingerprint=config_fingerprint)
+
+    def delta(self, worktree_id: str, generation: str):
+        from .delta import load_delta
+        return load_delta(self, worktree_id, generation)
+
+    def compose_delta(self, base_generation: str, worktree_id: str, delta_generation: str, *, config_fingerprint: str | None = None):
+        from .delta import compose_delta
+        return compose_delta(self, base_generation, worktree_id, delta_generation, config_fingerprint=config_fingerprint)
+
+    def handoff(self, base_generation: str, worktree_id: str, changed_paths: Iterable[str] | None = None, *, delta_generation: str | None = None, config_fingerprint: str | None = None, parity_snapshot: Path | None = None):
+        from .delta import handoff
+        return handoff(self, base_generation, worktree_id, changed_paths, delta_generation=delta_generation, config_fingerprint=config_fingerprint, parity_snapshot=parity_snapshot)
     def overlay(self, worktree_id: str, generation: str) -> Overlay:
         self._worktree_id(worktree_id)
         GenerationId(generation)

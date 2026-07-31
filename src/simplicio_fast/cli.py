@@ -395,6 +395,24 @@ def build_parser() -> argparse.ArgumentParser:
     overlay.add_argument("--base-generation", required=True)
     overlay.add_argument("--worktree-id", required=True)
 
+    delta = commands.add_parser("delta", help="build a changed-path delta against a canonical base")
+    delta.add_argument("root", nargs="?", default=".")
+    delta.add_argument("--storage", default=None)
+    delta.add_argument("--base-generation", required=True)
+    delta.add_argument("--worktree-id", required=True)
+    delta.add_argument("--changed-path", action="append", default=None)
+    delta.add_argument("--config-fingerprint", default=None)
+
+    handoff = commands.add_parser("handoff", help="emit canonical snapshot and changed-path delta handoff")
+    handoff.add_argument("root", nargs="?", default=".")
+    handoff.add_argument("--storage", default=None)
+    handoff.add_argument("--base-generation", required=True)
+    handoff.add_argument("--worktree-id", required=True)
+    handoff.add_argument("--delta-generation", default=None)
+    handoff.add_argument("--changed-path", action="append", default=None)
+    handoff.add_argument("--config-fingerprint", default=None)
+    handoff.add_argument("--parity-snapshot", default=None)
+
     merge = commands.add_parser("merge", help="query a composed base plus overlay view")
     merge.add_argument("term", nargs="?", default="")
     merge.add_argument("--root", default=".")
@@ -750,6 +768,21 @@ def main() -> None:
                 args.worktree_id, args.base_generation
             )
             emit({"schema": OVERLAY_SCHEMA, "overlay": asdict(overlay_value)})
+        elif args.command == "delta":
+            store = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None)
+            delta_value = store.create_delta(
+                args.base_generation, args.worktree_id, args.changed_path,
+                config_fingerprint=args.config_fingerprint,
+            )
+            emit({"schema": delta_value.schema, "delta": delta_value.to_dict()})
+        elif args.command == "handoff":
+            store = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None)
+            emit(store.handoff(
+                args.base_generation, args.worktree_id, args.changed_path,
+                delta_generation=args.delta_generation,
+                config_fingerprint=args.config_fingerprint,
+                parity_snapshot=Path(args.parity_snapshot) if args.parity_snapshot else None,
+            ))
         elif args.command == "merge":
             if args.worktree_id and not args.overlay_generation:
                 raise ValueError("--overlay-generation is required with --worktree-id")
