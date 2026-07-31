@@ -240,6 +240,20 @@ changed-file symbols and tombstones; merge is read-only and never rewrites the
 canonical base. Results carry `base_generation` and `overlay_generation` so a
 Mapper/Runtime caller can pin a bounded, auditable context attempt.
 
+For issue-scoped Loop handoffs, use the changed-path contract instead of rebuilding the canonical base:
+
+```bash
+simplicio-fast delta . --base-generation <base-generation> --worktree-id issue-230 --changed-path src/service.py
+simplicio-fast handoff . --base-generation <base-generation> --worktree-id issue-230 \
+  --delta-generation <delta-generation> --parity-snapshot .simplicio/fast/full.sfast
+```
+
+The handoff is `simplicio.fast.handoff/v1` and reports cold/warm/incremental timings,
+parsed files, cache reuse, canonical snapshot SHA-256, delta SHA-256 and source-tree parity.
+It rejects a stale base commit, config fingerprint, schema, artifact digest or source path.
+Rollback is safe and derived-state-only: discard the delta generation, release its lease, and
+keep the immutable canonical base; source files remain authoritative and are never reverted by
+Fast's handoff path.
 Use `simplicio-fast pin` while an attempt is active and `simplicio-fast gc`
 afterward. GC is dry-run by default and never removes a generation protected by
 an unexpired lease. `simplicio-fast watch` performs a debounced refresh pass;

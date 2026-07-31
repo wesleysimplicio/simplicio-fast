@@ -16,6 +16,8 @@ _EXPORTS = {
     "ArenaError": (".prism_arena", "ArenaError"),
     "EngineSelection": (".engine_selection", "EngineSelection"),
     "EngineSelectionError": (".engine_selection", "EngineSelectionError"),
+    "Delta": (".delta", "Delta"),
+    "DeltaError": (".delta", "DeltaError"),
     "GenerationId": (".workspace", "GenerationId"),
     "KnowledgeFacade": (".knowledge", "KnowledgeFacade"),
     "Manifest": (".workspace", "Manifest"),
