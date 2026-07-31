@@ -9,6 +9,7 @@ import statistics
 import tempfile
 
 from pathlib import Path
+from time import perf_counter
 
 from simplicio_fast.snapshot import build_snapshot
 from simplicio_fast.workspace import WorkspaceStore
@@ -27,20 +28,26 @@ def run(*, files: int = 24, repetitions: int = 3) -> dict[str, object]:
             )
         store = WorkspaceStore(root)
         base = store.build_base(config={"benchmark": "issue-230"})
-        raw = {"cold_ms": [], "warm_ms": [], "incremental_ms": []}
+        raw = {"cold_build_ms": [], "cold_ms": [], "warm_ms": [], "incremental_ms": []}
         parity = []
+        handoff_files_parsed = []
+        handoff_cache_reuse = []
         for revision in range(repetitions):
             source = root / "module_000.py"
             source.write_text(
                 f"def value_0():\n    return {revision + 1}\n", encoding="utf-8"
             )
             full = root / f"full-{revision}.sfast"
+            cold_build_start = perf_counter()
             build_snapshot(root, full)
+            raw["cold_build_ms"].append((perf_counter() - cold_build_start) * 1000)
             report = store.handoff(
                 base.generation_id, "benchmark", ["module_000.py"], parity_snapshot=full
             )
             parity.append(report["parity"])
-            for mode in raw:
+            handoff_files_parsed.append(int(report["files_parsed"]))
+            handoff_cache_reuse.append(int(report["cache_reuse"]))
+            for mode in ("cold_ms", "warm_ms", "incremental_ms"):
                 raw[mode].append(float(report["timings_ms"][mode]))
         return {
             "schema": SCHEMA,
@@ -50,8 +57,12 @@ def run(*, files: int = 24, repetitions: int = 3) -> dict[str, object]:
             "raw": raw,
             "totals": {mode + "_median_ms": statistics.median(samples) for mode, samples in raw.items()},
             "parity": parity,
-            "files_parsed": 1,
-            "cache_reuse": files - 1,
+            "files_parsed": handoff_files_parsed[-1],
+            "cache_reuse": handoff_cache_reuse[-1],
+            "handoff": {
+                "files_parsed": handoff_files_parsed,
+                "cache_reuse": handoff_cache_reuse,
+            },
         }
 
 

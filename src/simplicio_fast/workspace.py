@@ -19,7 +19,10 @@ import uuid
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import TYPE_CHECKING, Iterable, Iterator
+
+if TYPE_CHECKING:
+    from .delta import Delta
 
 from .adapters import capability_report, parse_path
 from .snapshot import ContextSpan, Snapshot, StaleSnapshotError, Symbol, build_snapshot, source_files
@@ -155,6 +158,16 @@ def _commit(root: Path) -> str:
         return "unknown"
 
 
+def _git_status(root: Path) -> str | None:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+            stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
 class WorkspaceStore:
     def __init__(self, root: Path, storage: Path | None = None) -> None:
         self.root = root.resolve()
@@ -184,13 +197,16 @@ class WorkspaceStore:
 
     def build_base(self, *, config: dict[str, object] | None = None) -> Manifest:
         config = config or {}
+        commit = _commit(self.root)
+        if commit != "unknown" and _git_status(self.root):
+            raise ValueError("canonical_base_dirty")
         files = source_files(self.root)
         source_hashes = {path.relative_to(self.root).as_posix(): _hash_source(path) for path in files}
         source_tree_sha256 = hashlib.sha256(_canonical_json(source_hashes)).hexdigest()
         parser_versions = {item.language: f"{item.parser}:1" for item in capability_report()}
         config_fingerprint = hashlib.sha256(_canonical_json(config)).hexdigest()
         identity = {
-            "kind": "base", "commit": _commit(self.root), "config_fingerprint": config_fingerprint,
+            "kind": "base", "commit": commit, "config_fingerprint": config_fingerprint,
             "parser_versions": parser_versions, "source_hashes": source_hashes,
             "source_tree_sha256": source_tree_sha256,
         }
@@ -239,19 +255,19 @@ class WorkspaceStore:
                                    "worktree_id": worktree_id, "changed_files": sorted(changed)})
         return overlay
 
-    def create_delta(self, base_generation: str, worktree_id: str, changed_paths: Iterable[str] | None = None, *, config_fingerprint: str | None = None):
+    def create_delta(self, base_generation: str, worktree_id: str, changed_paths: Iterable[str] | None = None, *, config_fingerprint: str | None = None) -> "Delta":
         from .delta import create_delta
         return create_delta(self, base_generation, worktree_id, changed_paths, config_fingerprint=config_fingerprint)
 
-    def delta(self, worktree_id: str, generation: str):
+    def delta(self, worktree_id: str, generation: str) -> "Delta":
         from .delta import load_delta
         return load_delta(self, worktree_id, generation)
 
-    def compose_delta(self, base_generation: str, worktree_id: str, delta_generation: str, *, config_fingerprint: str | None = None):
+    def compose_delta(self, base_generation: str, worktree_id: str, delta_generation: str, *, config_fingerprint: str | None = None) -> "EffectiveSnapshot":
         from .delta import compose_delta
         return compose_delta(self, base_generation, worktree_id, delta_generation, config_fingerprint=config_fingerprint)
 
-    def handoff(self, base_generation: str, worktree_id: str, changed_paths: Iterable[str] | None = None, *, delta_generation: str | None = None, config_fingerprint: str | None = None, parity_snapshot: Path | None = None):
+    def handoff(self, base_generation: str, worktree_id: str, changed_paths: Iterable[str] | None = None, *, delta_generation: str | None = None, config_fingerprint: str | None = None, parity_snapshot: Path | None = None) -> dict[str, object]:
         from .delta import handoff
         return handoff(self, base_generation, worktree_id, changed_paths, delta_generation=delta_generation, config_fingerprint=config_fingerprint, parity_snapshot=parity_snapshot)
     def overlay(self, worktree_id: str, generation: str) -> Overlay:

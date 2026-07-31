@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from simplicio_fast.snapshot import build_snapshot
@@ -77,6 +78,91 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             with self.assertRaises(DeltaError) as digest_error:
                 store.delta("issue-230", delta.delta_generation)
             self.assertEqual("delta_digest_mismatch", digest_error.exception.reason_code)
+
+    def test_added_file_preserves_unchanged_base_reuse(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            (root / "one.py").write_text("def one():\n    return 10\n", encoding="utf-8")
+            (root / "three.py").write_text("def three():\n    return 3\n", encoding="utf-8")
+            full = root / "full.sfast"
+            build_snapshot(root, full)
+            delta = store.create_delta(base.generation_id, "issue-230", ["one.py", "three.py"])
+            report = store.handoff(
+                base.generation_id, "issue-230", delta_generation=delta.delta_generation,
+                parity_snapshot=full,
+            )
+            self.assertTrue(report["parity"])
+            self.assertEqual(2, report["files_parsed"])
+            self.assertEqual(1, report["cache_reuse"])
+
+    def test_rejects_unlisted_current_source_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            (root / "one.py").write_text("def one():\n    return 10\n", encoding="utf-8")
+            delta = store.create_delta(base.generation_id, "issue-230", ["one.py"])
+            (root / "two.py").write_text("def two():\n    return 20\n", encoding="utf-8")
+            with self.assertRaises(DeltaError) as caught:
+                store.compose_delta(base.generation_id, "issue-230", delta.delta_generation)
+            self.assertEqual("delta_source_unlisted", caught.exception.reason_code)
+
+    def test_rejects_malformed_records_and_explicit_missing_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            with self.assertRaises(DeltaError) as missing:
+                store.create_delta(base.generation_id, "issue-230", ["missing.py"])
+            self.assertEqual("delta_path_missing", missing.exception.reason_code)
+            delta = store.create_delta(base.generation_id, "issue-230", ["one.py"])
+            path = store.delta_dir / "issue-230" / f"{delta.delta_generation}.json"
+            value = json.loads(path.read_text(encoding="utf-8"))
+            value["changed"]["one.py"] = {"sha256": "0" * 64}
+            path.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(DeltaError) as malformed:
+                store.delta("issue-230", delta.delta_generation)
+            self.assertEqual("delta_record_invalid", malformed.exception.reason_code)
+
+    def test_rejects_missing_digest_root_and_snapshot_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            manifest_path = store.base_dir / base.generation_id / "manifest.json"
+            value = json.loads(manifest_path.read_text(encoding="utf-8"))
+            value["snapshot_sha256"] = ""
+            manifest_path.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(DeltaError) as missing:
+                store.create_delta(base.generation_id, "issue-230")
+            self.assertEqual("base_artifact_digest_missing", missing.exception.reason_code)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            manifest_path = store.base_dir / base.generation_id / "manifest.json"
+            value = json.loads(manifest_path.read_text(encoding="utf-8"))
+            value["root"] = str(root / "other")
+            manifest_path.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(DeltaError) as root_error:
+                store.create_delta(base.generation_id, "issue-230")
+            self.assertEqual("base_root_mismatch", root_error.exception.reason_code)
+
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            manifest_path = store.base_dir / base.generation_id / "manifest.json"
+            value = json.loads(manifest_path.read_text(encoding="utf-8"))
+            value["snapshot"] = "../escape.sfast"
+            manifest_path.write_text(json.dumps(value), encoding="utf-8")
+            with self.assertRaises(DeltaError) as path_error:
+                store.create_delta(base.generation_id, "issue-230")
+            self.assertEqual("base_snapshot_path_invalid", path_error.exception.reason_code)
+
+    def test_rejects_dirty_git_canonical_base(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            with patch("simplicio_fast.workspace._commit", return_value="a" * 40), patch("simplicio_fast.workspace._git_status", return_value=" M one.py"):
+                with self.assertRaisesRegex(ValueError, "canonical_base_dirty"):
+                    store.build_base()
 
 
 if __name__ == "__main__":

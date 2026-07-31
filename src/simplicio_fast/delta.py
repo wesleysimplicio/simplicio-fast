@@ -51,23 +51,52 @@ class Delta:
     delta_sha256: str
 
     def __post_init__(self) -> None:
-        GenerationId(self.delta_generation)
-        GenerationId(self.base_generation)
+        try:
+            GenerationId(self.delta_generation)
+            GenerationId(self.base_generation)
+        except ValueError as error:
+            raise DeltaError("delta_generation_invalid") from error
         if self.schema != DELTA_SCHEMA:
             raise DeltaError("delta_schema_mismatch")
         if self.base_schema != MANIFEST_SCHEMA:
             raise DeltaError("base_schema_mismatch")
+        for field in (self.base_snapshot_sha256, self.delta_sha256):
+            if not _is_digest(field):
+                raise DeltaError("delta_digest_invalid")
+        for path, record in self.changed.items():
+            _validate_record(path, record)
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
     @classmethod
     def from_dict(cls, value: dict[str, object]) -> "Delta":
+        if not isinstance(value, dict):
+            raise DeltaError("delta_shape_invalid")
         if value.get("schema") != DELTA_SCHEMA:
             raise DeltaError("delta_schema_mismatch")
+        required = (
+            "delta_generation", "base_generation", "base_commit",
+            "base_config_fingerprint", "base_schema", "base_snapshot_sha256",
+            "worktree_id", "created_at", "delta_sha256",
+        )
+        missing = [key for key in required if key not in value]
+        if missing:
+            raise DeltaError("delta_field_missing", missing[0])
+        if any(not isinstance(value[key], str) for key in required):
+            raise DeltaError("delta_field_invalid")
         changed = value.get("changed")
         if not isinstance(changed, dict):
             raise DeltaError("delta_shape_invalid")
+        normalized_changed: dict[str, dict[str, object]] = {}
+        for path, record in changed.items():
+            if not isinstance(path, str) or not isinstance(record, dict):
+                raise DeltaError("delta_record_invalid")
+            normalized = _normal_path(path)
+            if normalized != path:
+                raise DeltaError("delta_record_invalid")
+            _validate_record(path, record)
+            normalized_changed[path] = record
         return cls(
             schema=str(value["schema"]),
             delta_generation=str(value["delta_generation"]),
@@ -77,7 +106,7 @@ class Delta:
             base_schema=str(value["base_schema"]),
             base_snapshot_sha256=str(value["base_snapshot_sha256"]),
             worktree_id=str(value["worktree_id"]),
-            changed={str(path): dict(record) for path, record in changed.items()},
+            changed=normalized_changed,
             created_at=str(value["created_at"]),
             delta_sha256=str(value["delta_sha256"]),
         )
@@ -85,6 +114,32 @@ class Delta:
 
 def _digest(value: object) -> str:
     return hashlib.sha256(_canonical_json(value)).hexdigest()
+
+
+def _is_digest(value: object) -> bool:
+    return isinstance(value, str) and len(value) == 64 and all(
+        character in "0123456789abcdef" for character in value
+    )
+
+
+def _validate_record(path: str, record: object) -> None:
+    if not isinstance(record, dict):
+        raise DeltaError("delta_record_invalid", path)
+    required = {"sha256", "tombstone", "symbols"}
+    if not required.issubset(record):
+        raise DeltaError("delta_record_invalid", path)
+    tombstone = record["tombstone"]
+    symbols = record["symbols"]
+    digest = record["sha256"]
+    if not isinstance(tombstone, bool) or not isinstance(symbols, list):
+        raise DeltaError("delta_record_invalid", path)
+    if not all(isinstance(symbol, dict) for symbol in symbols):
+        raise DeltaError("delta_record_invalid", path)
+    if tombstone:
+        if digest is not None or symbols:
+            raise DeltaError("delta_record_invalid", path)
+    elif not _is_digest(digest):
+        raise DeltaError("delta_record_invalid", path)
 
 
 def _normal_path(value: str) -> str:
@@ -99,16 +154,27 @@ def _normal_path(value: str) -> str:
     return candidate
 
 
-def _base_snapshot(store: WorkspaceStore, base_generation: str):
+def _base_snapshot(store: WorkspaceStore, base_generation: str) -> tuple[object, Path, str]:
     base = store.manifest(base_generation)
     if base.schema != MANIFEST_SCHEMA:
         raise DeltaError("base_schema_mismatch")
-    snapshot_path = store.base_dir / base_generation / base.snapshot
+    if not base.root or Path(base.root).resolve() != store.root:
+        raise DeltaError("base_root_mismatch")
+    if not _is_digest(base.snapshot_sha256) or not _is_digest(base.source_tree_sha256):
+        raise DeltaError("base_artifact_digest_missing")
+    if _digest(base.source_hashes) != base.source_tree_sha256:
+        raise DeltaError("base_source_tree_digest_mismatch")
+    directory = (store.base_dir / base_generation).resolve()
+    relative_snapshot = Path(base.snapshot)
+    if relative_snapshot.is_absolute() or ".." in relative_snapshot.parts:
+        raise DeltaError("base_snapshot_path_invalid")
+    snapshot_path = (directory / relative_snapshot).resolve()
+    if not snapshot_path.is_relative_to(directory):
+        raise DeltaError("base_snapshot_path_invalid")
     if not snapshot_path.is_file():
         raise DeltaError("base_artifact_missing")
     actual = _hash_source(snapshot_path)
-    expected = base.snapshot_sha256 or actual
-    if actual != expected:
+    if actual != base.snapshot_sha256:
         raise DeltaError("base_artifact_digest_mismatch")
     return base, snapshot_path, actual
 
@@ -148,6 +214,10 @@ def create_delta(
         path.relative_to(store.root).as_posix(): path for path in source_files(store.root)
     }
     requested = None if changed_paths is None else sorted({_normal_path(path) for path in changed_paths})
+    if requested is not None:
+        missing = [path for path in requested if path not in current_paths and path not in base.source_hashes]
+        if missing:
+            raise DeltaError("delta_path_missing", missing[0])
     candidates = sorted(set(current_paths) | set(base.source_hashes) if requested is None else set(requested))
     changed: dict[str, dict[str, object]] = {}
     for relative in candidates:
@@ -223,16 +293,16 @@ def compose_delta(
         raise DeltaError("config_fingerprint_mismatch")
     if delta.base_schema != base.schema or delta.base_snapshot_sha256 != snapshot_sha256:
         raise DeltaError("base_artifact_digest_mismatch")
-    current_paths = {
-        path.relative_to(store.root).as_posix(): path for path in source_files(store.root)
+    current_hashes = {
+        path.relative_to(store.root).as_posix(): _hash_source(path) for path in source_files(store.root)
     }
-    for relative, record in delta.changed.items():
-        path = current_paths.get(relative)
-        if bool(record.get("tombstone")):
-            if path is not None:
-                raise DeltaError("delta_source_stale")
-        elif path is None or _hash_source(path) != record.get("sha256"):
-            raise DeltaError("delta_source_stale")
+    expected_hashes = _composed_source_hashes(store, base, delta)
+    for relative in sorted(set(current_hashes) | set(expected_hashes)):
+        if current_hashes.get(relative) == expected_hashes.get(relative):
+            continue
+        if relative not in delta.changed:
+            raise DeltaError("delta_source_unlisted", relative)
+        raise DeltaError("delta_source_stale", relative)
     overlay = Overlay(
         OVERLAY_SCHEMA, delta.delta_generation, base_generation, worktree_id,
         delta.changed, delta.created_at,
@@ -303,6 +373,6 @@ def handoff(
         },
         "changed_paths": sorted(delta.changed),
         "files_parsed": sum(1 for record in delta.changed.values() if not bool(record.get("tombstone"))),
-        "cache_reuse": max(0, len(base.source_hashes) - len(delta.changed)),
+        "cache_reuse": len(set(base.source_hashes) - set(delta.changed)),
         "timings_ms": {"cold_ms": round(cold_ms, 3), "warm_ms": round(warm_ms, 3), "incremental_ms": round(incremental_ms, 3)},
     }
