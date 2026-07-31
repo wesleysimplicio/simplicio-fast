@@ -249,8 +249,17 @@ simplicio-fast handoff . --base-generation <base-generation> --worktree-id issue
 ```
 
 The handoff is `simplicio.fast.handoff/v1` and reports cold/warm/incremental timings,
-parsed files, cache reuse, canonical snapshot SHA-256, delta SHA-256 and source-tree parity.
-It rejects a stale base commit, config fingerprint, schema, artifact digest or source path.
+CPU time, mapped bytes, parsed files, cache reuse, canonical snapshot SHA-256, delta SHA-256
+and source-tree parity. It rejects a stale base commit, config fingerprint, schema, artifact
+digest or source path.
+
+Run the issue-specific benchmark with at least ten repetitions:
+`PYTHONPATH=src python benchmarks/changed_path_delta_230.py --repetitions 10`.
+It measures cold, warm, unchanged and one-file lanes, retaining raw wall/CPU/RSS/page-fault
+samples plus parsed/reused files and bytes and mapped bytes. Its receipt is
+`simplicio.fast.changed-path-delta-benchmark/v2`; v1 readers must reject or explicitly migrate
+the previous `raw`/`totals` shape to `categories.<lane>.raw`/`summary`.
+
 Rollback is safe and derived-state-only: discard the delta generation, release its lease, and
 keep the immutable canonical base; source files remain authoritative and are never reverted by
 Fast's handoff path.

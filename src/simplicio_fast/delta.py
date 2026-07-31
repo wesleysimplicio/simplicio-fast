@@ -250,7 +250,13 @@ def create_delta(
         base.schema, snapshot_sha256, worktree_id, changed,
         time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), generation,
     )
-    _atomic_json(store.delta_dir / worktree_id / f"{generation}.json", delta.to_dict())
+    path = store.delta_dir / worktree_id / f"{generation}.json"
+    if path.is_file():
+        try:
+            return load_delta(store, worktree_id, generation)
+        except DeltaError:
+            pass
+    _atomic_json(path, delta.to_dict())
     store._receipt("delta", {
         "base_generation": base_generation, "delta_generation": generation,
         "worktree_id": worktree_id, "changed_files": sorted(changed),
@@ -331,6 +337,7 @@ def handoff(
     parity_snapshot: Path | None = None,
 ) -> dict[str, object]:
     cold_start = perf_counter()
+    cpu_start = time.process_time()
     base, snapshot_path, snapshot_sha256 = _base_snapshot(store, base_generation)
     with Snapshot(snapshot_path) as canonical:
         canonical_files = canonical.files()
@@ -365,6 +372,8 @@ def handoff(
         "snapshot_hash": snapshot_sha256,
         "snapshot_sha256": snapshot_sha256,
         "delta_sha256": delta.delta_sha256,
+        "mapped_bytes": snapshot_path.stat().st_size,
+        "cpu_ms": round((time.process_time() - cpu_start) * 1000, 3),
         "parity_snapshot_hash": parity_snapshot_hash,
         "parity": parity,
         "parity_result": {
