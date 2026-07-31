@@ -2,6 +2,7 @@ import concurrent.futures
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -13,6 +14,36 @@ from benchmarks.changed_path_delta_230 import run as run_delta_benchmark
 from simplicio_fast.delta import DeltaError
 from simplicio_fast.snapshot import build_snapshot
 from simplicio_fast.workspace import WorkspaceStore
+
+
+def _shell_command(arguments: list[str]) -> str:
+    if os.name == "nt":
+        return subprocess.list2cmdline(arguments)
+    return shlex.join(arguments)
+
+
+def _run_external(
+    arguments: list[str],
+    stdout_path: Path | None = None,
+    stderr_path: Path | None = None,
+    environment: dict[str, str] | None = None,
+) -> int:
+    command = _shell_command(arguments)
+    if stdout_path is not None:
+        command += f" > {_shell_command([str(stdout_path)])}"
+    if stderr_path is not None:
+        command += f" 2> {_shell_command([str(stderr_path)])}"
+    previous = {key: os.environ.get(key) for key in environment} if environment else {}
+    try:
+        if environment is not None:
+            os.environ.update(environment)
+        return os.system(command)
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 class ChangedPathDeltaHandoffTest(unittest.TestCase):
@@ -234,6 +265,14 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             build_snapshot(root, parity)
             environment = os.environ.copy()
             environment["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
+            def run_cli(command: list[str]) -> dict[str, object]:
+                with tempfile.TemporaryDirectory(prefix="simplicio-fast-cli-") as logs:
+                    stdout_path = Path(logs) / "stdout.json"
+                    stderr_path = Path(logs) / "stderr.txt"
+                    result = _run_external(command, stdout_path, stderr_path, environment)
+                    self.assertEqual(0, result, stderr_path.read_text(encoding="utf-8"))
+                    return json.loads(stdout_path.read_text(encoding="utf-8"))
+
             delta_command = [
                 sys.executable,
                 "-m",
@@ -247,16 +286,9 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 "--changed-path",
                 "one.py",
             ]
-            delta_result = subprocess.run(
-                delta_command,
-                capture_output=True,
-                text=True,
-                env=environment,
-                check=True,
-            )
-            delta_payload = json.loads(delta_result.stdout)
+            delta_payload = run_cli(delta_command)
             generation = delta_payload["delta"]["delta_generation"]
-            handoff_result = subprocess.run(
+            report = run_cli(
                 [
                     sys.executable,
                     "-m",
@@ -271,13 +303,8 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                     generation,
                     "--parity-snapshot",
                     str(parity),
-                ],
-                capture_output=True,
-                text=True,
-                env=environment,
-                check=True,
+                ]
             )
-            report = json.loads(handoff_result.stdout)
             self.assertEqual("simplicio.fast.handoff/v1", report["schema"])
             self.assertEqual("pass", report["status"])
             self.assertEqual(1, report["files_parsed"])
@@ -325,6 +352,99 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "canonical_base_dirty"):
                     store.build_base()
 
+    def test_physical_git_worktrees_share_immutable_base_without_cross_contamination(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="simplicio-fast-worktrees-") as directory:
+            root = Path(directory)
+            canonical = root / "canonical"
+            worktree_a = root / "worktree-a"
+            worktree_b = root / "worktree-b"
+            storage = root / "shared-fast"
+            canonical.mkdir()
+            (canonical / "one.py").write_text("def one_base():\n    return 1\n", encoding="utf-8")
+            (canonical / "two.py").write_text("def two_base():\n    return 2\n", encoding="utf-8")
+
+            def run_git(*arguments: str, cwd: Path = canonical) -> None:
+                result = _run_external(
+                    ["git", "-C", str(cwd), *arguments],
+                    Path(os.devnull),
+                    Path(os.devnull),
+                )
+                if result != 0:
+                    raise AssertionError(f"git command failed with status {result}: {arguments}")
+
+            run_git("init")
+            run_git("config", "user.name", "simplicio-fast-test")
+            run_git("config", "user.email", "simplicio-fast-test@example.invalid")
+            run_git("add", "one.py", "two.py")
+            run_git("commit", "-m", "canonical base")
+            run_git("pack-refs", "--all", "--prune")
+            try:
+                run_git("worktree", "add", str(worktree_a), "HEAD")
+                run_git("worktree", "add", str(worktree_b), "HEAD")
+                (worktree_a / "one.py").write_text(
+                    "def one_slot_a():\n    return 10\n", encoding="utf-8"
+                )
+                (worktree_b / "two.py").write_text(
+                    "def two_slot_b():\n    return 20\n", encoding="utf-8"
+                )
+                canonical_store = WorkspaceStore(canonical, storage=storage)
+                base = canonical_store.build_base(config={"profile": "physical-worktrees"})
+                base_path = storage / "base" / base.generation_id / base.snapshot
+                base_bytes = base_path.read_bytes()
+                base_digest = hashlib.sha256(base_bytes).hexdigest()
+                store_a = WorkspaceStore(worktree_a, storage=storage)
+                store_b = WorkspaceStore(worktree_b, storage=storage)
+                reader_stores = [store_a, store_b] * 10
+
+                def read_base(store: WorkspaceStore) -> tuple[str, str, list[str]]:
+                    with store.open(base.generation_id) as view:
+                        return (
+                            view.base_generation,
+                            view.manifest.snapshot_sha256,
+                            sorted(symbol.name for symbol in view.find("base")),
+                        )
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=20) as pool:
+                    reader_results = list(pool.map(read_base, reader_stores))
+                expected_reader = (base.generation_id, base.snapshot_sha256, ["one_base", "two_base"])
+                self.assertEqual([expected_reader] * 20, reader_results)
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                    future_a = pool.submit(store_a.create_delta, base.generation_id, "slot-a", ["one.py"])
+                    future_b = pool.submit(store_b.create_delta, base.generation_id, "slot-b", ["two.py"])
+                    delta_a = future_a.result(timeout=30)
+                    delta_b = future_b.result(timeout=30)
+
+                self.assertEqual(["one.py"], sorted(delta_a.changed))
+                self.assertEqual(["two.py"], sorted(delta_b.changed))
+                with store_a.compose_delta(base.generation_id, "slot-a", delta_a.delta_generation) as view_a:
+                    self.assertEqual(["one_slot_a"], [symbol.name for symbol in view_a.find("one_slot")])
+                    self.assertEqual([], view_a.find("two_slot"))
+                    self.assertEqual(["two_base"], [symbol.name for symbol in view_a.find("two")])
+                with store_b.compose_delta(base.generation_id, "slot-b", delta_b.delta_generation) as view_b:
+                    self.assertEqual(["two_slot_b"], [symbol.name for symbol in view_b.find("two_slot")])
+                    self.assertEqual([], view_b.find("one_slot"))
+                    self.assertEqual(["one_base"], [symbol.name for symbol in view_b.find("one")])
+
+                with self.assertRaises(DeltaError) as crossed:
+                    store_a.compose_delta(base.generation_id, "slot-b", delta_b.delta_generation)
+                self.assertEqual("delta_source_unlisted", crossed.exception.reason_code)
+                self.assertEqual(base.generation_id, canonical_store.manifest(base.generation_id).generation_id)
+                self.assertEqual(base_bytes, base_path.read_bytes())
+                self.assertEqual(base_digest, hashlib.sha256(base_path.read_bytes()).hexdigest())
+            finally:
+                for worktree in (worktree_a, worktree_b):
+                    if worktree.exists():
+                        _run_external(
+                            ["git", "-C", str(canonical), "worktree", "remove", "--force", str(worktree)],
+                            Path(os.devnull),
+                            Path(os.devnull),
+                        )
+                _run_external(
+                    ["git", "-C", str(canonical), "worktree", "prune"],
+                    Path(os.devnull),
+                    Path(os.devnull),
+                )
 
 if __name__ == "__main__":
     unittest.main()
