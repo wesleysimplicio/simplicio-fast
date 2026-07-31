@@ -1,67 +1,284 @@
-"""Bounded changed-path delta handoff benchmark for issue #230."""
+"""Measured changed-path delta handoff benchmark for issue #230."""
 
 from __future__ import annotations
 
 import argparse
+import ctypes
+from ctypes import wintypes
 import json
+import os
 import platform
 import statistics
 import tempfile
-
+from collections.abc import Callable
 from pathlib import Path
-from time import perf_counter
+from time import perf_counter, process_time
 
-from simplicio_fast.snapshot import build_snapshot
+from simplicio_fast.snapshot import Snapshot, build_snapshot, source_files
 from simplicio_fast.workspace import WorkspaceStore
 
-SCHEMA = "simplicio.fast.changed-path-delta-benchmark/v1"
+SCHEMA = "simplicio.fast.changed-path-delta-benchmark/v2"
+MIN_REPETITIONS = 10
 
 
-def run(*, files: int = 24, repetitions: int = 3) -> dict[str, object]:
-    if files < 2 or repetitions < 3:
-        raise ValueError("files must be at least two and repetitions must be at least three")
-    with tempfile.TemporaryDirectory(prefix="simplicio-fast-delta-") as directory:
-        root = Path(directory)
-        for index in range(files):
-            (root / f"module_{index:03d}.py").write_text(
-                f"def value_{index}():\n    return {index}\n", encoding="utf-8"
+def _process_metrics() -> tuple[int | None, int | None, str | None]:
+    if os.name == "nt":
+        try:
+            class _Counters(ctypes.Structure):
+                _fields_ = [
+                    ("cb", ctypes.c_ulong),
+                    ("page_faults", ctypes.c_ulong),
+                    ("peak_working_set", ctypes.c_size_t),
+                    ("working_set", ctypes.c_size_t),
+                    ("quota_peak_paged_pool", ctypes.c_size_t),
+                    ("quota_paged_pool", ctypes.c_size_t),
+                    ("quota_peak_nonpaged_pool", ctypes.c_size_t),
+                    ("quota_nonpaged_pool", ctypes.c_size_t),
+                    ("pagefile", ctypes.c_size_t),
+                    ("peak_pagefile", ctypes.c_size_t),
+                ]
+
+            counters = _Counters()
+            counters.cb = ctypes.sizeof(_Counters)
+            kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+            psapi = ctypes.WinDLL("psapi", use_last_error=True)
+            process_memory_info = psapi.GetProcessMemoryInfo
+            process_memory_info.argtypes = [
+                wintypes.HANDLE,
+                ctypes.POINTER(_Counters),
+                wintypes.DWORD,
+            ]
+            process_memory_info.restype = wintypes.BOOL
+            if not process_memory_info(
+                kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb
+            ):
+                return None, None, "windows_process_memory_query_failed"
+            return (
+                max(0, int(counters.peak_working_set // 1024)),
+                int(counters.page_faults),
+                None,
             )
-        store = WorkspaceStore(root)
-        base = store.build_base(config={"benchmark": "issue-230"})
-        raw = {"cold_build_ms": [], "cold_ms": [], "warm_ms": [], "incremental_ms": []}
-        parity = []
-        handoff_files_parsed = []
-        handoff_cache_reuse = []
+        except (AttributeError, OSError, TypeError):
+            return None, None, "windows_process_memory_unavailable"
+
+    try:
+        import resource
+
+        usage = resource.getrusage(resource.RUSAGE_SELF)
+        rss = int(usage.ru_maxrss)
+        if platform.system() == "Darwin":
+            rss //= 1024
+        faults = int(usage.ru_minflt + usage.ru_majflt)
+        return max(0, rss), faults, None
+    except (ImportError, AttributeError, OSError, ValueError):
+        return None, None, "process_metrics_unavailable"
+
+
+def _measure(operation: Callable[[], object]) -> tuple[dict[str, object], object]:
+    before_rss, before_faults, reason = _process_metrics()
+    wall_start = perf_counter()
+    cpu_start = process_time()
+    result = operation()
+    sample = {
+        "wall_ms": (perf_counter() - wall_start) * 1000,
+        "cpu_ms": (process_time() - cpu_start) * 1000,
+        "rss_kib": None,
+        "page_faults": None,
+    }
+    after_rss, after_faults, after_reason = _process_metrics()
+    if after_rss is not None:
+        sample["rss_kib"] = after_rss
+    if after_faults is not None and before_faults is not None:
+        sample["page_faults"] = max(0, after_faults - before_faults)
+    return sample, result if reason is None else (result, reason or after_reason)
+
+
+def _summary(rows: list[dict[str, object]]) -> dict[str, object]:
+    def median(name: str) -> float | int | None:
+        values = [row[name] for row in rows if isinstance(row[name], (int, float))]
+        return statistics.median(values) if values else None
+
+    return {
+        "repetitions": len(rows),
+        "wall_ms_median": median("wall_ms"),
+        "cpu_ms_median": median("cpu_ms"),
+        "rss_kib_median": median("rss_kib"),
+        "page_faults_median": median("page_faults"),
+        "parsed_files_median": median("parsed_files"),
+        "reused_files_median": median("reused_files"),
+        "parsed_bytes_median": median("parsed_bytes"),
+        "reused_bytes_median": median("reused_bytes"),
+        "mapped_bytes_median": median("mapped_bytes"),
+        "parity": all(bool(row["parity"]) for row in rows),
+    }
+
+
+def _make_root(parent: Path, files: int, label: str) -> tuple[Path, WorkspaceStore, object, dict[str, int]]:
+    root = parent / label
+    root.mkdir()
+    for index in range(files):
+        (root / f"module_{index:03d}.py").write_text(
+            f"def value_{index}():\n    return {index}\n", encoding="utf-8"
+        )
+    store = WorkspaceStore(root)
+    base = store.build_base(config={"benchmark": "issue-230"})
+    sizes = {
+        path.relative_to(root).as_posix(): path.stat().st_size
+        for path in source_files(root)
+    }
+    return root, store, base, sizes
+
+
+def _mapped_bytes(store: WorkspaceStore, base: object) -> int:
+    manifest = store.manifest(base.generation_id)
+    return (store.base_dir / base.generation_id / manifest.snapshot).stat().st_size
+
+
+def _run_category(parent: Path, files: int, repetitions: int, category: str) -> list[dict[str, object]]:
+    root, store, base, sizes = _make_root(parent, files, category)
+    rows: list[dict[str, object]] = []
+    if category == "cold":
         for revision in range(repetitions):
-            source = root / "module_000.py"
+            target = root / f"cold-{revision}.sfast"
+
+            def build() -> None:
+                build_snapshot(root, target)
+
+            sample, _ = _measure(build)
+            sample.update({
+                "parsed_files": files,
+                "reused_files": 0,
+                "parsed_bytes": sum(sizes.values()),
+                "reused_bytes": 0,
+                "mapped_bytes": target.stat().st_size,
+                "parity": True,
+            })
+            rows.append(sample)
+        return rows
+
+    base_mapped_bytes = _mapped_bytes(store, base)
+    parity_snapshot = root / "parity.sfast"
+    build_snapshot(root, parity_snapshot)
+    if category == "warm":
+        for revision in range(repetitions):
+            def read_snapshot() -> int:
+                with Snapshot(store.base_dir / base.generation_id / base.snapshot) as snapshot:
+                    return len(snapshot.files())
+
+            sample, count = _measure(read_snapshot)
+            if isinstance(count, tuple):
+                count = count[0]
+            sample.update({
+                "parsed_files": 0,
+                "reused_files": files,
+                "parsed_bytes": 0,
+                "reused_bytes": sum(sizes.values()),
+                "mapped_bytes": base_mapped_bytes,
+                "parity": count == files,
+            })
+            rows.append(sample)
+        return rows
+
+    for revision in range(repetitions):
+        source = root / "module_000.py"
+        if category == "one_file":
             source.write_text(
                 f"def value_0():\n    return {revision + 1}\n", encoding="utf-8"
             )
-            full = root / f"full-{revision}.sfast"
-            cold_build_start = perf_counter()
-            build_snapshot(root, full)
-            raw["cold_build_ms"].append((perf_counter() - cold_build_start) * 1000)
-            report = store.handoff(
-                base.generation_id, "benchmark", ["module_000.py"], parity_snapshot=full
+            build_snapshot(root, parity_snapshot)
+            changed_bytes = source.stat().st_size
+            expected_parsed = 1
+            expected_reused = files - 1
+            expected_parsed_bytes = changed_bytes
+            expected_reused_bytes = sum(
+                size for path, size in sizes.items() if path != "module_000.py"
             )
-            parity.append(report["parity"])
-            handoff_files_parsed.append(int(report["files_parsed"]))
-            handoff_cache_reuse.append(int(report["cache_reuse"]))
-            for mode in ("cold_ms", "warm_ms", "incremental_ms"):
-                raw[mode].append(float(report["timings_ms"][mode]))
+            changed_paths = ["module_000.py"]
+        else:
+            source.write_text("def value_0():\n    return 0\n", encoding="utf-8")
+            build_snapshot(root, parity_snapshot)
+            expected_parsed = 0
+            expected_reused = files
+            expected_parsed_bytes = 0
+            expected_reused_bytes = sum(sizes.values())
+            changed_paths = ["module_000.py"]
+
+        def handoff() -> dict[str, object]:
+            return store.handoff(
+                base.generation_id,
+                category,
+                changed_paths,
+                parity_snapshot=parity_snapshot,
+            )
+
+        sample, report = _measure(handoff)
+        if isinstance(report, tuple):
+            report = report[0]
+        sample.update({
+            "parsed_files": int(report["files_parsed"]),
+            "reused_files": int(report["cache_reuse"]),
+            "parsed_bytes": expected_parsed_bytes,
+            "reused_bytes": expected_reused_bytes,
+            "mapped_bytes": base_mapped_bytes,
+            "parity": bool(report["parity"]),
+        })
+        if sample["parsed_files"] != expected_parsed or sample["reused_files"] != expected_reused:
+            raise AssertionError(f"{category} reuse accounting drifted: {sample}")
+        rows.append(sample)
+    return rows
+
+
+def run(*, files: int = 24, repetitions: int = MIN_REPETITIONS) -> dict[str, object]:
+    if files < 2:
+        raise ValueError("files must be at least two")
+    if repetitions < MIN_REPETITIONS:
+        raise ValueError(f"repetitions must be at least {MIN_REPETITIONS}")
+    with tempfile.TemporaryDirectory(prefix="simplicio-fast-delta-") as directory:
+        parent = Path(directory)
+        categories = {
+            category: _run_category(parent, files, repetitions, category)
+            for category in ("cold", "warm", "unchanged", "one_file")
+        }
+        metric_reasons = {
+            "rss_kib": "available" if all(
+                row["rss_kib"] is not None
+                for rows in categories.values()
+                for row in rows
+            ) else "host_metric_unavailable",
+            "page_faults": "available" if all(
+                row["page_faults"] is not None
+                for rows in categories.values()
+                for row in rows
+            ) else "host_metric_unavailable",
+        }
         return {
             "schema": SCHEMA,
-            "status": "pass" if all(parity) else "parity_mismatch",
-            "workload": {"files": files, "changed_files": 1, "repetitions": repetitions},
-            "environment": {"python": platform.python_version(), "platform": platform.platform()},
-            "raw": raw,
-            "totals": {mode + "_median_ms": statistics.median(samples) for mode, samples in raw.items()},
-            "parity": parity,
-            "files_parsed": handoff_files_parsed[-1],
-            "cache_reuse": handoff_cache_reuse[-1],
-            "handoff": {
-                "files_parsed": handoff_files_parsed,
-                "cache_reuse": handoff_cache_reuse,
+            "status": "pass" if all(
+                bool(row["parity"])
+                for rows in categories.values()
+                for row in rows
+            ) else "parity_mismatch",
+            "workload": {
+                "files": files,
+                "changed_files": 1,
+                "repetitions": repetitions,
+                "minimum_repetitions": MIN_REPETITIONS,
+                "categories": list(categories),
+            },
+            "environment": {
+                "python": platform.python_version(),
+                "platform": platform.platform(),
+                "metrics_status": "complete"
+                if all(value == "available" for value in metric_reasons.values())
+                else "partial",
+                "metric_reasons": metric_reasons,
+            },
+            "categories": {
+                name: {
+                    "summary": _summary(rows),
+                    "raw": rows,
+                }
+                for name, rows in categories.items()
             },
         }
 
@@ -69,7 +286,7 @@ def run(*, files: int = 24, repetitions: int = 3) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--files", type=int, default=24)
-    parser.add_argument("--repetitions", type=int, default=3)
+    parser.add_argument("--repetitions", type=int, default=MIN_REPETITIONS)
     parser.add_argument("--json-out", type=Path)
     args = parser.parse_args()
     receipt = run(files=args.files, repetitions=args.repetitions)

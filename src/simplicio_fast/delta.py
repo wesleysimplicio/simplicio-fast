@@ -154,12 +154,77 @@ def _normal_path(value: str) -> str:
     return candidate
 
 
+def _git_dir(root: Path) -> Path | None:
+    marker = root / ".git"
+    try:
+        if marker.is_dir():
+            return marker.resolve()
+        content = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not content.lower().startswith("gitdir:"):
+        return None
+    path = Path(content[7:].strip())
+    return (root / path if not path.is_absolute() else path).resolve()
+
+
+def _git_common_dir(root: Path) -> Path | None:
+    git_dir = _git_dir(root)
+    if git_dir is None:
+        return None
+    commondir = git_dir / "commondir"
+    try:
+        if commondir.is_file():
+            content = commondir.read_text(encoding="utf-8").strip()
+            path = Path(content)
+            git_dir = (git_dir / path if not path.is_absolute() else path).resolve()
+        return git_dir if git_dir.is_dir() else None
+    except OSError:
+        return None
+
+
+def _git_commit(root: Path) -> str:
+    git_dir = _git_dir(root)
+    common_dir = _git_common_dir(root)
+    if git_dir is None or common_dir is None:
+        return "unknown"
+    try:
+        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
+        if head.startswith("ref: "):
+            reference = head[5:]
+            ref_path = common_dir / reference
+            if ref_path.is_file():
+                head = ref_path.read_text(encoding="utf-8").strip()
+            else:
+                packed_refs = common_dir / "packed-refs"
+                for line in packed_refs.read_text(encoding="utf-8").splitlines():
+                    commit, _, packed_ref = line.partition(" ")
+                    if packed_ref == reference:
+                        head = commit
+                        break
+    except OSError:
+        return "unknown"
+    return head if len(head) == 40 and all(c in "0123456789abcdef" for c in head) else "unknown"
+
+
 def _base_snapshot(store: WorkspaceStore, base_generation: str) -> tuple[object, Path, str]:
     base = store.manifest(base_generation)
     if base.schema != MANIFEST_SCHEMA:
         raise DeltaError("base_schema_mismatch")
-    if not base.root or Path(base.root).resolve() != store.root:
-        raise DeltaError("base_root_mismatch")
+    base_root = Path(base.root).resolve() if base.root else None
+    if base_root != store.root:
+        base_common_dir = _git_common_dir(base_root) if base_root is not None else None
+        store_common_dir = _git_common_dir(store.root)
+        canonical_commit = _git_commit(base_root) if base_root is not None else "unknown"
+        expected_commit = base.commit if base.commit != "unknown" else canonical_commit
+        same_commit = (
+            expected_commit != "unknown"
+            and canonical_commit == expected_commit
+            and _git_commit(store.root) == expected_commit
+        )
+        same_repository = base_common_dir is not None and base_common_dir == store_common_dir
+        if not same_commit or not same_repository:
+            raise DeltaError("base_root_mismatch")
     if not _is_digest(base.snapshot_sha256) or not _is_digest(base.source_tree_sha256):
         raise DeltaError("base_artifact_digest_missing")
     if _digest(base.source_hashes) != base.source_tree_sha256:
@@ -250,7 +315,13 @@ def create_delta(
         base.schema, snapshot_sha256, worktree_id, changed,
         time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), generation,
     )
-    _atomic_json(store.delta_dir / worktree_id / f"{generation}.json", delta.to_dict())
+    path = store.delta_dir / worktree_id / f"{generation}.json"
+    if path.is_file():
+        try:
+            return load_delta(store, worktree_id, generation)
+        except DeltaError:
+            pass
+    _atomic_json(path, delta.to_dict())
     store._receipt("delta", {
         "base_generation": base_generation, "delta_generation": generation,
         "worktree_id": worktree_id, "changed_files": sorted(changed),
@@ -331,6 +402,7 @@ def handoff(
     parity_snapshot: Path | None = None,
 ) -> dict[str, object]:
     cold_start = perf_counter()
+    cpu_start = time.process_time()
     base, snapshot_path, snapshot_sha256 = _base_snapshot(store, base_generation)
     with Snapshot(snapshot_path) as canonical:
         canonical_files = canonical.files()
@@ -365,6 +437,8 @@ def handoff(
         "snapshot_hash": snapshot_sha256,
         "snapshot_sha256": snapshot_sha256,
         "delta_sha256": delta.delta_sha256,
+        "mapped_bytes": snapshot_path.stat().st_size,
+        "cpu_ms": round((time.process_time() - cpu_start) * 1000, 3),
         "parity_snapshot_hash": parity_snapshot_hash,
         "parity": parity,
         "parity_result": {
