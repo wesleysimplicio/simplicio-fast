@@ -947,6 +947,23 @@ mod tests {
     }
 
     #[test]
+    fn rejects_out_of_bounds_persisted_index() {
+        let mut indexes = PersistedIndexes {
+            exact: BTreeMap::new(),
+            names: BTreeMap::new(),
+            paths: BTreeMap::new(),
+            kinds: BTreeMap::new(),
+        };
+        indexes.exact.insert("helper".into(), vec![3]);
+        let result = validate_persisted_indexes(&indexes, 3);
+        assert!(matches!(
+            result,
+            Err(SnapshotError::Invalid(reason))
+                if reason == "persisted index record out of bounds"
+        ));
+    }
+
+    #[test]
     fn context_rejects_zero_budget() {
         let result = empty_reader().context(Path::new("."), "symbol", 1, 1, 1, 0);
         assert!(
