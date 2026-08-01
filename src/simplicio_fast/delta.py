@@ -492,16 +492,19 @@ def handoff(
     config_fingerprint: str | None = None,
     parity_snapshot: Path | None = None,
 ) -> dict[str, object]:
-    cold_start = perf_counter()
-    cpu_start = time.process_time()
-    changed_paths = (
+    scoped_paths = (
         None
         if changed_paths is None
         else sorted({_normal_path(path) for path in changed_paths})
     )
+    cold_start = perf_counter()
+    cpu_start = time.process_time()
     base, snapshot_path, snapshot_sha256 = _base_snapshot(store, base_generation)
-    with Snapshot(snapshot_path) as canonical:
-        canonical_files = canonical.files()
+    if scoped_paths is None:
+        with Snapshot(snapshot_path) as canonical:
+            canonical_file_count = len(canonical.files())
+    else:
+        canonical_file_count = len(base.source_hashes)
     cold_ms = (perf_counter() - cold_start) * 1000
     incremental_start = perf_counter()
     delta = (
@@ -511,28 +514,37 @@ def handoff(
             store,
             base_generation,
             worktree_id,
-            changed_paths,
+            scoped_paths,
             config_fingerprint=config_fingerprint,
         )
     )
     incremental_ms = (perf_counter() - incremental_start) * 1000
     warm_start = perf_counter()
-    with compose_delta(
-        store,
-        base_generation,
-        worktree_id,
-        delta.delta_generation,
-        config_fingerprint=config_fingerprint,
-        changed_paths=changed_paths,
-    ) as composed:
-        composed_symbols = len(composed.symbols())
+    if scoped_paths is None:
+        with compose_delta(
+            store,
+            base_generation,
+            worktree_id,
+            delta.delta_generation,
+            config_fingerprint=config_fingerprint,
+            changed_paths=scoped_paths,
+        ) as composed:
+            composed_symbol_count: int | None = len(composed.symbols())
+        composed_symbol_count_reason = None
+    else:
+        with compose_delta(
+            store,
+            base_generation,
+            worktree_id,
+            delta.delta_generation,
+            config_fingerprint=config_fingerprint,
+            changed_paths=scoped_paths,
+        ):
+            pass
+        composed_symbol_count = None
+        composed_symbol_count_reason = "scoped_query_not_materialized"
     warm_ms = (perf_counter() - warm_start) * 1000
     merged = _composed_source_hashes(store, base, delta)
-    scoped_paths = (
-        None
-        if changed_paths is None
-        else sorted({_normal_path(path) for path in changed_paths})
-    )
     if scoped_paths is None:
         current = {
             path.relative_to(store.root).as_posix(): _hash_source(path)
@@ -577,8 +589,9 @@ def handoff(
             "source_tree_sha256": _digest(merged),
             "target_tree_sha256": _digest(target),
             "scope": parity_scope,
-            "canonical_file_count": len(canonical_files),
-            "composed_symbol_count": composed_symbols,
+            "canonical_file_count": canonical_file_count,
+            "composed_symbol_count": composed_symbol_count,
+            "composed_symbol_count_reason": composed_symbol_count_reason,
         },
         "changed_paths": sorted(delta.changed),
         "files_parsed": sum(
