@@ -80,6 +80,8 @@ KIND_TO_ID = {
     "trait": 8,
     "enum": 9,
     "test": 10,
+    "property": 11,
+    "attribute": 12,
 }
 ID_TO_KIND = {value: key for key, value in KIND_TO_ID.items()}
 RELATION_KINDS = {"import", "reference", "call", "definition", "test"}
