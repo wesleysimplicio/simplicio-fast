@@ -78,7 +78,10 @@ class SnapshotTest(unittest.TestCase):
                 self.assertEqual(64, len(snapshot.sha256))
                 self.assertEqual(f"SFAST001:{snapshot.sha256}", snapshot.generation)
 
-            warm = build_snapshot(root, output)
+            with patch.object(
+                snapshot_module, "_build_v2", side_effect=AssertionError("republish")
+            ):
+                warm = build_snapshot(root, output)
             self.assertEqual(0, warm.parsed_files)
             self.assertEqual(1, warm.reused_files)
             self.assertEqual((), warm.parsed_paths)

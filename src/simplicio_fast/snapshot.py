@@ -726,12 +726,14 @@ def build_snapshot(
     previous_symbol_files: dict[str, str] = {}
     previous_checksum = ""
     previous_valid = False
+    previous_format_version = 0
     previous_start = time.perf_counter()
     if output.exists():
         try:
             with Snapshot(output) as snapshot:
                 previous = snapshot.grouped()
                 previous_relations = snapshot.relations()
+                previous_format_version = snapshot.format_version
                 previous_symbol_files = {
                     symbol.qualified_name: symbol.file for symbol in snapshot.symbols()
                 }
@@ -898,6 +900,28 @@ def build_snapshot(
             if relation.origin not in invalidated_paths
             and previous_symbol_files.get(relation.origin) not in invalidated_paths
         ] + relations
+    if previous_valid and previous_format_version == VERSION and not changed_paths:
+        # A validated unchanged source tree already has the exact published
+        # bytes. Avoid reserializing and atomically replacing the full SFAST
+        # file during warm/unchanged refreshes.
+        return BuildMetrics(
+            files=len(entries),
+            symbols=sum(len(found) for _, _, _, found in entries),
+            parsed_files=0,
+            reused_files=len(reused_paths),
+            snapshot_bytes=output.stat().st_size,
+            wall_ms=(time.perf_counter() - wall_start) * 1000,
+            cpu_ms=(time.process_time() - cpu_start) * 1000,
+            format_version=previous_format_version,
+            generation=previous_checksum,
+            relations=len(previous_relations),
+            parsed_paths=(),
+            reused_paths=tuple(reused_paths),
+            changed_paths=(),
+            reason_codes=("no_change",),
+            metadata_reused_files=metadata_reused_files,
+            phase_timings_ms=current_timings(),
+        )
     if deadline is not None and time.perf_counter() >= deadline:
         raise_timeout()
     publication_start = time.perf_counter()
