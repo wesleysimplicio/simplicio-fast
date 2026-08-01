@@ -86,6 +86,28 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 delta = store.create_delta(base.generation_id, "scoped", ["one.py"])
             self.assertEqual(["one.py"], sorted(delta.changed))
 
+    def test_scoped_handoff_does_not_rescan_for_compose_or_parity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            (root / "one.py").write_text(
+                "def one():\n    return 10\n", encoding="utf-8"
+            )
+            delta = store.create_delta(base.generation_id, "scoped", ["one.py"])
+            with patch(
+                "simplicio_fast.delta.source_files",
+                side_effect=AssertionError("scoped handoff scanned the repository"),
+            ):
+                report = store.handoff(
+                    base.generation_id,
+                    "scoped",
+                    delta_generation=delta.delta_generation,
+                    changed_paths=["one.py"],
+                )
+            self.assertTrue(report["parity"])
+            self.assertEqual("explicit_changed_paths", report["parity_result"]["scope"])
+            self.assertEqual(["one.py"], report["changed_paths"])
+
     def test_repeated_identical_delta_is_content_addressed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, store = self._store(directory)
