@@ -144,10 +144,8 @@ struct SegmentEntry {
 struct PersistedIndexes {
     exact: BTreeMap<String, Vec<usize>>,
     names: BTreeMap<String, Vec<usize>>,
-    #[serde(rename = "paths")]
-    _paths: BTreeMap<String, Vec<usize>>,
-    #[serde(rename = "kinds")]
-    _kinds: BTreeMap<String, Vec<usize>>,
+    paths: BTreeMap<String, Vec<usize>>,
+    kinds: BTreeMap<String, Vec<usize>>,
 }
 
 enum SegmentBytes {
@@ -434,6 +432,16 @@ impl SnapshotReader {
         term: &str,
         limit: usize,
     ) -> Result<QueryReceipt, SnapshotError> {
+        self.query_filtered(term, None, None, limit)
+    }
+
+    pub fn query_filtered(
+        &self,
+        term: &str,
+        path: Option<&str>,
+        kind: Option<&str>,
+        limit: usize,
+    ) -> Result<QueryReceipt, SnapshotError> {
         if limit == 0 {
             return Err(SnapshotError::Invalid(
                 "query limit must be positive".into(),
@@ -448,7 +456,7 @@ impl SnapshotReader {
         let symbol_count = self.sections["symbols"].length / SYMBOL_RECORD_SIZE;
         let mut candidate_ids = BTreeSet::new();
         let mut candidates_visited = 0;
-        let mut selected_index = "legacy.names+exact-substring";
+        let mut selected_index = "legacy.names+exact-substring".to_owned();
         let mut exact_hit = false;
         for index in [&indexes.names, &indexes.exact] {
             if let Some(values) = index.get(&needle) {
@@ -458,7 +466,7 @@ impl SnapshotReader {
             }
         }
         if exact_hit {
-            selected_index = "persisted.exact";
+            selected_index = "persisted.exact".into();
         } else if !needle.is_empty() {
             for index in [&indexes.names, &indexes.exact] {
                 for (key, values) in index.range(needle.clone()..) {
@@ -470,7 +478,7 @@ impl SnapshotReader {
                 }
             }
             if !candidate_ids.is_empty() {
-                selected_index = "persisted.prefix";
+                selected_index = "persisted.prefix".into();
             }
         }
         if candidate_ids.is_empty() {
@@ -491,6 +499,23 @@ impl SnapshotReader {
                 add_index_values(values, symbol_count, &mut candidate_ids)?;
             }
         }
+        for (filter, index, label) in [
+            (path, &indexes.paths, "path"),
+            (kind, &indexes.kinds, "kind"),
+        ] {
+            let Some(filter) = filter else {
+                continue;
+            };
+            let Some(values) = index.get(filter) else {
+                candidate_ids.clear();
+                continue;
+            };
+            let mut allowed = BTreeSet::new();
+            add_index_values(values, symbol_count, &mut allowed)?;
+            candidate_ids.retain(|candidate| allowed.contains(candidate));
+            selected_index.push('+');
+            selected_index.push_str(label);
+        }
         let strings = &self.sections["strings"];
         let matches: Vec<RustSymbol> = candidate_ids
             .into_iter()
@@ -500,7 +525,7 @@ impl SnapshotReader {
         let records_decoded = matches.len();
         Ok(QueryReceipt {
             matches,
-            selected_index: selected_index.into(),
+            selected_index,
             candidates_visited,
             records_decoded,
         })
