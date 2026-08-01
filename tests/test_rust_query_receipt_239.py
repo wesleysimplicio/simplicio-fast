@@ -48,7 +48,10 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         else "simplicio-fast-rs"
     )
     assert executable.is_file()
-    (tmp_path / "a.py").write_text("def helper():\n    return True\n", encoding="utf-8")
+    (tmp_path / "a.py").write_text(
+        "def helper():\n    return True\n\ndef helper_two():\n    return True\n",
+        encoding="utf-8",
+    )
     (tmp_path / "b.py").write_text("def helper():\n    return False\n", encoding="utf-8")
     snapshot = tmp_path / "service.sfast"
     build_snapshot(tmp_path, snapshot)
@@ -89,12 +92,12 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         "--context",
         str(snapshot),
         str(tmp_path),
-        "helper",
+        "hel",
         "--limit",
-        "2",
+        "3",
     )
     assert context["planner"]["source_files_read"] == 2
-    assert context["planner"]["source_cache_hits"] == 0
+    assert context["planner"]["source_cache_hits"] == 1
     assert context["planner"]["source_bytes_read"] > 0
 
     first_page = _run_json(
