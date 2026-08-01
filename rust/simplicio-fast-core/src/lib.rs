@@ -89,6 +89,14 @@ pub struct RustContextSpan {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ContextReceipt {
+    pub spans: Vec<RustContextSpan>,
+    pub source_files_read: usize,
+    pub source_cache_hits: usize,
+    pub source_bytes_read: usize,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct QueryReceipt {
     pub matches: Vec<RustSymbol>,
     pub selected_index: String,
@@ -562,6 +570,19 @@ impl SnapshotReader {
         max_bytes: usize,
         max_tokens: usize,
     ) -> Result<Vec<RustContextSpan>, SnapshotError> {
+        self.context_with_receipt(root, term, max_results, max_lines, max_bytes, max_tokens)
+            .map(|receipt| receipt.spans)
+    }
+
+    pub fn context_with_receipt(
+        &self,
+        root: &Path,
+        term: &str,
+        max_results: usize,
+        max_lines: u32,
+        max_bytes: usize,
+        max_tokens: usize,
+    ) -> Result<ContextReceipt, SnapshotError> {
         if max_results == 0 || max_lines == 0 || max_bytes == 0 || max_tokens == 0 {
             return Err(SnapshotError::Invalid(
                 "context limits must be positive".into(),
@@ -573,6 +594,9 @@ impl SnapshotReader {
         let files: HashMap<String, [u8; 32]> = self.file_info()?.into_iter().collect();
         let mut source_cache: HashMap<String, ([u8; 32], String)> = HashMap::new();
         let mut result = Vec::new();
+        let mut source_files_read = 0;
+        let mut source_cache_hits = 0;
+        let mut source_bytes_read = 0;
         let mut consumed_bytes = 0;
         let mut consumed_tokens = 0;
         for symbol in self.query(term, max_results)? {
@@ -589,6 +613,8 @@ impl SnapshotReader {
                     return Err(SnapshotError::Invalid("snapshot path escapes root".into()));
                 }
                 let bytes = fs::read(&path)?;
+                source_files_read += 1;
+                source_bytes_read += bytes.len();
                 let actual_digest: [u8; 32] = Sha256::digest(&bytes).into();
                 if &actual_digest != expected_digest {
                     return Err(SnapshotError::Invalid(format!(
@@ -599,6 +625,8 @@ impl SnapshotReader {
                 let text = String::from_utf8(bytes)
                     .map_err(|_| SnapshotError::Invalid("source is not UTF-8".into()))?;
                 source_cache.insert(symbol.file.clone(), (actual_digest, text));
+            } else {
+                source_cache_hits += 1;
             }
             let (actual_digest, text) = source_cache
                 .get(&symbol.file)
@@ -645,7 +673,12 @@ impl SnapshotReader {
                 tokens,
             });
         }
-        Ok(result)
+        Ok(ContextReceipt {
+            spans: result,
+            source_files_read,
+            source_cache_hits,
+            source_bytes_read,
+        })
     }
 
     fn symbol_at(&self, index: usize, strings: &Section) -> Result<RustSymbol, SnapshotError> {

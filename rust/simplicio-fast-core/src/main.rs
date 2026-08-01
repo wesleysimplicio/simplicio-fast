@@ -105,7 +105,7 @@ fn main() -> ExitCode {
                 .unwrap_or(default)
         };
         return match SnapshotReader::open(snapshot_path).and_then(|snapshot| {
-            snapshot.context(
+            snapshot.context_with_receipt(
                 std::path::Path::new(root),
                 term,
                 value("--limit", 10),
@@ -114,10 +114,19 @@ fn main() -> ExitCode {
                 value("--max-tokens", 8_000),
             )
         }) {
-            Ok(spans) => {
+            Ok(receipt) => {
                 println!(
                     "{}",
-                    serde_json::json!({"schema":"simplicio.fast.context/v1", "engine":"rust", "spans":spans})
+                    serde_json::json!({
+                        "schema":"simplicio.fast.context/v1",
+                        "engine":"rust",
+                        "spans":receipt.spans,
+                        "planner": {
+                            "source_files_read": receipt.source_files_read,
+                            "source_cache_hits": receipt.source_cache_hits,
+                            "source_bytes_read": receipt.source_bytes_read,
+                        }
+                    })
                 );
                 ExitCode::SUCCESS
             }

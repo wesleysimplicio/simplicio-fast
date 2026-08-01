@@ -84,6 +84,19 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
     assert exact["planner"]["records_decoded"] == 1
     assert prefix["planner"]["records_decoded"] == 1
 
+    context = _run_json(
+        executable,
+        "--context",
+        str(snapshot),
+        str(tmp_path),
+        "helper",
+        "--limit",
+        "2",
+    )
+    assert context["planner"]["source_files_read"] == 2
+    assert context["planner"]["source_cache_hits"] == 0
+    assert context["planner"]["source_bytes_read"] > 0
+
     first_page = _run_json(
         executable, "--query", str(snapshot), "helper", "--limit", "1"
     )
