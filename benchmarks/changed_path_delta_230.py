@@ -141,6 +141,38 @@ def _summary(rows: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
+def _performance_gates(categories: dict[str, list[dict[str, object]]]) -> dict[str, object]:
+    medians = {
+        name: _summary(rows)["wall_ms_median"]
+        for name, rows in categories.items()
+    }
+    one_file = medians["one_file"]
+    cold = medians["cold"]
+    unchanged = medians["unchanged"]
+    warm = medians["warm"]
+    checks = {
+        "one_file_faster_than_cold": (
+            isinstance(one_file, (int, float))
+            and isinstance(cold, (int, float))
+            and one_file < cold
+        ),
+        "unchanged_within_two_times_warm": (
+            isinstance(unchanged, (int, float))
+            and isinstance(warm, (int, float))
+            and unchanged <= warm * 2
+        ),
+    }
+    return {
+        "schema": "simplicio.fast.changed-path-performance-gates/v1",
+        "status": "pass" if all(checks.values()) else "fail",
+        "checks": checks,
+        "medians_ms": medians,
+        "unavailable_reason": None
+        if all(isinstance(value, (int, float)) for value in medians.values())
+        else "wall_median_missing",
+    }
+
+
 def _make_root(
     parent: Path, files: int, label: str, functions_per_file: int = 1
 ) -> tuple[Path, WorkspaceStore, object, dict[str, int]]:
@@ -348,6 +380,7 @@ def run(
             )
             else "host_metric_unavailable",
         }
+        performance_gates = _performance_gates(categories)
         return {
             "schema": SCHEMA,
             "status": "pass"
@@ -377,6 +410,7 @@ def run(
                 }
                 for name, rows in categories.items()
             },
+            "performance_gates": performance_gates,
         }
 
 
