@@ -27,6 +27,7 @@ class RustCoreSession:
     def __init__(self, executable: str | Path) -> None:
         self.executable = str(executable)
         self._lock = threading.Lock()
+        self._metrics: dict[str, int] = {"requests": 0, "failures": 0}
         try:
             self._process = subprocess.Popen(
                 [self.executable, "--session"],
@@ -84,13 +85,21 @@ class RustCoreSession:
                 self._process.stdin.flush()
                 response = self._readline()
             except (BrokenPipeError, OSError, RustSessionError) as error:
+                self._metrics["failures"] += 1
                 raise RustSessionError("session_crashed") from error
+            self._metrics["requests"] += 1
         if response.get("ok") is not True:
+            self._metrics["failures"] += 1
             raise RustSessionError(str(response.get("reason") or "session_request_failed"))
         result = response.get("result")
         if not isinstance(result, dict):
             raise RustSessionError("session_result_invalid")
         return result
+
+    def metrics(self) -> dict[str, int]:
+        """Return resident-session request counters for benchmark receipts."""
+        with self._lock:
+            return dict(self._metrics)
 
     def close(self) -> None:
         process = getattr(self, "_process", None)
