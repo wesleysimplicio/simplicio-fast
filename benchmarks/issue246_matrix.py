@@ -38,6 +38,7 @@ def run_matrix(
     sizes: Iterable[int] = DEFAULT_SIZES,
     repetitions: int = 10,
     rust_executable: Path | None = None,
+    resident_executable: Path | None = None,
 ) -> dict[str, Any]:
     if repetitions < 10:
         raise ValueError("repetitions must be at least 10")
@@ -51,6 +52,7 @@ def run_matrix(
                 functions=functions,
                 repetitions=repetitions,
                 rust_executable=rust_executable,
+                resident_executable=resident_executable,
                 compact_symbols=symbols >= 1_000_000,
             )
         except Exception as error:  # noqa: BLE001 - preserve a fail-closed receipt
@@ -88,6 +90,9 @@ def run_matrix(
         "requested_sizes": list(requested_sizes),
         "repetitions": repetitions,
         "rust_executable": str(rust_executable) if rust_executable else None,
+        "resident_executable": (
+            str(resident_executable) if resident_executable else None
+        ),
         "raw_runs": raw,
         "claims": {
             "speed": "unavailable until every compared scenario is complete and parity is verified",
@@ -101,12 +106,14 @@ def main() -> int:
     parser.add_argument("--sizes", default=",".join(map(str, DEFAULT_SIZES)))
     parser.add_argument("--repetitions", type=int, default=10)
     parser.add_argument("--rust-executable", type=Path)
+    parser.add_argument("--resident-executable", type=Path)
     parser.add_argument("--json-out", type=Path)
     args = parser.parse_args()
     receipt = run_matrix(
         sizes=(int(value) for value in args.sizes.split(",")),
         repetitions=args.repetitions,
         rust_executable=args.rust_executable,
+        resident_executable=args.resident_executable,
     )
     rendered = json.dumps(receipt, indent=2, sort_keys=True)
     if args.json_out:

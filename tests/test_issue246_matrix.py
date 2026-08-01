@@ -22,6 +22,7 @@ def test_matrix_preserves_raw_receipts_and_marks_partial(
         functions: int,
         repetitions: int,
         rust_executable: Path | None,
+        resident_executable: Path | None,
         compact_symbols: bool,
     ) -> dict[str, object]:
         calls.append((files, functions, repetitions, compact_symbols))

@@ -28,6 +28,7 @@ from typing import Any, Callable
 
 from simplicio_fast.delivery import DeliveryEngine
 from simplicio_fast.engine import select_engine
+from simplicio_fast.native_backend import NativeBackendError, ResidentRustSession
 from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
@@ -310,6 +311,24 @@ def rust_context(root: Path, snapshot: Path, term: str, executable: Path) -> str
     return "\n".join(span["content"] for span in payload.get("spans", []))
 
 
+def resident_rust_context(
+    session: ResidentRustSession, root: Path, snapshot: Path, term: str
+) -> str:
+    payload = session.call(
+        "context",
+        {
+            "snapshot": str(snapshot),
+            "root": str(root),
+            "term": term,
+            "limit": 10,
+            "max_lines": 120,
+            "max_bytes": 64_000,
+            "max_tokens": 8_000,
+        },
+    )
+    return "\n".join(span["content"] for span in payload.get("spans", []))
+
+
 def timed(call: Callable[[], str], repetitions: int) -> dict[str, Any]:
     durations: list[float] = []
     bytes_seen = 0
@@ -340,6 +359,7 @@ def run(
     functions: int,
     repetitions: int,
     rust_executable: Path | None = None,
+    resident_executable: Path | None = None,
     compact_symbols: bool = False,
 ) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="simplicio-fast-bench-") as directory:
@@ -411,6 +431,30 @@ def run(
                 "repetitions": repetitions,
                 "operation": "rust-standalone-subprocess-context",
             }
+        if resident_executable is not None and resident_executable.is_file():
+            try:
+                with ResidentRustSession(resident_executable, {}) as session:
+                    session.call("stats", {"snapshot": str(snapshot)})
+                    resident_rust = timed(
+                        lambda: resident_rust_context(session, root, snapshot, term),
+                        repetitions,
+                    )
+                    resident_rust["status"] = "complete"
+                    resident_rust["operation"] = "rust-resident-session-context"
+                    resident_rust["session_metrics"] = session.metrics()
+            except (NativeBackendError, OSError) as error:
+                resident_rust = {
+                    "status": "blocked",
+                    "reason": type(error).__name__,
+                    "operation": "rust-resident-session-context",
+                }
+        else:
+            resident_rust = {
+                "status": "blocked",
+                "reason": "resident_executable_missing",
+                "repetitions": repetitions,
+                "operation": "rust-resident-session-context",
+            }
         full_standalone, loop_standalone = delivery_scenarios(root, snapshot, term)
 
         baseline_scan_total = sum(baseline_scan["wall_ms"]["samples"])
@@ -424,7 +468,12 @@ def run(
             "status": "partial"
             if any(
                 item.get("status") == "blocked"
-                for item in (rust_standalone, full_standalone, loop_standalone)
+                for item in (
+                    rust_standalone,
+                    resident_rust,
+                    full_standalone,
+                    loop_standalone,
+                )
             )
             else "complete",
             "workload": {
@@ -451,6 +500,7 @@ def run(
                 "fast_python_alteration": alteration_fast,
                 "fast_python_alteration_refresh": alteration_fast_refresh,
                 "fast_rust_standalone": rust_standalone,
+                "fast_rust_resident": resident_rust,
                 "full_standalone": full_standalone,
                 "loop_standalone": loop_standalone,
             },
@@ -508,6 +558,17 @@ def run(
                     fast_total / sum(rust_standalone["wall_ms"]["samples"])
                     if rust_standalone.get("status") == "complete"
                     and sum(rust_standalone["wall_ms"]["samples"])
+                    else None
+                ),
+                "rust_resident_wall_ms": (
+                    sum(resident_rust["wall_ms"]["samples"])
+                    if resident_rust.get("status") == "complete"
+                    else None
+                ),
+                "rust_resident_speedup_vs_python": (
+                    fast_total / sum(resident_rust["wall_ms"]["samples"])
+                    if resident_rust.get("status") == "complete"
+                    and sum(resident_rust["wall_ms"]["samples"])
                     else None
                 ),
             },
