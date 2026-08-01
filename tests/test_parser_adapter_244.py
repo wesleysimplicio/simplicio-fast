@@ -112,6 +112,47 @@ class ParserAdapter244Test(unittest.TestCase):
             with self.assertRaisesRegex(ParserAdapterError, "path_escape"):
                 build_payload(root, changed_paths=["../outside.py"])
 
+    def test_previous_payload_reuses_unchanged_files_and_reports_deletion(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one.py").write_text("def one():\n    return 1\n", encoding="utf-8")
+            (root / "two.py").write_text("def two():\n    return 2\n", encoding="utf-8")
+            previous = build_payload(root)
+            (root / "one.py").write_text("def one():\n    return 3\n", encoding="utf-8")
+            (root / "two.py").unlink()
+
+            current = build_payload(
+                root,
+                changed_paths=["one.py", "two.py"],
+                previous_payload=previous,
+            )
+            assert [item["path"] for item in current["files"]] == ["one.py"]
+            assert current["invalidation"] == {
+                "schema": "simplicio.fast.parser-invalidation/v1",
+                "requested_paths": ["one.py", "two.py"],
+                "parsed_paths": ["one.py"],
+                "reused_paths": [],
+                "deleted_paths": ["two.py"],
+                "reason_codes": ["explicit_changed_paths", "previous_payload_reuse"],
+            }
+
+    def test_previous_payload_reuses_unmodified_file_records(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one.py").write_text("def one():\n    return 1\n", encoding="utf-8")
+            (root / "two.py").write_text("def two():\n    return 2\n", encoding="utf-8")
+            previous = build_payload(root)
+            (root / "one.py").write_text("def one():\n    return 3\n", encoding="utf-8")
+
+            current = build_payload(
+                root,
+                changed_paths=["one.py"],
+                previous_payload=previous,
+            )
+            assert {item["path"] for item in current["files"]} == {"one.py", "two.py"}
+            assert current["invalidation"]["parsed_paths"] == ["one.py"]
+            assert current["invalidation"]["reused_paths"] == ["two.py"]
+
     def test_adapter_limits_fail_closed_before_returning_partial_success(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -187,6 +187,7 @@ def build_payload(
     changed_paths: Iterable[str] | None = None,
     mode: str = "bootstrap",
     limits: Mapping[str, int] | None = None,
+    previous_payload: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic, bounded contract payload from existing adapters."""
 
@@ -201,6 +202,19 @@ def build_payload(
     ):
         raise ParserAdapterError("mapper_required")
     selected_limits = _adapter_limits(limits)
+    if previous_payload is not None and changed_paths is None:
+        raise ParserAdapterError("previous_payload_requires_changed_paths")
+    scoped = changed_paths is not None
+    changed_set = {
+        _safe_relative(path) for path in (changed_paths or ())
+    }
+    changed_paths = sorted(changed_set) if scoped else None
+    previous: dict[str, Any] | None = None
+    if previous_payload is not None:
+        validate_payload(previous_payload)
+        if previous_payload.get("repository") != str(root):
+            raise ParserAdapterError("previous_repository_mismatch")
+        previous = dict(previous_payload)
     files: list[dict[str, Any]] = []
     symbols: list[dict[str, Any]] = []
     relations: list[dict[str, Any]] = []
@@ -306,6 +320,44 @@ def build_payload(
                     "file": relative,
                 }
             )
+    reused_paths: set[str] = set()
+    deleted_paths: set[str] = set()
+    if previous is not None:
+        previous_files = {
+            str(item["path"]): item for item in previous["files"]
+        }
+        current_paths = {str(item["path"]) for item in files}
+        for path, item in previous_files.items():
+            if path in changed_set:
+                if not (root / path).is_file():
+                    deleted_paths.add(path)
+                continue
+            if path in current_paths:
+                continue
+            files.append(dict(item))
+            reused_paths.add(path)
+        for item in previous["symbols"]:
+            if item.get("file") in reused_paths:
+                symbols.append(dict(item))
+        for item in previous["relations"]:
+            if item.get("file") in reused_paths:
+                relations.append(dict(item))
+        diagnostics.extend(
+            item
+            for item in previous["diagnostics"]
+            if item.get("path") in reused_paths
+        )
+    files.sort(key=lambda item: str(item["path"]))
+    symbols.sort(key=lambda item: (str(item["file"]), int(item["line"]), str(item["id"])))
+    relations.sort(
+        key=lambda item: (
+            str(item["file"]),
+            str(item["kind"]),
+            str(item["origin"]),
+            str(item["destination"]),
+        )
+    )
+    diagnostics.sort(key=lambda item: (str(item.get("path", "")), str(item.get("code", ""))))
     payload: dict[str, Any] = {
         "schema": SCHEMA,
         "adapter_version": "1",
@@ -323,6 +375,17 @@ def build_payload(
         "relations": relations,
         "diagnostics": diagnostics,
         "completeness": "complete" if not diagnostics else "partial",
+        "invalidation": {
+            "schema": "simplicio.fast.parser-invalidation/v1",
+            "requested_paths": sorted(changed_set),
+            "parsed_paths": sorted(item["path"] for item in files if item["path"] not in reused_paths),
+            "reused_paths": sorted(reused_paths),
+            "deleted_paths": sorted(deleted_paths),
+            "reason_codes": [
+                "full_scan" if not scoped else "explicit_changed_paths",
+                *("previous_payload_reuse" if previous is not None else "no_previous_payload",),
+            ],
+        },
     }
     languages = {item["language"] for item in files}
     payload["workspace_fingerprints"] = {
@@ -382,6 +445,24 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
     diagnostics = value.get("diagnostics")
     if not isinstance(diagnostics, list):
         raise ParserAdapterError("diagnostics_invalid")
+    invalidation = value.get("invalidation")
+    if not isinstance(invalidation, Mapping):
+        raise ParserAdapterError("invalidation_invalid")
+    if invalidation.get("schema") != "simplicio.fast.parser-invalidation/v1":
+        raise ParserAdapterError("invalidation_invalid")
+    for field in ("requested_paths", "parsed_paths", "reused_paths", "deleted_paths"):
+        values = invalidation.get(field)
+        if not isinstance(values, list) or any(
+            not isinstance(path, str) for path in values
+        ):
+            raise ParserAdapterError("invalidation_invalid")
+        for path in values:
+            _safe_relative(path)
+    reason_codes = invalidation.get("reason_codes")
+    if not isinstance(reason_codes, list) or any(
+        not isinstance(reason, str) or not reason for reason in reason_codes
+    ):
+        raise ParserAdapterError("invalidation_invalid")
     workspace_fingerprints = value.get("workspace_fingerprints")
     if not isinstance(workspace_fingerprints, Mapping):
         raise ParserAdapterError("workspace_fingerprints_invalid")
