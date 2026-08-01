@@ -1,6 +1,8 @@
 import io
 import hashlib
 from pathlib import Path
+import shutil
+import subprocess
 import pytest
 from simplicio_fast import __version__
 from simplicio_fast.native_backend import (
@@ -231,3 +233,36 @@ def test_resident_session_handshake_and_framed_call(monkeypatch):
     assert metrics["bytes_out"] == 121
     assert metrics["wall_ms"] >= 0
     session.close()
+
+
+def test_resident_session_compiled_binary_lifecycle() -> None:
+    cargo = shutil.which("cargo")
+    if cargo is None:
+        pytest.skip("cargo is required for compiled native lifecycle E2E")
+    root = Path(__file__).parents[1]
+    subprocess.run(
+        [cargo, "build", "--manifest-path", "native/fast-native/Cargo.toml", "--quiet"],
+        cwd=root,
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=180,
+    )
+    binary = root / "native" / "fast-native" / "target" / "debug" / (
+        "simplicio-fast-native.exe" if shutil.which("cmd.exe") else "simplicio-fast-native"
+    )
+    assert binary.is_file()
+    session = ResidentRustSession(binary, {})
+    try:
+        assert session.call("sha256", {"hex": "616263"}) == (
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        )
+        assert session.call("page", {"hex": "616263", "offset": 1, "limit": 1}) == "62"
+        metrics = session.metrics()
+        assert metrics["starts"] == 1
+        assert metrics["requests"] == 2
+        assert metrics["failures"] == 0
+    finally:
+        session.close()
+    assert session._process.poll() is not None
