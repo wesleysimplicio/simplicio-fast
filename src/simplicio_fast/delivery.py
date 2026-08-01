@@ -375,7 +375,11 @@ class DeliveryEngine:
                     raise ValueError(
                         "tokenizer must return a non-negative integer"
                     ) from error
-                if not isinstance(token_count, int) or token_count < 0:
+                if (
+                    isinstance(token_count, bool)
+                    or not isinstance(token_count, int)
+                    or token_count < 0
+                ):
                     raise ValueError("tokenizer must return a non-negative integer")
                 if selected_tokens + token_count > 8_000:
                     rejected_budget.append(str(handle))

@@ -112,6 +112,23 @@ class DeliveryEngineTest(unittest.TestCase):
                     tokenizer=lambda text: len(text),
                 )
 
+    def test_prepare_rejects_boolean_token_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def create_user(name):\n    return name\n", encoding="utf-8"
+            )
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            with self.assertRaisesRegex(ValueError, "non-negative integer"):
+                DeliveryEngine(root, snapshot).prepare(
+                    "understand create_user",
+                    profile="loop-standalone",
+                    engine_receipt=select_engine("python").receipt(),
+                    tokenizer_id="test-bool-v1",
+                    tokenizer=lambda text: True,
+                )
+
     def test_legacy_regex_selection_is_explicit_and_receipted(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
