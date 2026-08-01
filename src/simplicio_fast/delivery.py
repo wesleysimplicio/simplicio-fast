@@ -11,9 +11,10 @@ import hashlib
 import json
 import re
 import subprocess
+import tempfile
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from . import __version__
 from .integrations import run_runtime_effect_transaction
@@ -34,16 +35,25 @@ PROFILE_NAMES = {"full": "Full", "loop-standalone": "Loop standalone"}
 
 def _source_commit(root: Path) -> tuple[str | None, str | None]:
     try:
-        result = subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "--verify", "HEAD^{commit}"],
-            capture_output=True,
-            text=True,
-            check=False,
-            close_fds=True,
-        )
+        with tempfile.TemporaryDirectory(prefix="simplicio-fast-git-") as directory:
+            stdout_path = Path(directory) / "stdout.txt"
+            stderr_path = Path(directory) / "stderr.txt"
+            with (
+                stdout_path.open("w", encoding="utf-8") as stdout,
+                stderr_path.open("w", encoding="utf-8") as stderr,
+            ):
+                result = subprocess.run(
+                    ["git", "-C", str(root), "rev-parse", "--verify", "HEAD^{commit}"],
+                    stdin=subprocess.DEVNULL,
+                    stdout=stdout,
+                    stderr=stderr,
+                    text=True,
+                    check=False,
+                    close_fds=True,
+                )
+            commit = stdout_path.read_text(encoding="utf-8").strip()
     except OSError:
         return None, "git_unavailable"
-    commit = result.stdout.strip()
     return (
         (commit, None)
         if result.returncode == 0 and commit
@@ -94,6 +104,8 @@ class DeliveryEngine:
         engine_receipt: dict[str, Any],
         mode: str = "bootstrap",
         mapper_handoff: dict[str, Any] | None = None,
+        tokenizer_id: str | None = None,
+        tokenizer: Callable[[str], int] | None = None,
     ) -> dict[str, Any]:
         started = time.perf_counter_ns()
         if profile not in PROFILE_NAMES:
@@ -125,6 +137,11 @@ class DeliveryEngine:
                 "engine": engine_receipt,
                 "source_commit": commit,
                 "snapshot_generation": snapshot.generation,
+                "mapper_mode": mode,
+                "mapper_generation": mapper_provenance.get("generation"),
+                "mapper_handoff": mapper_provenance.get("handoff_sha256"),
+                "tokenizer_id": tokenizer_id or "estimated:word-split-v1",
+                "scoring_config": "semantic-ranking-v1",
             }
             cache_key = hashlib.sha256(
                 json.dumps(key_material, sort_keys=True, separators=(",", ":")).encode(
@@ -193,23 +210,38 @@ class DeliveryEngine:
                     "fallback": {"used": True, "reason_code": error.args[0]},
                     "usage": {"candidate_count": len(documents), "selected_count": 0},
                 }
-            selected_ids = {
-                str(item["canonical_id"])
-                for item in ranking.get("selected", [])
-                if isinstance(item, dict) and isinstance(item.get("canonical_id"), str)
-            }
-            selected_spans = [
-                span
-                for handle, span in spans_by_handle.items()
-                if handle in selected_ids
-            ]
+            selected_spans = []
+            selected_tokens = 0
+            rejected_budget: list[str] = []
+            for item in ranking.get("selected", []):
+                if not isinstance(item, dict):
+                    continue
+                handle = item.get("canonical_id")
+                span = spans_by_handle.get(handle)
+                if span is None:
+                    continue
+                try:
+                    token_count = (
+                        tokenizer(span.content)
+                        if tokenizer is not None
+                        else max(1, len(span.content.split()))
+                    )
+                except (TypeError, ValueError) as error:
+                    raise ValueError(
+                        "tokenizer must return a non-negative integer"
+                    ) from error
+                if not isinstance(token_count, int) or token_count < 0:
+                    raise ValueError("tokenizer must return a non-negative integer")
+                if selected_tokens + token_count > 8_000:
+                    rejected_budget.append(str(handle))
+                    continue
+                selected_spans.append(span)
+                selected_tokens += token_count
             if selected_spans:
                 context_bytes = sum(
                     len(span.content.encode("utf-8")) for span in selected_spans
                 )
-                context_tokens = sum(
-                    max(1, len(span.content.split())) for span in selected_spans
-                )
+                context_tokens = selected_tokens
             receipt: dict[str, Any] = {
                 "schema": SCHEMA,
                 "status": "ready",
@@ -237,6 +269,7 @@ class DeliveryEngine:
                     "terms": terms,
                     "spans": len(selected_spans),
                     "bytes": context_bytes,
+                    "tokens": context_tokens,
                     "estimated_tokens": context_tokens,
                     "digest": hashlib.sha256(
                         "\n".join(span.content for span in selected_spans).encode(
@@ -244,9 +277,26 @@ class DeliveryEngine:
                         )
                     ).hexdigest(),
                     "selection": ranking,
+                    "selected": [
+                        {
+                            "handle": span.symbol_id
+                            or f"{span.file}:{span.start_line}:{span.symbol}",
+                            "file": span.file,
+                            "start_line": span.start_line,
+                            "end_line": span.end_line,
+                            "source_sha256": span.source_sha256,
+                            "generation": snapshot.generation,
+                            "reason": "semantic_rank_selected",
+                        }
+                        for span in selected_spans
+                    ],
+                    "rejected_budget_handles": rejected_budget,
                     "tokenizer": {
-                        "mode": "estimated",
-                        "reason": "provider_tokenizer_unavailable",
+                        "mode": "exact" if tokenizer is not None else "estimated",
+                        "id": tokenizer_id,
+                        "reason": None
+                        if tokenizer is not None
+                        else "provider_tokenizer_unavailable",
                     },
                 },
                 "cache": {
