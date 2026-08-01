@@ -1,3 +1,4 @@
+import io
 import hashlib
 from pathlib import Path
 import pytest
@@ -5,6 +6,7 @@ from simplicio_fast import __version__
 from simplicio_fast.native_backend import (
     ABI,
     PythonBackend,
+    ResidentRustSession,
     RustBackend,
     backend_receipt_fields,
     execute_with_fallback,
@@ -180,3 +182,31 @@ def test_artifact_hashing_is_streamed_and_size_bounded(tmp_path, monkeypatch):
     backend, reason = select_backend(artifact, manifest)
     assert isinstance(backend, PythonBackend)
     assert reason == "RUST_ARTIFACT_TOO_LARGE"
+
+
+def test_resident_session_handshake_and_framed_call(monkeypatch):
+    class FakeProcess:
+        def __init__(self):
+            self.stdin = io.StringIO()
+            self.stdout = io.StringIO(
+                '{"schema":"simplicio.fast.engine-session/v1",'
+                '"abi":"simplicio.fast-native/v1","ok":true}\n'
+                '{"abi":"simplicio.fast-native/v1","ok":true,"result":"ok"}\n'
+            )
+
+        def poll(self):
+            return None
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            return None
+
+    monkeypatch.setattr(
+        "simplicio_fast.native_backend.subprocess.Popen",
+        lambda *args, **kwargs: FakeProcess(),
+    )
+    session = ResidentRustSession(Path("native"), {})
+    assert session.call("sha256", {"hex": "00"}) == "ok"
+    session.close()

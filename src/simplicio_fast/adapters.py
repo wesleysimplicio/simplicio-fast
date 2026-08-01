@@ -8,6 +8,9 @@ handles while Fast owns extraction and persistence.
 from __future__ import annotations
 
 import ast
+import hashlib
+import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,6 +70,88 @@ def capability_report() -> list[AdapterCapability]:
 
 def language_for_path(path: Path) -> str | None:
     return SUPPORTED_EXTENSIONS.get(path.suffix.casefold())
+
+
+_RUST_IGNORED_DIRS = {".git", ".simplicio", ".simplicio-fast", "target", "vendor"}
+
+
+def discover_rust_projects(root: Path) -> list[Path]:
+    """Return Cargo manifests which belong to the source workspace.
+
+    Generated and vendored trees are deliberately excluded.  The result is
+    lexical and deterministic; Cargo remains authoritative for workspace
+    membership and feature resolution in the integrated path.
+    """
+
+    root = root.resolve()
+    manifests: list[Path] = []
+    for directory, child_dirs, files in os.walk(root):
+        child_dirs[:] = sorted(
+            name for name in child_dirs if name not in _RUST_IGNORED_DIRS
+        )
+        if "Cargo.toml" in files:
+            manifests.append(Path(directory) / "Cargo.toml")
+    return sorted(manifests, key=lambda path: path.relative_to(root).as_posix())
+
+
+def rust_workspace_fingerprint(root: Path) -> str:
+    """Hash Cargo inputs that affect the selected Rust source graph."""
+
+    root = root.resolve()
+    records: list[dict[str, str]] = []
+    for path in [*discover_rust_projects(root), root / "Cargo.lock"]:
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        records.append(
+            {
+                "path": relative,
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        )
+    payload = json.dumps(records, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def discover_typescript_projects(root: Path) -> list[Path]:
+    """Return deterministic TypeScript workspace/config inputs."""
+    names = {
+        "tsconfig.json",
+        "jsconfig.json",
+        "package.json",
+        "package-lock.json",
+        "pnpm-workspace.yaml",
+    }
+    ignored = {".git", ".simplicio", "node_modules", "dist", "build", "coverage"}
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and (
+            path.name in names
+            or path.name.startswith("tsconfig.")
+            or path.name.startswith("jsconfig.")
+        )
+        and not any(part in ignored for part in path.parts)
+    )
+
+
+def discover_csharp_projects(root: Path) -> list[Path]:
+    """Return deterministic .NET solution/project/config inputs."""
+    names = {
+        "Directory.Build.props",
+        "Directory.Build.targets",
+        "Directory.Packages.props",
+    }
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and (
+            path.suffix.casefold() in {".sln", ".slnx", ".csproj"} or path.name in names
+        )
+        and not any(part in {".git", ".simplicio", "bin", "obj"} for part in path.parts)
+    )
 
 
 def parse_path(path: Path, relative_path: str | None = None) -> list[Symbol]:
@@ -130,6 +215,16 @@ def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
                 ),
             ),
             (
+                "type",
+                "type",
+                re.compile(r"^\s*(?:export\s+)?type\s+(\w+)"),
+            ),
+            (
+                "enum",
+                "enum",
+                re.compile(r"^\s*(?:export\s+)?(?:const\s+)?enum\s+(\w+)"),
+            ),
+            (
                 "namespace",
                 "namespace",
                 re.compile(r"^\s*(?:export\s+)?(?:declare\s+)?namespace\s+(\w+)"),
@@ -154,42 +249,152 @@ def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
                 "function",
                 re.compile(r"^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\("),
             ),
+            (
+                "method",
+                "function",
+                re.compile(
+                    r"^\s*(?:public|private|protected|static|async|readonly)?\s*(\w+)\s*<[^>]+>\s*\("
+                ),
+            ),
+            (
+                "property",
+                "property",
+                re.compile(
+                    r"^\s*(?:public|private|protected|readonly|static)?\s*(\w+)\??\s*:\s*[^=;]+[;=]"
+                ),
+            ),
+            (
+                "test",
+                "test",
+                re.compile(r"^\s*(?:describe|it|test)\s*\(\s*[\"']([^\"']+)"),
+            ),
         ]
     elif language == "rust":
         patterns = [
             ("use", "import", re.compile(r"^\s*(?:pub\s+)?use\s+([^;]+)")),
-            ("mod", "namespace", re.compile(r"^\s*(?:pub\s+)?mod\s+(\w+)")),
-            ("struct", "struct", re.compile(r"^\s*(?:pub\s+)?struct\s+(\w+)")),
-            ("trait", "trait", re.compile(r"^\s*(?:pub\s+)?trait\s+(\w+)")),
+            (
+                "mod",
+                "namespace",
+                re.compile(r"^\s*(?:pub\s+)?(?:unsafe\s+)?mod\s+(\w+)"),
+            ),
+            (
+                "struct",
+                "struct",
+                re.compile(r"^\s*(?:pub\s+)?(?:packed\s+)?struct\s+(\w+)"),
+            ),
+            (
+                "trait",
+                "trait",
+                re.compile(r"^\s*(?:pub\s+)?(?:unsafe\s+)?trait\s+(\w+)"),
+            ),
             ("enum", "enum", re.compile(r"^\s*(?:pub\s+)?enum\s+(\w+)")),
+            ("type", "struct", re.compile(r"^\s*(?:pub\s+)?type\s+(\w+)")),
+            ("const", "struct", re.compile(r"^\s*(?:pub\s+)?const\s+(\w+)")),
+            (
+                "static",
+                "struct",
+                re.compile(r"^\s*(?:pub\s+)?static\s+(?:mut\s+)?(\w+)"),
+            ),
+            ("macro", "function", re.compile(r"^\s*(?:pub\s+)?macro_rules!\s+(\w+)")),
+            (
+                "impl",
+                "namespace",
+                re.compile(r"^\s*impl(?:<[^>{}]+>)?\s+(?:[^{}]+\s+for\s+)?([\w:]+)"),
+            ),
             (
                 "function",
                 "function",
-                re.compile(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)"),
+                re.compile(
+                    r"^\s*(?:pub\s+)?(?:const\s+|async\s+|unsafe\s+)*fn\s+(\w+)"
+                ),
             ),
         ]
     else:
         patterns = [
-            ("using", "import", re.compile(r"^\s*using\s+(?:static\s+)?([^;=]+)")),
-            ("namespace", "namespace", re.compile(r"^\s*namespace\s+([\w.]+)")),
+            ("attribute", "attribute", re.compile(r"^\s*\[\s*([\w.]+)")),
             (
-                "interface",
-                "interface",
-                re.compile(r"^\s*(?:public\s+)?interface\s+(\w+)"),
+                "using",
+                "import",
+                re.compile(r"^\s*(?:global\s+)?using\s+(?:static\s+)?([^;=]+)"),
             ),
             (
-                "class",
-                "class",
+                "namespace",
+                "namespace",
+                re.compile(r"^\s*(?:file\s+)?namespace\s+([\w.]+)"),
+            ),
+            (
+                "delegate",
+                "delegate",
                 re.compile(
-                    r"^\s*(?:public\s+|internal\s+|private\s+)?(?:abstract\s+)?class\s+(\w+)"
+                    r"^\s*(?:public\s+|internal\s+|private\s+)?delegate\s+[^\s]+\s+(\w+)"
                 ),
             ),
-            ("struct", "struct", re.compile(r"^\s*(?:public\s+)?struct\s+(\w+)")),
             (
-                "function",
+                "interface",
+                "interface",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*interface\s+(\w+)"
+                ),
+            ),
+            (
+                "record",
+                "record",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*(?:record\s+(?:class\s+|struct\s+)?)(\w+)"
+                ),
+            ),
+            (
+                "class",
+                "class",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*(?:abstract\s+)?class\s+(\w+)"
+                ),
+            ),
+            (
+                "struct",
+                "struct",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*struct\s+(\w+)"
+                ),
+            ),
+            (
+                "enum",
+                "enum",
+                re.compile(r"^\s*(?:public\s+|internal\s+|private\s+)*enum\s+(\w+)"),
+            ),
+            (
+                "event",
+                "event",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+)*event\s+[^\s]+\s+(\w+)"
+                ),
+            ),
+            (
+                "property",
+                "property",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+|virtual\s+|override\s+|required\s+)*[\w<>?,.\[\]]+\s+(\w+)\s*\{\s*(?:get|set|init)"
+                ),
+            ),
+            (
+                "constructor",
+                "constructor",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+|static\s+|async\s+)*([A-Z]\w*)\s*\([^;]*\)"
+                ),
+            ),
+            (
+                "method",
                 "function",
                 re.compile(
-                    r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+)?(?:static\s+)?[\w<>?\[\]]+\s+(\w+)\s*\([^;]*\)"
+                    r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+|static\s+|async\s+|virtual\s+|override\s+|partial\s+)*[\w<>?,.\[\]]+\s+(\w+)\s*\([^;]*\)"
+                ),
+            ),
+            (
+                "field",
+                "field",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+|readonly\s+|const\s+)+[\w<>?,.\[\]]+\s+(\w+)\s*(?:=|;)"
                 ),
             ),
         ]
