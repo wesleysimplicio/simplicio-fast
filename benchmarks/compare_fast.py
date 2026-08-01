@@ -50,7 +50,7 @@ def environment_receipt() -> dict[str, Any]:
 
 def corpus_sha256(root: Path) -> str:
     digest = hashlib.sha256()
-    for path in sorted(root.glob("*.py")):
+    for path in _source_paths(root):
         relative = path.name.encode("utf-8")
         content = path.read_bytes()
         digest.update(len(relative).to_bytes(4, "big"))
@@ -86,22 +86,41 @@ def make_workload(
     root: Path, *, files: int, functions: int, compact_symbols: bool = False
 ) -> str:
     for index in range(files):
-        lines = [] if compact_symbols else [f"class Service{index}:\n"]
+        if compact_symbols:
+            lines = []
+            suffix = ".rs"
+        else:
+            lines = [f"class Service{index}:\n"]
+            suffix = ".py"
         for function in range(functions):
-            indentation = "" if compact_symbols else "    "
-            lines.extend(
-                [
-                    f"{indentation}def task_{function}(self, value):\n",
-                    f"{indentation}    return value\n",
-                ]
-            )
-        (root / f"service_{index}.py").write_text("".join(lines), encoding="utf-8")
+            if compact_symbols:
+                lines.extend(
+                    [
+                        f"pub fn task_{function}(value: i32) -> i32 {{\n",
+                        "    return value;\n",
+                        "}\n",
+                    ]
+                )
+            else:
+                lines.extend(
+                    [
+                        f"    def task_{function}(self, value):\n",
+                        "        return value\n",
+                    ]
+                )
+        (root / f"service_{index}{suffix}").write_text(
+            "".join(lines), encoding="utf-8"
+        )
     return "task_7"
+
+
+def _source_paths(root: Path) -> list[Path]:
+    return sorted([*root.glob("*.py"), *root.glob("*.rs")])
 
 
 def direct_context(root: Path, term: str, *, max_lines: int = 8) -> str:
     snippets: list[str] = []
-    for path in sorted(root.glob("*.py")):
+    for path in _source_paths(root):
         lines = path.read_text(encoding="utf-8").splitlines()
         for index, line in enumerate(lines):
             if term.casefold() in line.casefold():
@@ -112,8 +131,10 @@ def direct_context(root: Path, term: str, *, max_lines: int = 8) -> str:
 
 
 def ast_context(root: Path, term: str, *, max_lines: int = 8) -> str:
+    if any(path.suffix == ".rs" for path in _source_paths(root)):
+        return direct_context(root, term, max_lines=max_lines)
     snippets: list[str] = []
-    for path in sorted(root.glob("*.py")):
+    for path in _source_paths(root):
         text = path.read_text(encoding="utf-8")
         tree = ast.parse(text, filename=str(path))
         lines = text.splitlines()
@@ -129,7 +150,7 @@ def ast_context(root: Path, term: str, *, max_lines: int = 8) -> str:
 
 
 def direct_target(root: Path, term: str) -> Path:
-    for path in sorted(root.glob("*.py")):
+    for path in _source_paths(root):
         if term.casefold() in path.read_text(encoding="utf-8").casefold():
             return path
     raise LookupError(f"target not found: {term}")
@@ -137,7 +158,12 @@ def direct_target(root: Path, term: str) -> Path:
 
 def apply_deterministic_change(path: Path) -> None:
     source = path.read_text(encoding="utf-8")
-    changed = source.replace("return value\n", "return value + 1\n", 1)
+    marker, replacement = (
+        ("return value;\n", "return value + 1;\n")
+        if path.suffix == ".rs"
+        else ("return value\n", "return value + 1\n")
+    )
+    changed = source.replace(marker, replacement, 1)
     if changed == source:
         raise ValueError(f"change marker not found: {path}")
     path.write_text(changed, encoding="utf-8")
@@ -145,7 +171,8 @@ def apply_deterministic_change(path: Path) -> None:
     # overlap with antivirus/indexer handles. Use a sibling artifact per edit.
     compiled = path.with_name(f".{path.name}.{time.perf_counter_ns()}.pyc")
     try:
-        py_compile.compile(str(path), cfile=str(compiled), doraise=True)
+        if path.suffix == ".py":
+            py_compile.compile(str(path), cfile=str(compiled), doraise=True)
     finally:
         compiled.unlink(missing_ok=True)
 
@@ -185,7 +212,7 @@ def timed_edit(
         "estimated_input_tokens": sum(estimate_tokens(context) for context in contexts),
         "context_bytes": sum(len(context.encode("utf-8")) for context in contexts),
         "token_measurement": "whitespace-v1-estimate",
-        "operation": "locate+edit+py_compile" + ("+refresh" if refresh else ""),
+        "operation": "locate+edit" + ("+py_compile" if target.suffix == ".py" else "") + ("+refresh" if refresh else ""),
     }
 
 
@@ -328,7 +355,7 @@ def run(
         source_commit, source_commit_reason = source_commit_receipt()
         repetition_order = list(range(1, repetitions + 1))
         random.Random(163).shuffle(repetition_order)
-        source_bytes = sum(path.stat().st_size for path in root.glob("*.py"))
+        source_bytes = sum(path.stat().st_size for path in _source_paths(root))
         baseline_scan = timed(lambda: direct_context(root, term), repetitions)
         baseline_ast = timed(lambda: ast_context(root, term), repetitions)
 
