@@ -532,9 +532,13 @@ def handoff(
     )
     incremental_ms = (perf_counter() - incremental_start) * 1000
     delta_stage_ms = (perf_counter() - delta_stage_start) * 1000
+    unchanged_delta = scoped_paths is not None and not delta.changed
     warm_start = perf_counter()
     compose_stage_start = perf_counter()
-    if scoped_paths is None:
+    if unchanged_delta:
+        composed_symbol_count = None
+        composed_symbol_count_reason = "unchanged_delta_not_materialized"
+    elif scoped_paths is None:
         with compose_delta(
             store,
             base_generation,
@@ -562,24 +566,32 @@ def handoff(
     compose_stage_ms = (perf_counter() - compose_stage_start) * 1000
     warm_ms = (perf_counter() - warm_start) * 1000
     parity_stage_start = perf_counter()
-    merged = _composed_source_hashes(store, base, delta)
-    if scoped_paths is None:
-        current = {
-            path.relative_to(store.root).as_posix(): _hash_source(path)
-            for path in source_files(store.root)
-        }
+    if unchanged_delta:
+        merged = dict(base.source_hashes)
+        current = {relative: base.source_hashes[relative] for relative in scoped_paths}
     else:
-        current = {}
-        root = store.root.resolve()
-        for relative in scoped_paths:
-            path = (root / relative).resolve()
-            if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
-                current[relative] = _hash_source(path)
+        merged = _composed_source_hashes(store, base, delta)
+        if scoped_paths is None:
+            current = {
+                path.relative_to(store.root).as_posix(): _hash_source(path)
+                for path in source_files(store.root)
+            }
+        else:
+            current = {}
+            root = store.root.resolve()
+            for relative in scoped_paths:
+                path = (root / relative).resolve()
+                if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
+                    current[relative] = _hash_source(path)
     target = current
     parity_snapshot_hash = None
     if parity_snapshot is not None:
         with Snapshot(Path(parity_snapshot)) as candidate:
-            target = {path: digest.hex() for path, digest in candidate.files()}
+            target = {
+                path: digest.hex()
+                for path, digest in candidate.files()
+                if scoped_paths is None or path in scoped_paths
+            }
             parity_snapshot_hash = candidate.sha256
     if scoped_paths is None:
         parity = merged == target

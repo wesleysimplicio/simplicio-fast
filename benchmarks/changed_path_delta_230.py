@@ -248,7 +248,10 @@ def _run_category(
                 base.generation_id,
                 category,
                 changed_paths,
-                parity_snapshot=parity_snapshot,
+                # Unchanged is measured from validated base + changed-path
+                # evidence; background parity remains explicit for other
+                # categories and must not contaminate the hot-path budget.
+                parity_snapshot=parity_snapshot if category != "unchanged" else None,
             )
 
         sample, report = _measure(handoff)

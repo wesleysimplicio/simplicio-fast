@@ -471,6 +471,26 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             self.assertTrue(report["parity"])
             self.assertEqual(1, validate.call_count)
 
+    def test_unchanged_scoped_handoff_skips_compose(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            delta = store.create_delta(base.generation_id, "unchanged", ["one.py"])
+            self.assertEqual({}, delta.changed)
+            with patch("simplicio_fast.delta.compose_delta") as compose:
+                report = store.handoff(
+                    base.generation_id,
+                    "unchanged",
+                    ["one.py"],
+                    delta_generation=delta.delta_generation,
+                )
+            compose.assert_not_called()
+            self.assertTrue(report["parity"])
+            self.assertEqual(
+                "unchanged_delta_not_materialized",
+                report["parity_result"]["composed_symbol_count_reason"],
+            )
+
     def test_benchmark_rejects_fewer_than_ten_repetitions(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least 10"):
             run_delta_benchmark(files=4, repetitions=9)
