@@ -1,4 +1,5 @@
 import argparse
+import atexit
 import hashlib
 import json
 import subprocess
@@ -23,6 +24,7 @@ from .engine import EngineSelection, EngineSelectionError, select_engine
 from .delivery import DeliveryEngine
 from .query_planner import plan_query
 from .navigation import DIRECTIONS, RELATIONS, NavigationBudget, NavigationIndex
+from .rust_session import RustCoreSession, RustSessionError
 from .semantic_scoring import (
     SemanticBudgets,
     SemanticScorer,
@@ -35,6 +37,18 @@ from .users.service import UserService
 
 DEFAULT_STATE_DIR = ".simplicio/fast"
 DEFAULT_SNAPSHOT = f"{DEFAULT_STATE_DIR}/project.sfast"
+_RUST_SESSIONS: dict[str, RustCoreSession] = {}
+
+
+def _close_rust_sessions() -> None:
+    for session in tuple(_RUST_SESSIONS.values()):
+        close = getattr(session, "close", None)
+        if close is not None:
+            close()
+    _RUST_SESSIONS.clear()
+
+
+atexit.register(_close_rust_sessions)
 
 
 def emit(value: object) -> None:
@@ -92,63 +106,48 @@ def _rust_bridge(
             }
         )
     if args.command == "stats":
-        command = [executable, "--stats", str(Path(args.snapshot)), "--json"]
+        operation = "stats"
+        payload = {"snapshot": str(Path(args.snapshot))}
         expected_schema = "simplicio.fast.stats/v1"
     elif args.command == "query":
         if args.limit < 1:
             raise ValueError("--limit must be positive")
-        command = [
-            executable,
-            "--query",
-            str(Path(args.snapshot)),
-            args.term,
-            "--limit",
-            str(args.limit),
-            "--json",
-        ]
+        operation = "query"
+        payload = {
+            "snapshot": str(Path(args.snapshot)),
+            "term": args.term,
+            "limit": args.limit,
+        }
         expected_schema = "simplicio.fast.query/v1"
     else:
         if min(args.max_results, args.max_lines, args.max_bytes, args.max_tokens) < 1:
             raise ValueError("context limits must be positive")
-        command = [
-            executable,
-            "--context",
-            str(Path(args.snapshot)),
-            str(Path(args.root).resolve()),
-            args.term,
-            "--limit",
-            str(args.max_results),
-            "--max-lines",
-            str(args.max_lines),
-            "--max-bytes",
-            str(args.max_bytes),
-            "--max-tokens",
-            str(args.max_tokens),
-            "--json",
-        ]
+        operation = "context"
+        payload = {
+            "snapshot": str(Path(args.snapshot)),
+            "root": str(Path(args.root).resolve()),
+            "term": args.term,
+            "limit": args.max_results,
+            "max_lines": args.max_lines,
+            "max_bytes": args.max_bytes,
+            "max_tokens": args.max_tokens,
+        }
         expected_schema = "simplicio.fast.context/v1"
     try:
-        completed = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=30,
-        )
-    except (OSError, subprocess.TimeoutExpired) as error:
-        raise RuntimeError(f"rust_bridge_failed: {type(error).__name__}") from error
-    try:
-        payload = json.loads(completed.stdout)
-    except json.JSONDecodeError as error:
-        raise RuntimeError(f"rust_bridge_invalid_json: {error}") from error
-    if not isinstance(payload, dict):
-        raise RuntimeError("rust_bridge_output_not_object")
-    if payload.get("schema") != expected_schema:
-        reason = payload.get("reason", "schema_mismatch")
-        raise RuntimeError(f"rust_bridge_contract_error: {reason}")
-    if completed.returncode != 0:
-        raise RuntimeError("rust_bridge_command_failed")
-    return payload
+        key = str(Path(executable).resolve())
+        session = _RUST_SESSIONS.get(key)
+        if session is None:
+            session = RustCoreSession(executable)
+            _RUST_SESSIONS[key] = session
+        result = session.call(operation, payload)
+    except RustSessionError as error:
+        raise RuntimeError(f"rust_bridge_failed: {error}") from error
+    return {
+        "schema": expected_schema,
+        "engine": "rust",
+        "transport": "resident-session",
+        **result,
+    }
 
 
 def json_option(parser: argparse.ArgumentParser) -> None:
