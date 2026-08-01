@@ -35,10 +35,28 @@ def manifest() -> dict[str, object]:
         "vector_count": 2,
         "canonical_id_mapping": {"owner": "mapper", "format": "canonical-id/v1"},
         "segments": [
-            {"name": "hot", "offset": 4096, "bytes": 128, "alignment": 4096, "endianness": "little", "sha256": DIGEST},
-            {"name": "metadata", "offset": 8192, "bytes": 64, "alignment": 4096, "endianness": "little", "sha256": DIGEST},
+            {
+                "name": "hot",
+                "offset": 4096,
+                "bytes": 128,
+                "alignment": 4096,
+                "endianness": "little",
+                "sha256": DIGEST,
+            },
+            {
+                "name": "metadata",
+                "offset": 8192,
+                "bytes": 64,
+                "alignment": 4096,
+                "endianness": "little",
+                "sha256": DIGEST,
+            },
         ],
-        "integral_store": {"format": "fp16", "location": "cold-vectors.bin", "sha256": DIGEST},
+        "integral_store": {
+            "format": "fp16",
+            "location": "cold-vectors.bin",
+            "sha256": DIGEST,
+        },
         "build_source_hashes": {"corpus": DIGEST},
         "created_at": "2026-07-27T00:00:00Z",
         "compatibility_flags": ["little-endian", "immutable-segments"],
@@ -58,7 +76,13 @@ def receipt() -> dict[str, object]:
         "io": {"pages_read": 2, "bytes_read": 8192},
         "cache": {"hit": False, "miss": True},
         "fallback": {"used": False, "reason_code": "none"},
-        "results": [{"canonical_id": "mapper:1", "quantized_score": -0.8, "integral_score": -0.9}],
+        "results": [
+            {
+                "canonical_id": "mapper:1",
+                "quantized_score": -0.8,
+                "integral_score": -0.9,
+            }
+        ],
         "resources": {"cpu_ms": 1.0, "rss_bytes": None, "io_bytes": 8192},
         "status": "ok",
         "generation": "g1",
@@ -123,12 +147,13 @@ class VectorContractTest(unittest.TestCase):
         self.assertEqual("unsupported_schema", error.exception.reason_code)
 
     def test_adr_names_the_frozen_contracts_and_residuals(self) -> None:
-        document = Path("docs/ADR-0002-turboquant-vector-contracts.md").read_text(encoding="utf-8")
+        document = Path("docs/ADR-0002-turboquant-vector-contracts.md").read_text(
+            encoding="utf-8"
+        )
         self.assertIn(VECTOR_INDEX_SCHEMA, document)
         self.assertIn(VECTOR_QUERY_RECEIPT_SCHEMA, document)
         self.assertIn("Rust", document)
         self.assertIn("re-ranking", document)
-
 
     def test_fail_closed_reason_codes_cover_schema_and_bounds(self) -> None:
         invalid_manifest_cases = [
@@ -136,7 +161,10 @@ class VectorContractTest(unittest.TestCase):
             ({}, "schema_mismatch"),
         ]
         for payload, reason in invalid_manifest_cases:
-            with self.subTest(reason=reason), self.assertRaises(VectorContractError) as error:
+            with (
+                self.subTest(reason=reason),
+                self.assertRaises(VectorContractError) as error,
+            ):
                 validate_vector_index_manifest(payload)
             self.assertEqual(reason, error.exception.reason_code)
 
@@ -149,7 +177,10 @@ class VectorContractTest(unittest.TestCase):
         for field, value, reason in cases:
             payload = manifest()
             payload[field] = value
-            with self.subTest(field=field), self.assertRaises(VectorContractError) as error:
+            with (
+                self.subTest(field=field),
+                self.assertRaises(VectorContractError) as error,
+            ):
                 validate_vector_index_manifest(payload)
             self.assertEqual(reason, error.exception.reason_code)
 
@@ -161,7 +192,10 @@ class VectorContractTest(unittest.TestCase):
         for section, field, value, reason in nested_cases:
             payload = manifest()
             payload[section][field] = value
-            with self.subTest(field=f"{section}.{field}"), self.assertRaises(VectorContractError) as error:
+            with (
+                self.subTest(field=f"{section}.{field}"),
+                self.assertRaises(VectorContractError) as error,
+            ):
                 validate_vector_index_manifest(payload)
             self.assertEqual(reason, error.exception.reason_code)
 
@@ -215,9 +249,14 @@ class VectorContractTest(unittest.TestCase):
         self.assertEqual("fallback_invalid", error.exception.reason_code)
 
         payload = receipt()
-        payload["results"] = [{"canonical_id": str(index), "quantized_score": 0.1, "integral_score": 0.2} for index in range(5)]
+        payload["results"] = [
+            {"canonical_id": str(index), "quantized_score": 0.1, "integral_score": 0.2}
+            for index in range(5)
+        ]
         with self.assertRaises(VectorContractError) as error:
             validate_vector_query_receipt(payload)
         self.assertEqual("results_invalid", error.exception.reason_code)
+
+
 if __name__ == "__main__":
     unittest.main()

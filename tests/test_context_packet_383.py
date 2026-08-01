@@ -1,22 +1,38 @@
 import pytest
 from simplicio_fast.slot_executor import (
-    FastExecutorError, consume_context_packet, digest
+    FastExecutorError,
+    consume_context_packet,
+    digest,
 )
 
 
 def packet():
     value = {
-        "schema": "simplicio.context-packet/v1", "repo_id": "repo",
-        "generation": "g1", "graph_digest": "g" * 64,
-        "items": [{
-            "fact_id": "f", "kind": "symbol", "value": {"signature": "x()"},
-            "content_sha256": "c" * 64, "provenance": {},
-            "handle": f"fast://context/{'g' * 64}/f",
-        }],
-        "coverage": 1.0, "truncated": False, "omitted_items": 0,
-        "budget": {"max_bytes": 8192, "max_items": 64, "token_count": None,
-                   "token_count_null_reason": "TOKENIZER_UNAVAILABLE"},
-        "ancestor_packet_hash": None, "lineage_reason": "INITIAL",
+        "schema": "simplicio.context-packet/v1",
+        "repo_id": "repo",
+        "generation": "g1",
+        "graph_digest": "g" * 64,
+        "items": [
+            {
+                "fact_id": "f",
+                "kind": "symbol",
+                "value": {"signature": "x()"},
+                "content_sha256": "c" * 64,
+                "provenance": {},
+                "handle": f"fast://context/{'g' * 64}/f",
+            }
+        ],
+        "coverage": 1.0,
+        "truncated": False,
+        "omitted_items": 0,
+        "budget": {
+            "max_bytes": 8192,
+            "max_items": 64,
+            "token_count": None,
+            "token_count_null_reason": "TOKENIZER_UNAVAILABLE",
+        },
+        "ancestor_packet_hash": None,
+        "lineage_reason": "INITIAL",
     }
     value["packet_hash"] = digest(value)
     value["encoded_bytes"] = 1

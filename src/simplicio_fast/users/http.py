@@ -34,9 +34,11 @@ def handler_for(service: UserService) -> type[BaseHTTPRequestHandler]:
             if route != "users":
                 return self._send(HTTPStatus.NOT_FOUND, {"error": "route not found"})
             try:
-                payload = service.get(user_id).to_dict() if user_id else [
-                    user.to_dict() for user in service.list()
-                ]
+                payload = (
+                    service.get(user_id).to_dict()
+                    if user_id
+                    else [user.to_dict() for user in service.list()]
+                )
                 self._send(HTTPStatus.OK, payload)
             except UserNotFoundError as error:
                 self._send(HTTPStatus.NOT_FOUND, {"error": str(error)})
@@ -45,7 +47,10 @@ def handler_for(service: UserService) -> type[BaseHTTPRequestHandler]:
             route, user_id = self._route()
             if route != "users" or user_id:
                 return self._send(HTTPStatus.NOT_FOUND, {"error": "route not found"})
-            self._mutate(lambda data: service.create(data["name"], data["email"]), HTTPStatus.CREATED)
+            self._mutate(
+                lambda data: service.create(data["name"], data["email"]),
+                HTTPStatus.CREATED,
+            )
 
         def do_PUT(self) -> None:
             route, user_id = self._route()

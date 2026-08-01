@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import multiprocessing
-import mmap
 import os
 import tempfile
 import time
@@ -35,9 +34,7 @@ def _process_overlay(
     slot = arena.open_slot(
         f"slot-{task}", "prism", fence=f"f-{task}", max_overlay_bytes=1024
     )
-    overlay = arena.create_overlay(
-        slot, task, 1, f"wt-{task}", fence=f"f-{task}"
-    )
+    overlay = arena.create_overlay(slot, task, 1, f"wt-{task}", fence=f"f-{task}")
     arena.apply_delta(
         slot,
         overlay,
@@ -58,9 +55,7 @@ class PrismArenaTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
         self.storage = Path(self.temporary.name) / "arena"
-        self.arena = PrismArena.publish(
-            self.storage, "org/repo", "source-1", FILES
-        )
+        self.arena = PrismArena.publish(self.storage, "org/repo", "source-1", FILES)
 
     def tearDown(self) -> None:
         self.arena.close()
@@ -111,12 +106,8 @@ class PrismArenaTest(unittest.TestCase):
         slot = self.slot()
         first = self.overlay(slot, "task-a")
         second = self.overlay(slot, "task-b")
-        self.arena.apply_delta(
-            slot, first, PrismWorkDelta(writes={"src/a.py": b"A"})
-        )
-        self.arena.apply_delta(
-            slot, second, PrismWorkDelta(writes={"src/a.py": b"B"})
-        )
+        self.arena.apply_delta(slot, first, PrismWorkDelta(writes={"src/a.py": b"A"}))
+        self.arena.apply_delta(slot, second, PrismWorkDelta(writes={"src/a.py": b"B"}))
         self.assertEqual(b"A", self.arena.read(slot, first, "src/a.py"))
         self.assertEqual(b"B", self.arena.read(slot, second, "src/a.py"))
         self.assertEqual(FILES["src/a.py"], self.arena.base_read(slot, "src/a.py"))
@@ -220,7 +211,9 @@ class PrismArenaTest(unittest.TestCase):
         self.assertEqual(self.arena.receipts()[-1].event_hash, verify_chain(rows))
         self.assertFalse(list(self.storage.rglob("*.json")))
         exported = self.arena.export_receipts()
-        self.assertEqual("simplicio.fast.prism-arena-receipt/v1", exported[-1]["schema"])
+        self.assertEqual(
+            "simplicio.fast.prism-arena-receipt/v1", exported[-1]["schema"]
+        )
 
     def test_overlay_budget_is_enforced_before_publication(self) -> None:
         slot = self.arena.open_slot(
@@ -232,17 +225,13 @@ class PrismArenaTest(unittest.TestCase):
         )
         overlay = self.overlay(slot, "bounded-task")
         with self.assertRaises(ArenaError) as bytes_error:
-            self.arena.apply_delta(
-                slot, overlay, PrismWorkDelta(writes={"x": b"four"})
-            )
+            self.arena.apply_delta(slot, overlay, PrismWorkDelta(writes={"x": b"four"}))
         self.assertEqual(
             "overlay_byte_budget_exceeded", bytes_error.exception.reason_code
         )
         self.arena.apply_delta(slot, overlay, PrismWorkDelta(writes={"x": b"one"}))
         with self.assertRaises(ArenaError) as files_error:
-            self.arena.apply_delta(
-                slot, overlay, PrismWorkDelta(writes={"y": b"two"})
-            )
+            self.arena.apply_delta(slot, overlay, PrismWorkDelta(writes={"y": b"two"}))
         self.assertEqual(
             "overlay_file_budget_exceeded", files_error.exception.reason_code
         )
@@ -250,9 +239,7 @@ class PrismArenaTest(unittest.TestCase):
     def test_stale_fence_and_expired_lease_are_rejected(self) -> None:
         slot = self.slot()
         with self.assertRaises(ArenaError) as fence:
-            self.arena.create_overlay(
-                slot, "task", 1, "wt-task", fence="old-fence"
-            )
+            self.arena.create_overlay(slot, "task", 1, "wt-task", fence="old-fence")
         self.assertEqual("fence_stale", fence.exception.reason_code)
         self.arena._leases[slot.lease_id].expires_at = 0
         with self.assertRaises(ArenaError) as lease:
@@ -327,14 +314,10 @@ class PrismArenaTest(unittest.TestCase):
     def test_missing_metadata_current_and_base_have_distinct_reason_codes(self) -> None:
         with self.assertRaises(ArenaError) as metadata:
             PrismArena(self.storage, "org/repo", "0" * 64)
-        self.assertEqual(
-            "snapshot_metadata_corrupt", metadata.exception.reason_code
-        )
+        self.assertEqual("snapshot_metadata_corrupt", metadata.exception.reason_code)
         with self.assertRaises(ArenaError) as current:
             PrismArena.open_current(Path(self.temporary.name) / "missing", "org/repo")
-        self.assertEqual(
-            "current_generation_corrupt", current.exception.reason_code
-        )
+        self.assertEqual("current_generation_corrupt", current.exception.reason_code)
         self.arena.close()
         data = self.arena.base_path.read_bytes()
         self.arena.base_path.unlink()
@@ -351,9 +334,7 @@ class PrismArenaTest(unittest.TestCase):
             self.assertEqual(self.arena.generation, other.generation)
         finally:
             other.close()
-        refreshed = PrismArena.publish(
-            self.storage, "org/repo", "source-other", FILES
-        )
+        refreshed = PrismArena.publish(self.storage, "org/repo", "source-other", FILES)
         try:
             self.assertNotEqual(self.arena.generation, refreshed.generation)
             self.assertEqual(self.arena.base_hash, refreshed.base_hash)
@@ -381,9 +362,7 @@ class PrismArenaTest(unittest.TestCase):
         self.assertEqual("arena_closed", closed.exception.reason_code)
 
     def test_context_manager_closes_handle_and_double_close_is_safe(self) -> None:
-        with PrismArena(
-            self.storage, "org/repo", self.arena.generation
-        ) as opened:
+        with PrismArena(self.storage, "org/repo", self.arena.generation) as opened:
             self.assertEqual(self.arena.base_handle_id, opened.base_handle_id)
         opened.close()
 
@@ -450,7 +429,9 @@ class PrismArenaTest(unittest.TestCase):
         self.assertGreater(metric["io"]["read_bytes"], 0)
         self.assertEqual(7, metric["io"]["write_bytes"])
 
-    def test_multiprocess_multiworktree_isolation_and_shared_file_identity(self) -> None:
+    def test_multiprocess_multiworktree_isolation_and_shared_file_identity(
+        self,
+    ) -> None:
         context = multiprocessing.get_context("spawn")
         queue = context.Queue()
         workers = [
@@ -473,9 +454,7 @@ class PrismArenaTest(unittest.TestCase):
             worker.join(timeout=15)
             self.assertEqual(0, worker.exitcode)
         self.assertEqual({b"a", b"b"}, {result["value"] for result in results})
-        self.assertEqual(
-            {FILES["src/a.py"]}, {result["base"] for result in results}
-        )
+        self.assertEqual({FILES["src/a.py"]}, {result["base"] for result in results})
         self.assertEqual(
             {self.arena.base_handle_id}, {result["handle"] for result in results}
         )
@@ -483,7 +462,9 @@ class PrismArenaTest(unittest.TestCase):
 
     def test_base_encoding_is_deterministic_and_base_never_changes(self) -> None:
         before = self.arena.base_path.read_bytes()
-        self.assertEqual(encode_base(FILES), encode_base(dict(reversed(list(FILES.items())))))
+        self.assertEqual(
+            encode_base(FILES), encode_base(dict(reversed(list(FILES.items()))))
+        )
         slot = self.slot()
         for index in range(10):
             overlay = self.overlay(slot, f"property-{index}")

@@ -60,7 +60,9 @@ def negotiate(language: str) -> AdapterCapability:
 
 
 def capability_report() -> list[AdapterCapability]:
-    return [negotiate(language) for language in ("python", "typescript", "rust", "csharp")]
+    return [
+        negotiate(language) for language in ("python", "typescript", "rust", "csharp")
+    ]
 
 
 def language_for_path(path: Path) -> str | None:
@@ -113,18 +115,45 @@ def _parse_python(path: Path, relative: str) -> list[Symbol]:
     visit(tree)
     return result
 
+
 def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     patterns: list[tuple[str, str, re.Pattern[str]]] = []
     if language == "typescript":
         patterns = [
-            ("import", "import", re.compile(r"^\s*import\s+(?:type\s+)?(?:.+?from\s+)?[\"']([^\"']+)[\"']")),
-            ("namespace", "namespace", re.compile(r"^\s*(?:export\s+)?(?:declare\s+)?namespace\s+(\w+)")),
-            ("interface", "interface", re.compile(r"^\s*(?:export\s+)?interface\s+(\w+)")),
-            ("class", "class", re.compile(r"^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)")),
-            ("function", "function", re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)")),
-            ("function", "function", re.compile(r"^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\(")),
+            (
+                "import",
+                "import",
+                re.compile(
+                    r"^\s*import\s+(?:type\s+)?(?:.+?from\s+)?[\"']([^\"']+)[\"']"
+                ),
+            ),
+            (
+                "namespace",
+                "namespace",
+                re.compile(r"^\s*(?:export\s+)?(?:declare\s+)?namespace\s+(\w+)"),
+            ),
+            (
+                "interface",
+                "interface",
+                re.compile(r"^\s*(?:export\s+)?interface\s+(\w+)"),
+            ),
+            (
+                "class",
+                "class",
+                re.compile(r"^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)"),
+            ),
+            (
+                "function",
+                "function",
+                re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)"),
+            ),
+            (
+                "function",
+                "function",
+                re.compile(r"^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\("),
+            ),
         ]
     elif language == "rust":
         patterns = [
@@ -133,16 +162,36 @@ def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
             ("struct", "struct", re.compile(r"^\s*(?:pub\s+)?struct\s+(\w+)")),
             ("trait", "trait", re.compile(r"^\s*(?:pub\s+)?trait\s+(\w+)")),
             ("enum", "enum", re.compile(r"^\s*(?:pub\s+)?enum\s+(\w+)")),
-            ("function", "function", re.compile(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)")),
+            (
+                "function",
+                "function",
+                re.compile(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)"),
+            ),
         ]
     else:
         patterns = [
             ("using", "import", re.compile(r"^\s*using\s+(?:static\s+)?([^;=]+)")),
             ("namespace", "namespace", re.compile(r"^\s*namespace\s+([\w.]+)")),
-            ("interface", "interface", re.compile(r"^\s*(?:public\s+)?interface\s+(\w+)")),
-            ("class", "class", re.compile(r"^\s*(?:public\s+|internal\s+|private\s+)?(?:abstract\s+)?class\s+(\w+)")),
+            (
+                "interface",
+                "interface",
+                re.compile(r"^\s*(?:public\s+)?interface\s+(\w+)"),
+            ),
+            (
+                "class",
+                "class",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+)?(?:abstract\s+)?class\s+(\w+)"
+                ),
+            ),
             ("struct", "struct", re.compile(r"^\s*(?:public\s+)?struct\s+(\w+)")),
-            ("function", "function", re.compile(r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+)?(?:static\s+)?[\w<>?\[\]]+\s+(\w+)\s*\([^;]*\)")),
+            (
+                "function",
+                "function",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+)?(?:static\s+)?[\w<>?\[\]]+\s+(\w+)\s*\([^;]*\)"
+                ),
+            ),
         ]
     result: list[Symbol] = []
     for index, line in enumerate(lines, 1):

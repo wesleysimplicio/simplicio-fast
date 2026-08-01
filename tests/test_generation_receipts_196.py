@@ -1,18 +1,27 @@
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 from simplicio_fast.generation_receipts import (
-    GenerationReceiptError, ReceiptJournal, seal_receipt, verify_chain,
+    GenerationReceiptError,
+    ReceiptJournal,
+    seal_receipt,
+    verify_chain,
     verify_receipt,
 )
 
 
 def receipt(**overrides):
-    args = dict(kind="context", repo="org/repo", commit="a" * 40,
-                snapshot_digest="b" * 64, generation="g1",
-                source_hashes={"src/a.py": "c" * 64}, backend="python",
-                fallback_reason="RUST_UNAVAILABLE",
-                ancestor_context_packet_hash="d" * 64,
-                downstream_changeset_hash="e" * 64)
+    args = dict(
+        kind="context",
+        repo="org/repo",
+        commit="a" * 40,
+        snapshot_digest="b" * 64,
+        generation="g1",
+        source_hashes={"src/a.py": "c" * 64},
+        backend="python",
+        fallback_reason="RUST_UNAVAILABLE",
+        ancestor_context_packet_hash="d" * 64,
+        downstream_changeset_hash="e" * 64,
+    )
     args.update(overrides)
     return seal_receipt(**args)
 
@@ -30,8 +39,9 @@ def test_offline_verifier_detects_tamper_stale_and_cross_generation():
 
 
 def test_chain_binds_ancestor_packet_and_downstream_changeset():
-    first = receipt(kind="build", ancestor_context_packet_hash=None,
-                    downstream_changeset_hash=None)
+    first = receipt(
+        kind="build", ancestor_context_packet_hash=None, downstream_changeset_hash=None
+    )
     second = receipt(kind="rollout", ancestor_receipt_hash=first["receipt_hash"])
     assert verify_chain([first, second])[-1]["downstream_changeset_hash"] == "e" * 64
 
@@ -48,8 +58,7 @@ def test_identical_retry_is_idempotent_under_slot_concurrency(workers):
 
 def test_backend_and_fallback_are_explicit_and_offsets_private():
     python = receipt()
-    rust = receipt(backend="rust", backend_artifact_hash="f" * 64,
-                   fallback_reason=None)
+    rust = receipt(backend="rust", backend_artifact_hash="f" * 64, fallback_reason=None)
     assert python["fallback_reason"] == "RUST_UNAVAILABLE"
     assert rust["backend_artifact_hash"] == "f" * 64
     assert rust["public_offsets"] is None

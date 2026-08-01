@@ -12,7 +12,9 @@ class CompareFastAlterationTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "service.py"
-            source.write_text("def task_7(value):\n    return value\n", encoding="utf-8")
+            source.write_text(
+                "def task_7(value):\n    return value\n", encoding="utf-8"
+            )
             self.assertEqual(source, direct_target(root, "task_7"))
             apply_deterministic_change(source)
             self.assertIn("return value + 1", source.read_text(encoding="utf-8"))

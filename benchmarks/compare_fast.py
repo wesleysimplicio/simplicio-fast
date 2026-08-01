@@ -82,7 +82,6 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text.split())) if text else 0
 
 
-
 def make_workload(root: Path, *, files: int, functions: int) -> str:
     for index in range(files):
         lines = [f"class Service{index}:\n"]
@@ -148,7 +147,15 @@ def apply_deterministic_change(path: Path) -> None:
         compiled.unlink(missing_ok=True)
 
 
-def timed_edit(call: Callable[[], str], root: Path, term: str, snapshot: Path | None, repetitions: int, *, refresh: bool) -> dict[str, Any]:
+def timed_edit(
+    call: Callable[[], str],
+    root: Path,
+    term: str,
+    snapshot: Path | None,
+    repetitions: int,
+    *,
+    refresh: bool,
+) -> dict[str, Any]:
     durations: list[float] = []
     contexts: list[str] = []
     target = direct_target(root, term)
@@ -198,12 +205,17 @@ def fast_edit(root: Path, snapshot: Path, term: str, *, refresh: bool) -> str:
     return context
 
 
-
-def delivery_scenarios(root: Path, snapshot: Path, term: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def delivery_scenarios(
+    root: Path, snapshot: Path, term: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
     target = direct_target(root, term)
     original = target.read_bytes()
     source_lines = original.decode("utf-8").splitlines()
-    return_line = next(index for index, line in enumerate(source_lines, start=1) if "return value" in line)
+    return_line = next(
+        index
+        for index, line in enumerate(source_lines, start=1)
+        if "return value" in line
+    )
     changeset = {
         "schema": "simplicio.fast.changeset/v2",
         "changes": [
@@ -214,7 +226,9 @@ def delivery_scenarios(root: Path, snapshot: Path, term: str) -> tuple[dict[str,
                     {
                         "start_line": return_line,
                         "end_line": return_line,
-                        "content": source_lines[return_line - 1].replace("return value", "return value + 1"),
+                        "content": source_lines[return_line - 1].replace(
+                            "return value", "return value + 1"
+                        ),
                     }
                 ],
             }
@@ -239,6 +253,8 @@ def delivery_scenarios(root: Path, snapshot: Path, term: str) -> tuple[dict[str,
     full["operation"] = "full-runtime-delivery"
     loop["operation"] = "simplicio-loop-delivery"
     return full, loop
+
+
 def rust_context(root: Path, snapshot: Path, term: str, executable: Path) -> str:
     completed = subprocess.run(
         [
@@ -288,7 +304,9 @@ def timed(call: Callable[[], str], repetitions: int) -> dict[str, Any]:
     }
 
 
-def run(*, files: int, functions: int, repetitions: int, rust_executable: Path | None = None) -> dict[str, Any]:
+def run(
+    *, files: int, functions: int, repetitions: int, rust_executable: Path | None = None
+) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="simplicio-fast-bench-") as directory:
         root = Path(directory)
         make_workload(root, files=files, functions=functions)
@@ -309,13 +327,20 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
             fast = timed(
                 lambda: "\n".join(
                     span.content
-                    for span in opened.context(root, term, max_results=files, max_bytes=64_000)
+                    for span in opened.context(
+                        root, term, max_results=files, max_bytes=64_000
+                    )
                 ),
                 repetitions,
             )
 
         alteration_without_fast = timed_edit(
-            lambda: direct_edit(root, term), root, term, None, repetitions, refresh=False
+            lambda: direct_edit(root, term),
+            root,
+            term,
+            None,
+            repetitions,
+            refresh=False,
         )
         alteration_fast = timed_edit(
             lambda: fast_edit(root, snapshot, term, refresh=False),
@@ -351,10 +376,17 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
         baseline_scan_total = sum(baseline_scan["wall_ms"]["samples"])
         baseline_ast_total = sum(baseline_ast["wall_ms"]["samples"])
         fast_total = build_wall_ms + sum(fast["wall_ms"]["samples"])
-        token_saved = baseline_ast["estimated_input_tokens"] - fast["estimated_input_tokens"]
+        token_saved = (
+            baseline_ast["estimated_input_tokens"] - fast["estimated_input_tokens"]
+        )
         return {
             "schema": SCHEMA,
-            "status": "partial" if any(item.get("status") == "blocked" for item in (rust_standalone, full_standalone, loop_standalone)) else "complete",
+            "status": "partial"
+            if any(
+                item.get("status") == "blocked"
+                for item in (rust_standalone, full_standalone, loop_standalone)
+            )
+            else "complete",
             "workload": {"files": files, "functions_per_file": functions, "term": term},
             "environment": environment_receipt(),
             "provenance": {
@@ -381,8 +413,12 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
                 "without_fast_scan_wall_ms": baseline_scan_total,
                 "without_fast_ast_reparse_wall_ms": baseline_ast_total,
                 "fast_python_wall_ms": fast_total,
-                "speedup_vs_scan": baseline_scan_total / fast_total if fast_total else None,
-                "speedup_vs_ast_reparse": baseline_ast_total / fast_total if fast_total else None,
+                "speedup_vs_scan": baseline_scan_total / fast_total
+                if fast_total
+                else None,
+                "speedup_vs_ast_reparse": baseline_ast_total / fast_total
+                if fast_total
+                else None,
                 "estimated_tokens_without_fast": baseline_ast["estimated_input_tokens"],
                 "estimated_tokens_fast": fast["estimated_input_tokens"],
                 "estimated_tokens_saved": token_saved,
@@ -391,9 +427,15 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
                     if baseline_ast["estimated_input_tokens"]
                     else None
                 ),
-                "without_fast_alteration_wall_ms": sum(alteration_without_fast["wall_ms"]["samples"]),
-                "fast_python_alteration_wall_ms": sum(alteration_fast["wall_ms"]["samples"]),
-                "fast_python_alteration_refresh_wall_ms": sum(alteration_fast_refresh["wall_ms"]["samples"]),
+                "without_fast_alteration_wall_ms": sum(
+                    alteration_without_fast["wall_ms"]["samples"]
+                ),
+                "fast_python_alteration_wall_ms": sum(
+                    alteration_fast["wall_ms"]["samples"]
+                ),
+                "fast_python_alteration_refresh_wall_ms": sum(
+                    alteration_fast_refresh["wall_ms"]["samples"]
+                ),
                 "alteration_speedup_hot": (
                     sum(alteration_without_fast["wall_ms"]["samples"])
                     / sum(alteration_fast["wall_ms"]["samples"])
@@ -406,8 +448,12 @@ def run(*, files: int, functions: int, repetitions: int, rust_executable: Path |
                     if sum(alteration_fast_refresh["wall_ms"]["samples"])
                     else None
                 ),
-                "alteration_estimated_tokens_without_fast": alteration_without_fast["estimated_input_tokens"],
-                "alteration_estimated_tokens_fast": alteration_fast["estimated_input_tokens"],
+                "alteration_estimated_tokens_without_fast": alteration_without_fast[
+                    "estimated_input_tokens"
+                ],
+                "alteration_estimated_tokens_fast": alteration_fast[
+                    "estimated_input_tokens"
+                ],
                 "rust_standalone_wall_ms": (
                     sum(rust_standalone["wall_ms"]["samples"])
                     if rust_standalone.get("status") == "complete"

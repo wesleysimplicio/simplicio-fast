@@ -19,6 +19,7 @@ from scripts.conformance import (
     run,
 )
 
+
 class ConformanceHarnessTest(unittest.TestCase):
     def test_real_engine_envelope_is_validated_at_harness_boundary(self) -> None:
         command = [
@@ -28,9 +29,12 @@ class ConformanceHarnessTest(unittest.TestCase):
         ]
         payload = _json_command(command)
         self.assertEqual(
-            _require_envelope(payload, schema="simplicio.fast.stats/v1", engine="rust")["engine"],
+            _require_envelope(payload, schema="simplicio.fast.stats/v1", engine="rust")[
+                "engine"
+            ],
             "rust",
         )
+
     def test_normalize_maps_python_and_rust_stats_to_one_contract(self) -> None:
         python = {
             "version": 2,
@@ -45,11 +49,27 @@ class ConformanceHarnessTest(unittest.TestCase):
             "truncations": {"context": False},
             "reason_codes": ["budget", "partial"],
         }
-        rust = {**python, "format_version": 2, "sections": ["files", "symbols"], "source_hashes": {"b": "2", "a": "1"}, "reason_codes": ["partial", "budget"]}
+        rust = {
+            **python,
+            "format_version": 2,
+            "sections": ["files", "symbols"],
+            "source_hashes": {"b": "2", "a": "1"},
+            "reason_codes": ["partial", "budget"],
+        }
         self.assertEqual(normalize(python), normalize(rust))
 
     def test_normalize_preserves_missing_optional_fields_as_null(self) -> None:
-        normalized = normalize({"version": 2, "bytes": 0, "files": 0, "symbols": 0, "relations": 0, "sections": [], "generation": "g"})
+        normalized = normalize(
+            {
+                "version": 2,
+                "bytes": 0,
+                "files": 0,
+                "symbols": 0,
+                "relations": 0,
+                "sections": [],
+                "generation": "g",
+            }
+        )
         self.assertIsNone(normalized["source_hashes"])
         self.assertIsNone(normalized["budgets"])
         self.assertIsNone(normalized["truncations"])
@@ -95,7 +115,9 @@ class ConformanceHarnessTest(unittest.TestCase):
             first = _corpus_digest(copy)
             self.assertEqual(first, _corpus_digest(copy))
             target = copy / "python" / "service.py"
-            target.write_text(target.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            target.write_text(
+                target.read_text(encoding="utf-8") + "\n", encoding="utf-8"
+            )
             with self.assertRaisesRegex(RuntimeError, "corpus_digest_mismatch"):
                 _corpus_digest(copy)
 
@@ -103,8 +125,19 @@ class ConformanceHarnessTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             snapshot_path = Path(directory) / "snapshot.bin"
             snapshot_path.write_bytes(b"snapshot")
-            stats = {"version": 2, "bytes": 1, "files": 1, "symbols": 0, "relations": 0, "sections": [], "generation": "g"}
-            with patch("scripts.conformance._python_stats", return_value=stats), patch("scripts.conformance._rust_stats", return_value=dict(stats)):
+            stats = {
+                "version": 2,
+                "bytes": 1,
+                "files": 1,
+                "symbols": 0,
+                "relations": 0,
+                "sections": [],
+                "generation": "g",
+            }
+            with (
+                patch("scripts.conformance._python_stats", return_value=stats),
+                patch("scripts.conformance._rust_stats", return_value=dict(stats)),
+            ):
                 receipt = run(snapshot_path, Path("rust"), corpus=DEFAULT_CORPUS)
         self.assertEqual("pass", receipt["status"])
         self.assertEqual(stats, receipt["engine_raw"]["python"])

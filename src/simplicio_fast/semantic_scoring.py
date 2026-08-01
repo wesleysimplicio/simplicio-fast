@@ -18,7 +18,7 @@ import time
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Protocol, Sequence, runtime_checkable
+from typing import Any, Mapping, Protocol, Sequence, runtime_checkable
 
 
 SCORE_SCHEMA = "simplicio.fast.semantic-score/v1"
@@ -104,9 +104,7 @@ class ModelIdentity:
 
     @property
     def preprocessing_hash(self) -> str:
-        return _digest(
-            {"schema": PREPROCESSING_SCHEMA, "name": self.preprocessing}
-        )
+        return _digest({"schema": PREPROCESSING_SCHEMA, "name": self.preprocessing})
 
     def record(self) -> dict[str, object]:
         return {
@@ -173,8 +171,7 @@ class SemanticBudgets:
 class InferenceBackend(Protocol):
     """Runtime-owned InferenceBackend/v1 surface."""
 
-    def capabilities(self) -> Mapping[str, Any]:
-        ...
+    def capabilities(self) -> Mapping[str, Any]: ...
 
     def infer(
         self,
@@ -182,8 +179,7 @@ class InferenceBackend(Protocol):
         *,
         deadline: float,
         cancel_event: threading.Event | None,
-    ) -> Mapping[str, Any]:
-        ...
+    ) -> Mapping[str, Any]: ...
 
 
 @runtime_checkable
@@ -191,8 +187,7 @@ class EmbeddingProvider(Protocol):
     """Optional embedding SPI with no LiteRT import or hard dependency."""
 
     @property
-    def identity(self) -> ModelIdentity:
-        ...
+    def identity(self) -> ModelIdentity: ...
 
     def embed(
         self,
@@ -200,8 +195,7 @@ class EmbeddingProvider(Protocol):
         *,
         deadline: float,
         cancel_event: threading.Event | None,
-    ) -> tuple[tuple[float, ...], ...]:
-        ...
+    ) -> tuple[tuple[float, ...], ...]: ...
 
 
 @runtime_checkable
@@ -215,8 +209,7 @@ class Reranker(Protocol):
         *,
         deadline: float,
         cancel_event: threading.Event | None,
-    ) -> Mapping[str, float]:
-        ...
+    ) -> Mapping[str, float]: ...
 
 
 def _check_cancel_deadline(
@@ -439,9 +432,7 @@ class DerivedVectorStore:
             raise SemanticScoringError("VECTOR_ARTIFACT_CORRUPT")
         normalized: dict[str, list[float]] = {}
         for canonical_id, raw in vectors.items():
-            vector = _validated_vectors(
-                [raw], expected=1, dimension=model.dimension
-            )[0]
+            vector = _validated_vectors([raw], expected=1, dimension=model.dimension)[0]
             normalized[str(canonical_id)] = list(vector)
         if set(normalized) != set(manifest.get("source_hashes", {})):
             raise SemanticScoringError("VECTOR_ARTIFACT_CORRUPT")
@@ -451,9 +442,7 @@ class DerivedVectorStore:
         self, generation: str, model: ModelIdentity
     ) -> tuple[dict[str, Any], dict[str, tuple[float, ...]]]:
         manifest, vectors = self._read(generation, model)
-        return manifest, {
-            key: tuple(value) for key, value in sorted(vectors.items())
-        }
+        return manifest, {key: tuple(value) for key, value in sorted(vectors.items())}
 
     def refresh(
         self,
@@ -593,9 +582,7 @@ class SemanticScorer:
         self.reranker = reranker
         self.store = store
         self.budgets = budgets or SemanticBudgets()
-        self.minimum_confidence = _finite(
-            minimum_confidence, "minimum_confidence"
-        )
+        self.minimum_confidence = _finite(minimum_confidence, "minimum_confidence")
         if self.minimum_confidence > 1:
             raise ValueError("minimum_confidence must be <= 1")
         self._queue_lock = threading.Lock()
@@ -661,8 +648,7 @@ class SemanticScorer:
         started: float,
     ) -> dict[str, Any]:
         lexical = {
-            item.canonical_id: lexical_score(query, item.text)
-            for item in candidates
+            item.canonical_id: lexical_score(query, item.text) for item in candidates
         }
         semantic: dict[str, float] = {}
         reranked: dict[str, float] = {}
@@ -683,16 +669,12 @@ class SemanticScorer:
                     cancel_event=cancel_event,
                 )
                 cache_hit = refresh_receipt["embedded"] == 0
-                _manifest, vectors = self.store.load(
-                    generation, self.provider.identity
-                )
+                _manifest, vectors = self.store.load(generation, self.provider.identity)
                 query_vector = self.provider.embed(
                     [query], deadline=deadline, cancel_event=cancel_event
                 )[0]
                 semantic = {
-                    item.canonical_id: _cosine(
-                        query_vector, vectors[item.canonical_id]
-                    )
+                    item.canonical_id: _cosine(query_vector, vectors[item.canonical_id])
                     for item in candidates
                 }
                 embed_ms = (time.perf_counter() - embed_started) * 1000
@@ -713,8 +695,7 @@ class SemanticScorer:
                 if set(raw) - {item.canonical_id for item in candidates}:
                     raise SemanticScoringError("RERANK_ID_UNKNOWN")
                 reranked = {
-                    key: _finite(value, "reranker score")
-                    for key, value in raw.items()
+                    key: _finite(value, "reranker score") for key, value in raw.items()
                 }
                 if any(value > 1 for value in reranked.values()):
                     raise SemanticScoringError("RERANK_SCORE_INVALID")
@@ -739,11 +720,7 @@ class SemanticScorer:
                     if rerank_value is not None
                     else semantic_value
                 )
-                combined = (
-                    0.45 * lexical_value
-                    + 0.15 * structural
-                    + 0.40 * auxiliary
-                )
+                combined = 0.45 * lexical_value + 0.15 * structural + 0.40 * auxiliary
                 method = "runtime_semantic_auxiliary"
                 reason = "NONE"
             results.append(
@@ -871,7 +848,9 @@ def semantic_capabilities(
         "inference_backend": INFERENCE_BACKEND_SCHEMA,
         "runtime_first": True,
         "available": provider is not None,
-        "mode": "runtime" if isinstance(provider, RuntimeEmbeddingProvider) else (
+        "mode": "runtime"
+        if isinstance(provider, RuntimeEmbeddingProvider)
+        else (
             "isolated_test" if isinstance(provider, LocalLiteRTAdapter) else "offline"
         ),
         "model": provider.identity.record() if provider else None,

@@ -46,6 +46,7 @@ def _atomic_publish(temporary: Path, destination: Path) -> None:
                 raise
             time.sleep(ATOMIC_PUBLISH_DELAY_SECONDS * (attempt + 1))
 
+
 DEFAULT_MAX_SOURCE_FILE_BYTES = 8 * 1024 * 1024
 DEFAULT_BUILD_TIMEOUT_SECONDS = 180.0
 VALIDATION_CACHE_SCHEMA = "simplicio.fast.validation-cache/v1"
@@ -69,8 +70,15 @@ FILE_RECORD = struct.Struct("<IIQ32s16s")
 SYMBOL_RECORD = struct.Struct("<IIIIIIIIII32s")
 REQUIRED_SECTIONS = ("files", "symbols", "relations", "indexes", "strings")
 KIND_TO_ID = {
-    "class": 1, "function": 2, "async_function": 3, "import": 4,
-    "namespace": 5, "interface": 6, "struct": 7, "trait": 8, "enum": 9,
+    "class": 1,
+    "function": 2,
+    "async_function": 3,
+    "import": 4,
+    "namespace": 5,
+    "interface": 6,
+    "struct": 7,
+    "trait": 8,
+    "enum": 9,
 }
 ID_TO_KIND = {value: key for key, value in KIND_TO_ID.items()}
 RELATION_KINDS = {"import", "reference", "call", "definition", "test"}
@@ -119,6 +127,7 @@ class BuildMetrics:
     metadata_reused_files: int = 0
     phase_timings_ms: dict[str, float] | None = None
 
+
 @dataclass(frozen=True, slots=True)
 class ContextSpan:
     symbol: str
@@ -138,7 +147,9 @@ class StaleSnapshotError(RuntimeError):
     pass
 
 
-def stable_id(repository: str, file: str, language: str, symbol: str, signature: str) -> str:
+def stable_id(
+    repository: str, file: str, language: str, symbol: str, signature: str
+) -> str:
     """Return the stable 256-bit ID required by the public format contract."""
 
     value = "\0".join((repository, file, language, symbol, signature))
@@ -223,9 +234,19 @@ class _Collector(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_Name(self, node: ast.Name) -> None:
-        if self._current and isinstance(node.ctx, ast.Load) and node.id not in {"True", "False", "None"}:
+        if (
+            self._current
+            and isinstance(node.ctx, ast.Load)
+            and node.id not in {"True", "False", "None"}
+        ):
             self.relations.append(
-                Relation(self._current[-1].qualified_name, node.id, "reference", 0.5, self._current[-1].symbol_id)
+                Relation(
+                    self._current[-1].qualified_name,
+                    node.id,
+                    "reference",
+                    0.5,
+                    self._current[-1].symbol_id,
+                )
             )
 
     def _visit_scope(
@@ -246,7 +267,9 @@ class _Collector(ast.NodeVisitor):
             signature,
         )
         self.symbols.append(symbol)
-        self.relations.append(Relation(self.file, qualified, "definition", 1.0, "", symbol.symbol_id))
+        self.relations.append(
+            Relation(self.file, qualified, "definition", 1.0, "", symbol.symbol_id)
+        )
         self.scope.append(node.name)
         self._current.append(symbol)
         self.generic_visit(node)
@@ -276,7 +299,9 @@ class SnapshotBuildTimeout(TimeoutError):
     """Raised when a bounded build cannot complete before its deadline."""
 
     code = "snapshot_build_timeout"
-    recovery = "retry with a larger timeout or exclude generated/vendor source directories"
+    recovery = (
+        "retry with a larger timeout or exclude generated/vendor source directories"
+    )
 
     def __init__(
         self,
@@ -318,7 +343,9 @@ class SnapshotTooLarge(ValueError):
     def __init__(self, size: int, limit: int) -> None:
         self.size = size
         self.limit = limit
-        self.recovery = "exclude generated/vendor source or use a partitioned repository snapshot"
+        self.recovery = (
+            "exclude generated/vendor source or use a partitioned repository snapshot"
+        )
         super().__init__(
             f"{self.code} size={size} limit={limit} recovery={self.recovery}"
         )
@@ -333,17 +360,22 @@ class SourceFileTooLarge(ValueError):
         self.path = path.as_posix()
         self.size = size
         self.limit = limit
-        self.recovery = "exclude generated/vendor source or raise --max-file-bytes explicitly"
+        self.recovery = (
+            "exclude generated/vendor source or raise --max-file-bytes explicitly"
+        )
         super().__init__(
             f"{self.code} path={self.path} size={size} limit={limit} recovery={self.recovery}"
         )
+
 
 class SourceEncodingError(ValueError):
     code = "source_encoding_unreadable"
 
     def __init__(self, path: Path, cause: BaseException) -> None:
         self.path = path.as_posix()
-        self.recovery = "add a PEP 263 encoding cookie or remove the binary-looking source file"
+        self.recovery = (
+            "add a PEP 263 encoding cookie or remove the binary-looking source file"
+        )
         super().__init__(
             f"{self.code} path={self.path} recovery={self.recovery} cause={type(cause).__name__}"
         )
@@ -357,7 +389,9 @@ def _read_python_source(path: Path) -> str:
         raise SourceEncodingError(path, error) from error
 
 
-def _parse_file(path: Path, relative_path: str, repository: str) -> tuple[list[Symbol], list[Relation]]:
+def _parse_file(
+    path: Path, relative_path: str, repository: str
+) -> tuple[list[Symbol], list[Relation]]:
     if path.suffix.casefold() not in {".py", ".pyi"}:
         from .adapters import parse_path
 
@@ -375,10 +409,19 @@ def parse_symbols(path: Path, relative_path: str) -> list[Symbol]:
 
 
 def source_files(root: Path) -> list[Path]:
-    ignored = {".git", ".venv", "__pycache__", ".simplicio-fast", ".simplicio", "node_modules"}
+    ignored = {
+        ".git",
+        ".venv",
+        "__pycache__",
+        ".simplicio-fast",
+        ".simplicio",
+        "node_modules",
+    }
     suffixes = {".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".rs", ".cs"}
     found: list[Path] = []
-    for directory, directories, filenames in os.walk(root, topdown=True, followlinks=False):
+    for directory, directories, filenames in os.walk(
+        root, topdown=True, followlinks=False
+    ):
         directories[:] = sorted(name for name in directories if name not in ignored)
         found.extend(
             Path(directory) / name
@@ -396,10 +439,16 @@ def _add_string(strings: bytearray, value: str) -> tuple[int, int]:
 
 
 def _json_bytes(value: object) -> bytes:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
 
 
-def _build_v2(entries: list[tuple[str, bytes, int, list[Symbol]]], relations: list[Relation], output: Path) -> tuple[int, str]:
+def _build_v2(
+    entries: list[tuple[str, bytes, int, list[Symbol]]],
+    relations: list[Relation],
+    output: Path,
+) -> tuple[int, str]:
     strings = bytearray()
     file_rows: list[bytes] = []
     file_index: dict[str, int] = {}
@@ -411,7 +460,12 @@ def _build_v2(entries: list[tuple[str, bytes, int, list[Symbol]]], relations: li
 
     symbols = sorted(
         (symbol for _, _, _, found in entries for symbol in found),
-        key=lambda item: (item.name.casefold(), item.qualified_name, item.file, item.line),
+        key=lambda item: (
+            item.name.casefold(),
+            item.qualified_name,
+            item.file,
+            item.line,
+        ),
     )
     symbol_rows: list[bytes] = []
     for symbol in symbols:
@@ -454,7 +508,13 @@ def _build_v2(entries: list[tuple[str, bytes, int, list[Symbol]]], relations: li
             "destination_id": relation.destination_id,
         }
         for relation in sorted(
-            relations, key=lambda item: (item.kind, item.origin, item.destination, item.confidence)
+            relations,
+            key=lambda item: (
+                item.kind,
+                item.origin,
+                item.destination,
+                item.confidence,
+            ),
         )
     ]
     sections_data = {
@@ -476,21 +536,47 @@ def _build_v2(entries: list[tuple[str, bytes, int, list[Symbol]]], relations: li
             offset += 8 - offset % 8
         digest = hashlib.sha256(data).digest()
         section_offsets.append((name, offset, data))
-        section_rows.append(SECTION_RECORD.pack(name.encode("ascii"), offset, len(data), digest))
+        section_rows.append(
+            SECTION_RECORD.pack(name.encode("ascii"), offset, len(data), digest)
+        )
         offset += len(data)
     total_size = offset
     if total_size > MAX_SNAPSHOT_BYTES:
         raise SnapshotTooLarge(total_size, MAX_SNAPSHOT_BYTES)
-    source_digest = hashlib.sha256(b"".join(digest for _, digest, _, _ in entries)).digest()
+    source_digest = hashlib.sha256(
+        b"".join(digest for _, digest, _, _ in entries)
+    ).digest()
     generation_int = int.from_bytes(source_digest[:8], "little")
-    header = HEADER.pack(MAGIC, VERSION, ENDIAN_MARKER, section_count, generation_int, directory_offset, directory_size, total_size, b"\0" * 32)
+    header = HEADER.pack(
+        MAGIC,
+        VERSION,
+        ENDIAN_MARKER,
+        section_count,
+        generation_int,
+        directory_offset,
+        directory_size,
+        total_size,
+        b"\0" * 32,
+    )
     payload = bytearray(total_size)
     payload[: HEADER.size] = header
-    payload[directory_offset : directory_offset + directory_size] = b"".join(section_rows)
+    payload[directory_offset : directory_offset + directory_size] = b"".join(
+        section_rows
+    )
     for _, section_offset, data in section_offsets:
         payload[section_offset : section_offset + len(data)] = data
     checksum = hashlib.sha256(payload).digest()
-    payload[: HEADER.size] = HEADER.pack(MAGIC, VERSION, ENDIAN_MARKER, section_count, generation_int, directory_offset, directory_size, total_size, checksum)
+    payload[: HEADER.size] = HEADER.pack(
+        MAGIC,
+        VERSION,
+        ENDIAN_MARKER,
+        section_count,
+        generation_int,
+        directory_offset,
+        directory_size,
+        total_size,
+        checksum,
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary_name: str | None = None
     try:
@@ -578,15 +664,18 @@ def _write_validation_cache(
     files: dict[str, dict[str, int | str]],
 ) -> None:
     path = _validation_cache_path(output)
-    payload = json.dumps(
-        {
-            "schema": VALIDATION_CACHE_SCHEMA,
-            "snapshot_checksum": snapshot_checksum,
-            "files": files,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8") + b"\n"
+    payload = (
+        json.dumps(
+            {
+                "schema": VALIDATION_CACHE_SCHEMA,
+                "snapshot_checksum": snapshot_checksum,
+                "files": files,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        + b"\n"
+    )
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_name: str | None = None
     try:
@@ -649,7 +738,9 @@ def build_snapshot(
             previous = {}
             previous_relations = []
             previous_symbol_files = {}
-    phase_timings["previous_snapshot_load"] = (time.perf_counter() - previous_start) * 1000
+    phase_timings["previous_snapshot_load"] = (
+        time.perf_counter() - previous_start
+    ) * 1000
 
     discovery_start = time.perf_counter()
     paths = source_files(root)
@@ -669,8 +760,7 @@ def build_snapshot(
         try:
             cache_age_ns = max(
                 0,
-                time.time_ns()
-                - _validation_cache_path(output).stat().st_mtime_ns,
+                time.time_ns() - _validation_cache_path(output).stat().st_mtime_ns,
             )
             validation_cache_requires_digest = (
                 cache_age_ns <= VALIDATION_CACHE_TIMESTAMP_GUARD_NS
@@ -836,6 +926,7 @@ def build_snapshot(
         phase_timings_ms=current_timings(),
     )
 
+
 class Snapshot:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -855,7 +946,9 @@ class Snapshot:
             elif version == VERSION:
                 self._open_v2()
             else:
-                raise ValueError(f"unsupported Simplicio Fast snapshot version: {version}")
+                raise ValueError(
+                    f"unsupported Simplicio Fast snapshot version: {version}"
+                )
         except Exception:
             self.close()
             raise
@@ -863,7 +956,16 @@ class Snapshot:
     def _open_legacy(self) -> None:
         if len(self._map) < LEGACY_HEADER.size:
             raise ValueError("truncated SFAST001/v1 header")
-        magic, version, self.file_count, self.symbol_count, self.files_offset, self.symbols_offset, self.strings_offset, total_size = LEGACY_HEADER.unpack_from(self._map)
+        (
+            magic,
+            version,
+            self.file_count,
+            self.symbol_count,
+            self.files_offset,
+            self.symbols_offset,
+            self.strings_offset,
+            total_size,
+        ) = LEGACY_HEADER.unpack_from(self._map)
         if magic != MAGIC or version != LEGACY_VERSION or total_size != len(self._map):
             raise ValueError("invalid or unsupported SFAST001/v1 snapshot")
         self.format_version = LEGACY_VERSION
@@ -872,24 +974,63 @@ class Snapshot:
         self._sections = {}
         if self.file_count > MAX_FILES or self.symbol_count > MAX_SYMBOLS:
             raise ValueError("snapshot record limit exceeded")
-        _validate_region(self.files_offset, self.file_count * LEGACY_FILE_RECORD.size, self.strings_offset, LEGACY_HEADER.size)
-        _validate_region(self.symbols_offset, self.symbol_count * LEGACY_SYMBOL_RECORD.size, self.strings_offset, LEGACY_HEADER.size)
-        if not self.files_offset <= self.symbols_offset <= self.strings_offset <= total_size:
+        _validate_region(
+            self.files_offset,
+            self.file_count * LEGACY_FILE_RECORD.size,
+            self.strings_offset,
+            LEGACY_HEADER.size,
+        )
+        _validate_region(
+            self.symbols_offset,
+            self.symbol_count * LEGACY_SYMBOL_RECORD.size,
+            self.strings_offset,
+            LEGACY_HEADER.size,
+        )
+        if (
+            not self.files_offset
+            <= self.symbols_offset
+            <= self.strings_offset
+            <= total_size
+        ):
             raise ValueError("invalid v1 section offsets")
         for index in range(self.file_count):
-            row = LEGACY_FILE_RECORD.unpack_from(self._map, self.files_offset + index * LEGACY_FILE_RECORD.size)
+            row = LEGACY_FILE_RECORD.unpack_from(
+                self._map, self.files_offset + index * LEGACY_FILE_RECORD.size
+            )
             _validate_text(row[0], row[1], total_size - self.strings_offset)
         for index in range(self.symbol_count):
-            row = LEGACY_SYMBOL_RECORD.unpack_from(self._map, self.symbols_offset + index * LEGACY_SYMBOL_RECORD.size)
+            row = LEGACY_SYMBOL_RECORD.unpack_from(
+                self._map, self.symbols_offset + index * LEGACY_SYMBOL_RECORD.size
+            )
             _validate_text(row[0], row[1], total_size - self.strings_offset)
-            if row[2] >= self.file_count or row[3] < 1 or row[4] < row[3] or row[5] not in ID_TO_KIND:
+            if (
+                row[2] >= self.file_count
+                or row[3] < 1
+                or row[4] < row[3]
+                or row[5] not in ID_TO_KIND
+            ):
                 raise ValueError("invalid v1 symbol record")
 
     def _open_v2(self) -> None:
         if len(self._map) < HEADER.size:
             raise ValueError("truncated SFAST001/v2 header")
-        magic, version, endian, section_count, generation, directory_offset, directory_size, total_size, checksum = HEADER.unpack_from(self._map)
-        if magic != MAGIC or version != VERSION or endian != ENDIAN_MARKER or total_size != len(self._map):
+        (
+            magic,
+            version,
+            endian,
+            section_count,
+            generation,
+            directory_offset,
+            directory_size,
+            total_size,
+            checksum,
+        ) = HEADER.unpack_from(self._map)
+        if (
+            magic != MAGIC
+            or version != VERSION
+            or endian != ENDIAN_MARKER
+            or total_size != len(self._map)
+        ):
             raise ValueError("invalid or unsupported SFAST001/v2 header")
         if section_count < len(REQUIRED_SECTIONS) or section_count > MAX_SECTIONS:
             raise ValueError("invalid section count")
@@ -904,26 +1045,38 @@ class Snapshot:
         sections: dict[str, tuple[int, int]] = {}
         regions: list[tuple[int, int]] = []
         for index in range(section_count):
-            name_raw, offset, length, section_checksum = SECTION_RECORD.unpack_from(self._map, directory_offset + index * SECTION_RECORD.size)
+            name_raw, offset, length, section_checksum = SECTION_RECORD.unpack_from(
+                self._map, directory_offset + index * SECTION_RECORD.size
+            )
             name = name_raw.rstrip(b"\0").decode("ascii", errors="strict")
             if not name or name in sections:
                 raise ValueError("invalid or duplicate section name")
             _validate_region(offset, length, len(self._map), directory_end)
             if offset % 8:
                 raise ValueError("unaligned section offset")
-            if hashlib.sha256(self._map[offset : offset + length]).digest() != section_checksum:
+            if (
+                hashlib.sha256(self._map[offset : offset + length]).digest()
+                != section_checksum
+            ):
                 raise ValueError(f"section checksum mismatch: {name}")
             sections[name] = (offset, length)
             regions.append((offset, offset + length))
         if any(name not in sections for name in REQUIRED_SECTIONS):
             raise ValueError("snapshot is missing a required section")
-        if any(a < b and c < d and max(a, c) < min(b, d) for i, (a, b) in enumerate(regions) for c, d in regions[i + 1 :]):
+        if any(
+            a < b and c < d and max(a, c) < min(b, d)
+            for i, (a, b) in enumerate(regions)
+            for c, d in regions[i + 1 :]
+        ):
             raise ValueError("overlapping snapshot sections")
         self.format_version = VERSION
         self._header_generation = f"{generation:016x}"
         self._content_checksum = checksum.hex()
         self._sections = sections
-        if sections["files"][1] % FILE_RECORD.size or sections["symbols"][1] % SYMBOL_RECORD.size:
+        if (
+            sections["files"][1] % FILE_RECORD.size
+            or sections["symbols"][1] % SYMBOL_RECORD.size
+        ):
             raise ValueError("section length is not a whole number of records")
         self.file_count = sections["files"][1] // FILE_RECORD.size
         self.symbol_count = sections["symbols"][1] // SYMBOL_RECORD.size
@@ -935,14 +1088,23 @@ class Snapshot:
     def _validate_v2_records(self) -> None:
         string_offset, string_length = self._sections["strings"]
         for index in range(self.file_count):
-            row = FILE_RECORD.unpack_from(self._map, self._sections["files"][0] + index * FILE_RECORD.size)
+            row = FILE_RECORD.unpack_from(
+                self._map, self._sections["files"][0] + index * FILE_RECORD.size
+            )
             _validate_text(row[0], row[1], string_length)
         for index in range(self.symbol_count):
-            row = SYMBOL_RECORD.unpack_from(self._map, self._sections["symbols"][0] + index * SYMBOL_RECORD.size)
+            row = SYMBOL_RECORD.unpack_from(
+                self._map, self._sections["symbols"][0] + index * SYMBOL_RECORD.size
+            )
             _validate_text(row[0], row[1], string_length)
             _validate_text(row[2], row[3], string_length)
             _validate_text(row[4], row[5], string_length)
-            if row[6] >= self.file_count or row[7] < 1 or row[8] < row[7] or row[9] not in ID_TO_KIND:
+            if (
+                row[6] >= self.file_count
+                or row[7] < 1
+                or row[8] < row[7]
+                or row[9] not in ID_TO_KIND
+            ):
                 raise ValueError("invalid symbol record")
         try:
             relation_data = json.loads(self._section_bytes("relations"))
@@ -952,9 +1114,15 @@ class Snapshot:
         if not isinstance(relation_data, list) or len(relation_data) > MAX_RELATIONS:
             raise ValueError("invalid relation count")
         for relation in relation_data:
-            if not isinstance(relation, dict) or relation.get("kind") not in RELATION_KINDS:
+            if (
+                not isinstance(relation, dict)
+                or relation.get("kind") not in RELATION_KINDS
+            ):
                 raise ValueError("invalid relation record")
-            if not isinstance(relation.get("confidence"), (int, float)) or not 0 <= relation["confidence"] <= 1:
+            if (
+                not isinstance(relation.get("confidence"), (int, float))
+                or not 0 <= relation["confidence"] <= 1
+            ):
                 raise ValueError("invalid relation confidence")
         if not isinstance(index_data, dict):
             raise ValueError("invalid index payload")
@@ -962,7 +1130,12 @@ class Snapshot:
             if not isinstance(index_data.get(key), dict):
                 raise ValueError("missing direct index")
             for values in index_data[key].values():
-                if not isinstance(values, list) or any(not isinstance(value, int) or value < 0 or value >= self.symbol_count for value in values):
+                if not isinstance(values, list) or any(
+                    not isinstance(value, int)
+                    or value < 0
+                    or value >= self.symbol_count
+                    for value in values
+                ):
                     raise ValueError("direct index points outside symbol section")
         self.relation_count = len(relation_data)
 
@@ -1018,25 +1191,50 @@ class Snapshot:
         result: list[tuple[str, bytes]] = []
         for index in range(self.file_count):
             if self.format_version == LEGACY_VERSION:
-                row = LEGACY_FILE_RECORD.unpack_from(self._map, self.files_offset + index * LEGACY_FILE_RECORD.size)
+                row = LEGACY_FILE_RECORD.unpack_from(
+                    self._map, self.files_offset + index * LEGACY_FILE_RECORD.size
+                )
                 result.append((self._text(row[0], row[1]), row[4]))
             else:
-                row = FILE_RECORD.unpack_from(self._map, self._sections["files"][0] + index * FILE_RECORD.size)
+                row = FILE_RECORD.unpack_from(
+                    self._map, self._sections["files"][0] + index * FILE_RECORD.size
+                )
                 result.append((self._text(row[0], row[1]), row[3]))
         return result
 
     def _symbol_at(self, index: int, files: list[str] | None = None) -> Symbol:
         files = files or [path for path, _ in self.files()]
         if self.format_version == LEGACY_VERSION:
-            row = LEGACY_SYMBOL_RECORD.unpack_from(self._map, self.symbols_offset + index * LEGACY_SYMBOL_RECORD.size)
+            row = LEGACY_SYMBOL_RECORD.unpack_from(
+                self._map, self.symbols_offset + index * LEGACY_SYMBOL_RECORD.size
+            )
             qualified = self._text(row[0], row[1])
             file = files[row[2]]
-            return Symbol(row and qualified.rsplit(".", 1)[-1], qualified, ID_TO_KIND[row[5]], file, row[3], row[4], stable_id(file.split("/", 1)[0], file, "python", qualified, ""))
-        row = SYMBOL_RECORD.unpack_from(self._map, self._sections["symbols"][0] + index * SYMBOL_RECORD.size)
+            return Symbol(
+                row and qualified.rsplit(".", 1)[-1],
+                qualified,
+                ID_TO_KIND[row[5]],
+                file,
+                row[3],
+                row[4],
+                stable_id(file.split("/", 1)[0], file, "python", qualified, ""),
+            )
+        row = SYMBOL_RECORD.unpack_from(
+            self._map, self._sections["symbols"][0] + index * SYMBOL_RECORD.size
+        )
         name = self._text(row[0], row[1])
         qualified = self._text(row[2], row[3])
         signature = self._text(row[4], row[5])
-        return Symbol(name, qualified, ID_TO_KIND[row[9]], files[row[6]], row[7], row[8], row[10].hex(), signature)
+        return Symbol(
+            name,
+            qualified,
+            ID_TO_KIND[row[9]],
+            files[row[6]],
+            row[7],
+            row[8],
+            row[10].hex(),
+            signature,
+        )
 
     def symbols(self) -> list[Symbol]:
         files = [path for path, _ in self.files()]
@@ -1050,29 +1248,69 @@ class Snapshot:
 
     def find_exact(self, query: str) -> list[Symbol]:
         if self.format_version == LEGACY_VERSION:
-            return [symbol for symbol in self.symbols() if symbol.qualified_name.casefold() == query.casefold()]
+            return [
+                symbol
+                for symbol in self.symbols()
+                if symbol.qualified_name.casefold() == query.casefold()
+            ]
         indexes = self._indexes()["exact"]
         files = [path for path, _ in self.files()]
-        return [self._symbol_at(index, files) for index in indexes.get(query.casefold(), [])]
+        return [
+            self._symbol_at(index, files) for index in indexes.get(query.casefold(), [])
+        ]
 
-    def search(self, query: str, *, prefix: bool = False, path: str | None = None, kind: str | None = None) -> list[Symbol]:
+    def search(
+        self,
+        query: str,
+        *,
+        prefix: bool = False,
+        path: str | None = None,
+        kind: str | None = None,
+    ) -> list[Symbol]:
         needle = query.casefold()
         if self.format_version == LEGACY_VERSION:
             candidates = list(range(self.symbol_count))
         else:
             indexes = self._indexes()
             if prefix:
-                candidates = [index for name, values in indexes["names"].items() if name.startswith(needle) for index in values]
+                candidates = [
+                    index
+                    for name, values in indexes["names"].items()
+                    if name.startswith(needle)
+                    for index in values
+                ]
             else:
-                candidates = [index for name, values in indexes["names"].items() if needle in name for index in values]
-                candidates.extend(index for name, values in indexes["exact"].items() if needle in name for index in values)
+                candidates = [
+                    index
+                    for name, values in indexes["names"].items()
+                    if needle in name
+                    for index in values
+                ]
+                candidates.extend(
+                    index
+                    for name, values in indexes["exact"].items()
+                    if needle in name
+                    for index in values
+                )
             if path is not None:
-                candidates = sorted(set(candidates).intersection(indexes["paths"].get(path, [])))
+                candidates = sorted(
+                    set(candidates).intersection(indexes["paths"].get(path, []))
+                )
             if kind is not None:
-                candidates = sorted(set(candidates).intersection(indexes["kinds"].get(kind, [])))
+                candidates = sorted(
+                    set(candidates).intersection(indexes["kinds"].get(kind, []))
+                )
         files = [path_value for path_value, _ in self.files()]
         result = [self._symbol_at(index, files) for index in sorted(set(candidates))]
-        return sorted(result, key=lambda item: (item.name.casefold(), item.qualified_name, item.file, item.line))
+        return sorted(
+            result,
+            key=lambda item: (
+                item.name.casefold(),
+                item.qualified_name,
+                item.file,
+                item.line,
+            ),
+        )
 
     def find(self, query: str) -> list[Symbol]:
         return self.search(query)
@@ -1080,7 +1318,9 @@ class Snapshot:
     def relations(self) -> list[Relation]:
         if self.format_version == LEGACY_VERSION:
             return []
-        return [Relation(**value) for value in json.loads(self._section_bytes("relations"))]
+        return [
+            Relation(**value) for value in json.loads(self._section_bytes("relations"))
+        ]
 
     def invalidation_closure(
         self,
@@ -1092,7 +1332,15 @@ class Snapshot:
         """Return a deterministic, bounded reverse dependency closure."""
         if max_symbols < 1 or max_files < 1:
             raise ValueError("max_symbols and max_files must be positive")
-        paths = tuple(sorted({str(path).replace("\\", "/").strip("/") for path in changed_paths if str(path).strip()}))
+        paths = tuple(
+            sorted(
+                {
+                    str(path).replace("\\", "/").strip("/")
+                    for path in changed_paths
+                    if str(path).strip()
+                }
+            )
+        )
         symbols = self.symbols()
         by_id = {symbol.symbol_id: symbol for symbol in symbols}
         name_to_ids: dict[str, set[str]] = {}
@@ -1103,7 +1351,11 @@ class Snapshot:
         reverse: dict[str, set[str]] = {}
         edge_count = 0
         for relation in self.relations():
-            origins = {relation.origin_id} if relation.origin_id else name_to_ids.get(relation.origin.casefold(), set())
+            origins = (
+                {relation.origin_id}
+                if relation.origin_id
+                else name_to_ids.get(relation.origin.casefold(), set())
+            )
             origins = {origin for origin in origins if origin in by_id}
             if not origins:
                 continue
@@ -1114,7 +1366,9 @@ class Snapshot:
                 reverse.setdefault(destination, set()).update(origins)
             edge_count += len(origins)
 
-        frontier = sorted(symbol.symbol_id for symbol in symbols if symbol.file in paths)
+        frontier = sorted(
+            symbol.symbol_id for symbol in symbols if symbol.file in paths
+        )
         affected: set[str] = set()
         while frontier and len(affected) < max_symbols:
             current = frontier.pop(0)
@@ -1122,18 +1376,40 @@ class Snapshot:
                 continue
             affected.add(current)
             symbol = by_id[current]
-            keys = {current.casefold(), symbol.name.casefold(), symbol.qualified_name.casefold()}
-            frontier.extend(sorted({origin for key in keys for origin in reverse.get(key, set()) if origin not in affected}))
+            keys = {
+                current.casefold(),
+                symbol.name.casefold(),
+                symbol.qualified_name.casefold(),
+            }
+            frontier.extend(
+                sorted(
+                    {
+                        origin
+                        for key in keys
+                        for origin in reverse.get(key, set())
+                        if origin not in affected
+                    }
+                )
+            )
 
-        selected = sorted((by_id[symbol_id] for symbol_id in affected), key=lambda item: (item.file, item.line, item.qualified_name))
+        selected = sorted(
+            (by_id[symbol_id] for symbol_id in affected),
+            key=lambda item: (item.file, item.line, item.qualified_name),
+        )
         files = sorted({symbol.file for symbol in selected})
         files_truncated = len(files) > max_files
         truncated = bool(frontier) or files_truncated
-        status = "no_op" if not selected else "truncated" if truncated else "invalidated"
+        status = (
+            "no_op" if not selected else "truncated" if truncated else "invalidated"
+        )
         return {
             "schema": "simplicio.fast.invalidation-closure/v1",
             "status": status,
-            "reason_code": "no_changed_symbols" if not selected else "closure_bounded" if truncated else "dependency_changed",
+            "reason_code": "no_changed_symbols"
+            if not selected
+            else "closure_bounded"
+            if truncated
+            else "dependency_changed",
             "changed_paths": paths,
             "affected_symbol_ids": [symbol.symbol_id for symbol in selected],
             "affected_symbols": [symbol.qualified_name for symbol in selected],
@@ -1150,10 +1426,29 @@ class Snapshot:
         qualified = {symbol.qualified_name.casefold() for symbol in symbols}
         result = []
         for relation in self.relations():
-            fields = {relation.origin.casefold(), relation.destination.casefold(), relation.origin_id.casefold(), relation.destination_id.casefold()}
-            if needle in fields or any(needle in value for value in fields) or ids.intersection(fields) or names.intersection(fields) or qualified.intersection(fields):
+            fields = {
+                relation.origin.casefold(),
+                relation.destination.casefold(),
+                relation.origin_id.casefold(),
+                relation.destination_id.casefold(),
+            }
+            if (
+                needle in fields
+                or any(needle in value for value in fields)
+                or ids.intersection(fields)
+                or names.intersection(fields)
+                or qualified.intersection(fields)
+            ):
                 result.append(relation)
-        return sorted(result, key=lambda item: (item.kind, item.origin, item.destination, item.confidence))
+        return sorted(
+            result,
+            key=lambda item: (
+                item.kind,
+                item.origin,
+                item.destination,
+                item.confidence,
+            ),
+        )
 
     def context(
         self,
@@ -1165,7 +1460,12 @@ class Snapshot:
         max_bytes: int = 32_000,
         max_tokens: int | None = None,
     ) -> list[ContextSpan]:
-        if max_results < 1 or max_lines < 1 or max_bytes < 1 or (max_tokens is not None and max_tokens < 1):
+        if (
+            max_results < 1
+            or max_lines < 1
+            or max_bytes < 1
+            or (max_tokens is not None and max_tokens < 1)
+        ):
             raise ValueError("context limits must be positive")
         root = root.resolve()
         expected_hashes = {path: digest for path, digest in self.files()}
@@ -1181,11 +1481,15 @@ class Snapshot:
             try:
                 path.relative_to(root)
             except ValueError as error:
-                raise ValueError(f"snapshot path escapes root: {symbol.file}") from error
+                raise ValueError(
+                    f"snapshot path escapes root: {symbol.file}"
+                ) from error
             contents = path.read_bytes()
             actual_hash = hashlib.sha256(contents).digest()
             if actual_hash != expected_hashes[symbol.file]:
-                raise StaleSnapshotError(f"source changed after snapshot: {symbol.file}; run simplicio-fast refresh")
+                raise StaleSnapshotError(
+                    f"source changed after snapshot: {symbol.file}; run simplicio-fast refresh"
+                )
             lines = contents.decode("utf-8").splitlines()
             start = symbol.line
             end = min(symbol.end_line, start + max_lines - 1)
@@ -1197,20 +1501,36 @@ class Snapshot:
                 remaining = max_bytes - consumed
                 if remaining <= 0:
                     break
-                snippet = snippet.encode("utf-8")[:remaining].decode("utf-8", errors="ignore")
+                snippet = snippet.encode("utf-8")[:remaining].decode(
+                    "utf-8", errors="ignore"
+                )
             encoded_size = len(snippet.encode("utf-8"))
             tokens = max(1, (encoded_size + 3) // 4) if encoded_size else 0
             if max_tokens is not None and consumed_tokens + tokens > max_tokens:
                 remaining_tokens = max_tokens - consumed_tokens
                 if remaining_tokens <= 0:
                     break
-                snippet = snippet.encode("utf-8")[: remaining_tokens * 4].decode("utf-8", errors="ignore")
+                snippet = snippet.encode("utf-8")[: remaining_tokens * 4].decode(
+                    "utf-8", errors="ignore"
+                )
                 encoded_size = len(snippet.encode("utf-8"))
                 tokens = max(1, (encoded_size + 3) // 4) if encoded_size else 0
             seen.add(key)
             consumed += encoded_size
             consumed_tokens += tokens
-            spans.append(ContextSpan(symbol.qualified_name, symbol.kind, symbol.file, start, end, actual_hash.hex(), snippet, symbol.symbol_id, tokens))
+            spans.append(
+                ContextSpan(
+                    symbol.qualified_name,
+                    symbol.kind,
+                    symbol.file,
+                    start,
+                    end,
+                    actual_hash.hex(),
+                    snippet,
+                    symbol.symbol_id,
+                    tokens,
+                )
+            )
         return spans
 
     def stats(self) -> dict[str, object]:
@@ -1240,4 +1560,6 @@ def _validate_region(offset: int, length: int, limit: int, minimum: int) -> None
 
 def _validate_text(offset: int, length: int, limit: int) -> None:
     if offset < 0 or length < 0 or offset > limit or length > limit - offset:
-        raise ValueError("snapshot string offset or length is outside the string section")
+        raise ValueError(
+            "snapshot string offset or length is outside the string section"
+        )

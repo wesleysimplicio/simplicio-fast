@@ -1,4 +1,5 @@
 """Fail-closed optional native hot paths with a complete Python fallback."""
+
 from __future__ import annotations
 
 import hashlib
@@ -6,7 +7,7 @@ import json
 from pathlib import Path
 import platform
 import subprocess
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from . import __version__
 
@@ -21,8 +22,9 @@ class NativeBackendError(RuntimeError):
 
 
 def canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"),
-                      ensure_ascii=True).encode()
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode()
 
 
 def _file_sha256(path: Path) -> tuple[str, int]:
@@ -52,11 +54,12 @@ class PythonBackend:
     def page(data: bytes, offset: int, limit: int) -> bytes:
         if offset < 0 or limit < 1 or limit > 65536:
             raise NativeBackendError("page_bounds_invalid")
-        return data[offset:offset + limit]
+        return data[offset : offset + limit]
 
     @staticmethod
-    def overlay_merge(base: Mapping[str, bytes],
-                      overlay: Mapping[str, bytes | None]) -> dict[str, bytes]:
+    def overlay_merge(
+        base: Mapping[str, bytes], overlay: Mapping[str, bytes | None]
+    ) -> dict[str, bytes]:
         result = dict(base)
         for key, value in sorted(overlay.items()):
             if value is None:
@@ -74,12 +77,15 @@ class RustBackend:
         self.manifest = dict(manifest)
 
     def call(self, operation: str, payload: Mapping[str, Any]) -> Any:
-        request = canonical({"abi": ABI, "operation": operation,
-                             "payload": payload})
+        request = canonical({"abi": ABI, "operation": operation, "payload": payload})
         try:
             result = subprocess.run(
-                [str(self.executable)], input=request, capture_output=True,
-                timeout=5, check=False)
+                [str(self.executable)],
+                input=request,
+                capture_output=True,
+                timeout=5,
+                check=False,
+            )
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise NativeBackendError("native_crash", type(exc).__name__) from exc
         if result.returncode != 0:
@@ -104,8 +110,7 @@ def select_backend(
     path = Path(artifact)
     if manifest.get("abi") != ABI:
         return PythonBackend(), "RUST_ABI_INCOMPATIBLE"
-    supported = {"linux-x86_64", "linux-aarch64",
-                 "macos-aarch64", "windows-x86_64"}
+    supported = {"linux-x86_64", "linux-aarch64", "macos-aarch64", "windows-x86_64"}
     manifest_platform = manifest.get("platform")
     if manifest_platform not in supported:
         return PythonBackend(), "RUST_PLATFORM_UNSUPPORTED"
@@ -136,8 +141,9 @@ def select_backend(
     return RustBackend(path, manifest), None
 
 
-def platform_tag(*, system: str | None = None,
-                 machine: str | None = None) -> str | None:
+def platform_tag(
+    *, system: str | None = None, machine: str | None = None
+) -> str | None:
     system = (system or platform.system()).lower()
     machine = (machine or platform.machine()).lower()
     aliases = {
@@ -152,10 +158,9 @@ def platform_tag(*, system: str | None = None,
     return aliases.get((system, machine))
 
 
-def resolve_packaged_backend(root: str | Path, *,
-                             system: str | None = None,
-                             machine: str | None = None
-                             ) -> tuple[PythonBackend | RustBackend, str | None]:
+def resolve_packaged_backend(
+    root: str | Path, *, system: str | None = None, machine: str | None = None
+) -> tuple[PythonBackend | RustBackend, str | None]:
     """Resolve `artifacts/<platform>/<ABI>/manifest.json` without a toolchain.
 
     Absence is a normal, explicit Python fallback. This function never invokes
@@ -181,23 +186,31 @@ def resolve_packaged_backend(root: str | Path, *,
     return select_backend(directory / filename, manifest, expected_platform=tag)
 
 
-def execute_with_fallback(backend: PythonBackend | RustBackend,
-                          operation: str, payload: Mapping[str, Any]) -> tuple[Any, str, str | None]:
+def execute_with_fallback(
+    backend: PythonBackend | RustBackend, operation: str, payload: Mapping[str, Any]
+) -> tuple[Any, str, str | None]:
     python = PythonBackend()
+
     def py_result() -> Any:
         if operation == "sha256":
             return python.sha256(bytes.fromhex(payload["hex"]))
         if operation == "catalog_lookup":
             return python.catalog_lookup(payload["catalog"], payload["key"])
         if operation == "page":
-            return python.page(bytes.fromhex(payload["hex"]),
-                               int(payload["offset"]), int(payload["limit"])).hex()
+            return python.page(
+                bytes.fromhex(payload["hex"]),
+                int(payload["offset"]),
+                int(payload["limit"]),
+            ).hex()
         if operation == "overlay_merge":
             base = {k: bytes.fromhex(v) for k, v in payload["base"].items()}
-            overlay = {k: None if v is None else bytes.fromhex(v)
-                       for k, v in payload["overlay"].items()}
+            overlay = {
+                k: None if v is None else bytes.fromhex(v)
+                for k, v in payload["overlay"].items()
+            }
             return {k: v.hex() for k, v in python.overlay_merge(base, overlay).items()}
         raise NativeBackendError("operation_unknown", operation)
+
     if isinstance(backend, PythonBackend):
         return py_result(), "python", "RUST_UNAVAILABLE"
     try:
@@ -207,12 +220,14 @@ def execute_with_fallback(backend: PythonBackend | RustBackend,
         return py_result(), "python", exc.reason_code.upper()
 
 
-def backend_receipt_fields(backend: PythonBackend | RustBackend,
-                           fallback_reason: str | None) -> dict[str, Any]:
+def backend_receipt_fields(
+    backend: PythonBackend | RustBackend, fallback_reason: str | None
+) -> dict[str, Any]:
     artifact_hash = None
     if isinstance(backend, RustBackend):
         artifact_hash = backend.manifest.get("sha256")
     return {
-        "backend": backend.name, "backend_artifact_hash": artifact_hash,
+        "backend": backend.name,
+        "backend_artifact_hash": artifact_hash,
         "fallback_reason": fallback_reason,
     }

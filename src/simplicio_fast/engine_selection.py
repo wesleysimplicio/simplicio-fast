@@ -4,6 +4,7 @@ This module is deliberately side-effect free: probing and conformance are suppli
 by the caller, so selecting Rust never imports or starts the Python engine in the
 same fast path. The CLI/router can persist the returned receipt at its boundary.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -21,7 +22,12 @@ def resolve_mode(
     default: str = "auto",
 ) -> tuple[str, str]:
     """Resolve mode by CLI, workspace, user, then default precedence."""
-    for source, value in (("cli", cli), ("workspace", workspace), ("user", user), ("default", default)):
+    for source, value in (
+        ("cli", cli),
+        ("workspace", workspace),
+        ("user", user),
+        ("default", default),
+    ):
         if value is None:
             continue
         normalized = str(value).strip().lower()
@@ -79,28 +85,78 @@ def select_engine(
     rust_healthy = bool(probe.get("healthy") and probe.get("capabilities_ok"))
     rust_ready = rust_healthy and bool(conformance_passed)
     if requested == "off":
-        return EngineSelection(requested, None, False, "disabled_by_configuration", probe,
-                               python_available, conformance_passed)
+        return EngineSelection(
+            requested,
+            None,
+            False,
+            "disabled_by_configuration",
+            probe,
+            python_available,
+            conformance_passed,
+        )
     if requested == "python":
         if not python_available:
             raise EngineSelectionError("python_engine_unavailable")
-        return EngineSelection(requested, "python", True, "explicit_python", probe,
-                               python_available, conformance_passed)
+        return EngineSelection(
+            requested,
+            "python",
+            True,
+            "explicit_python",
+            probe,
+            python_available,
+            conformance_passed,
+        )
     if requested == "rust":
         if not rust_ready:
-            reason = "rust_conformance_missing" if rust_healthy else "rust_health_failed"
+            reason = (
+                "rust_conformance_missing" if rust_healthy else "rust_health_failed"
+            )
             raise EngineSelectionError(reason)
-        return EngineSelection(requested, "rust", True, "explicit_rust", probe,
-                               python_available, conformance_passed)
+        return EngineSelection(
+            requested,
+            "rust",
+            True,
+            "explicit_rust",
+            probe,
+            python_available,
+            conformance_passed,
+        )
     if rust_ready:
-        return EngineSelection(requested, "rust", True, "rust_health_and_conformance_passed", probe,
-                               python_available, conformance_passed)
+        return EngineSelection(
+            requested,
+            "rust",
+            True,
+            "rust_health_and_conformance_passed",
+            probe,
+            python_available,
+            conformance_passed,
+        )
     if python_available:
         reason = "rust_conformance_missing" if rust_healthy else "rust_unavailable"
-        return EngineSelection(requested, "python", True, reason, probe,
-                               python_available, conformance_passed)
-    return EngineSelection(requested, None, False, "no_usable_engine", probe,
-                           python_available, conformance_passed)
+        return EngineSelection(
+            requested,
+            "python",
+            True,
+            reason,
+            probe,
+            python_available,
+            conformance_passed,
+        )
+    return EngineSelection(
+        requested,
+        None,
+        False,
+        "no_usable_engine",
+        probe,
+        python_available,
+        conformance_passed,
+    )
 
 
-__all__ = ["ENGINE_SELECTION_SCHEMA", "EngineSelection", "EngineSelectionError", "resolve_mode", "select_engine"]
+__all__ = [
+    "ENGINE_SELECTION_SCHEMA",
+    "EngineSelection",
+    "EngineSelectionError",
+    "resolve_mode",
+    "select_engine",
+]

@@ -47,9 +47,10 @@ class EngineSelectionTest(unittest.TestCase):
             "status": "available",
             "conformance": {"passed": False},
         }
-        with patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"), patch(
-            "simplicio_fast.engine.subprocess.run"
-        ) as run:
+        with (
+            patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"),
+            patch("simplicio_fast.engine.subprocess.run") as run,
+        ):
             run.return_value.returncode = 0
             run.return_value.stdout = json.dumps(manifest)
             run.return_value.stderr = ""
@@ -64,9 +65,10 @@ class EngineSelectionTest(unittest.TestCase):
             "status": "available",
             "conformance": {"passed": True},
         }
-        with patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"), patch(
-            "simplicio_fast.engine.subprocess.run"
-        ) as run:
+        with (
+            patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"),
+            patch("simplicio_fast.engine.subprocess.run") as run,
+        ):
             run.return_value.returncode = 0
             run.return_value.stdout = json.dumps(manifest)
             run.return_value.stderr = ""
@@ -83,7 +85,9 @@ class EngineSelectionTest(unittest.TestCase):
         self.assertEqual("3.11", manifest["minimum_python"])
         self.assertEqual(512 * 1024 * 1024, manifest["limits"]["max_snapshot_bytes"])
 
-    def test_python_manifest_validation_rejects_missing_capability_with_stable_code(self) -> None:
+    def test_python_manifest_validation_rejects_missing_capability_with_stable_code(
+        self,
+    ) -> None:
         manifest = python_manifest()
         manifest["capabilities"].remove("query")
         with self.assertRaises(PythonManifestError) as raised:
@@ -104,7 +108,14 @@ class EngineSelectionTest(unittest.TestCase):
 
     def test_cli_accepts_engine_selector_after_command(self) -> None:
         output = io.StringIO()
-        with patch.object(sys, "argv", ["simplicio-fast", "capabilities", "--fast-engine", "python"]), contextlib.redirect_stdout(output):
+        with (
+            patch.object(
+                sys,
+                "argv",
+                ["simplicio-fast", "capabilities", "--fast-engine", "python"],
+            ),
+            contextlib.redirect_stdout(output),
+        ):
             main()
         payload = json.loads(output.getvalue())
         self.assertEqual("python", payload["engine"]["selected"])
@@ -116,7 +127,11 @@ class EngineSelectionTest(unittest.TestCase):
             "rust",
             "rust_probe_passed",
             "simplicio-fast-rs",
-            {"schema": "simplicio.fast.engine-manifest/v1", "engine": "rust", "status": "available"},
+            {
+                "schema": "simplicio.fast.engine-manifest/v1",
+                "engine": "rust",
+                "status": "available",
+            },
         )
         completed = subprocess.CompletedProcess(
             ["simplicio-fast-rs"],
@@ -124,11 +139,24 @@ class EngineSelectionTest(unittest.TestCase):
             '{"schema":"simplicio.fast.query/v1","engine":"rust","matches":[{"name":"save"}]}',
             "",
         )
-        with patch.object(sys, "argv", [
-            "simplicio-fast", "query", "save", "--snapshot", "snapshot.sfast", "--fast-engine", "rust"
-        ]), patch("simplicio_fast.cli.select_engine", return_value=selection), patch(
-            "simplicio_fast.cli.subprocess.run", return_value=completed
-        ) as run, contextlib.redirect_stdout(output):
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "simplicio-fast",
+                    "query",
+                    "save",
+                    "--snapshot",
+                    "snapshot.sfast",
+                    "--fast-engine",
+                    "rust",
+                ],
+            ),
+            patch("simplicio_fast.cli.select_engine", return_value=selection),
+            patch("simplicio_fast.cli.subprocess.run", return_value=completed) as run,
+            contextlib.redirect_stdout(output),
+        ):
             main()
         payload = json.loads(output.getvalue())
         self.assertEqual("simplicio.fast.query/v1", payload["schema"])
@@ -144,7 +172,11 @@ class EngineSelectionTest(unittest.TestCase):
             "rust",
             "rust_probe_passed",
             "simplicio-fast-rs",
-            {"schema": "simplicio.fast.engine-manifest/v1", "engine": "rust", "status": "available"},
+            {
+                "schema": "simplicio.fast.engine-manifest/v1",
+                "engine": "rust",
+                "status": "available",
+            },
         )
         completed = subprocess.CompletedProcess(
             ["simplicio-fast-rs"],
@@ -152,13 +184,34 @@ class EngineSelectionTest(unittest.TestCase):
             '{"schema":"simplicio.fast.context/v1","engine":"rust","spans":[]}',
             "",
         )
-        with patch.object(sys, "argv", [
-            "simplicio-fast", "context", "save", "--root", ".", "--snapshot", "snapshot.sfast",
-            "--max-results", "2", "--max-lines", "9", "--max-bytes", "100", "--max-tokens", "30",
-            "--fast-engine", "rust"
-        ]), patch("simplicio_fast.cli.select_engine", return_value=selection), patch(
-            "simplicio_fast.cli.subprocess.run", return_value=completed
-        ) as run, contextlib.redirect_stdout(output):
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "simplicio-fast",
+                    "context",
+                    "save",
+                    "--root",
+                    ".",
+                    "--snapshot",
+                    "snapshot.sfast",
+                    "--max-results",
+                    "2",
+                    "--max-lines",
+                    "9",
+                    "--max-bytes",
+                    "100",
+                    "--max-tokens",
+                    "30",
+                    "--fast-engine",
+                    "rust",
+                ],
+            ),
+            patch("simplicio_fast.cli.select_engine", return_value=selection),
+            patch("simplicio_fast.cli.subprocess.run", return_value=completed) as run,
+            contextlib.redirect_stdout(output),
+        ):
             main()
         payload = json.loads(output.getvalue())
         self.assertEqual("simplicio.fast.context/v1", payload["schema"])
@@ -186,9 +239,10 @@ class EngineSelectionTest(unittest.TestCase):
             "capabilities": ["query", "context"],
             "conformance": {"passed": True, "digest": "sha256:test"},
         }
-        with patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"), patch(
-            "simplicio_fast.engine.subprocess.run"
-        ) as run:
+        with (
+            patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"),
+            patch("simplicio_fast.engine.subprocess.run") as run,
+        ):
             run.return_value.returncode = 0
             run.return_value.stdout = json.dumps(manifest)
             run.return_value.stderr = ""
@@ -209,9 +263,10 @@ class EngineSelectionTest(unittest.TestCase):
             "status": "available",
             "conformance": {"passed": False},
         }
-        with patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"), patch(
-            "simplicio_fast.engine.subprocess.run"
-        ) as run:
+        with (
+            patch("simplicio_fast.engine._rust_executable", return_value="rust.exe"),
+            patch("simplicio_fast.engine.subprocess.run") as run,
+        ):
             run.return_value.returncode = 0
             run.return_value.stdout = json.dumps(manifest)
             run.return_value.stderr = ""

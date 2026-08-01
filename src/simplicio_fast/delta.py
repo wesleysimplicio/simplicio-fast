@@ -26,6 +26,7 @@ from .workspace import (
 
 DELTA_SCHEMA = "simplicio.fast.delta/v1"
 HANDOFF_SCHEMA = "simplicio.fast.handoff/v1"
+SOURCE_SUFFIXES = {".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".rs", ".cs"}
 
 
 class DeltaError(ValueError):
@@ -76,9 +77,15 @@ class Delta:
         if value.get("schema") != DELTA_SCHEMA:
             raise DeltaError("delta_schema_mismatch")
         required = (
-            "delta_generation", "base_generation", "base_commit",
-            "base_config_fingerprint", "base_schema", "base_snapshot_sha256",
-            "worktree_id", "created_at", "delta_sha256",
+            "delta_generation",
+            "base_generation",
+            "base_commit",
+            "base_config_fingerprint",
+            "base_schema",
+            "base_snapshot_sha256",
+            "worktree_id",
+            "created_at",
+            "delta_sha256",
         )
         missing = [key for key in required if key not in value]
         if missing:
@@ -117,8 +124,10 @@ def _digest(value: object) -> str:
 
 
 def _is_digest(value: object) -> bool:
-    return isinstance(value, str) and len(value) == 64 and all(
-        character in "0123456789abcdef" for character in value
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
     )
 
 
@@ -147,10 +156,17 @@ def _normal_path(value: str) -> str:
     if candidate.startswith("/") or (len(candidate) > 1 and candidate[1] == ":"):
         raise DeltaError("delta_path_invalid", f"invalid changed path: {value}")
     candidate = candidate.strip("/")
-    if not candidate or candidate in {".", ".."} or candidate.startswith("../") or "/../" in candidate:
+    if (
+        not candidate
+        or candidate in {".", ".."}
+        or candidate.startswith("../")
+        or "/../" in candidate
+    ):
         raise DeltaError("delta_path_invalid", f"invalid changed path: {value}")
     if candidate.startswith(".simplicio/") or candidate == ".simplicio":
-        raise DeltaError("delta_path_derived", f"derived path is not a source delta: {value}")
+        raise DeltaError(
+            "delta_path_derived", f"derived path is not a source delta: {value}"
+        )
     return candidate
 
 
@@ -204,10 +220,16 @@ def _git_commit(root: Path) -> str:
                         break
     except OSError:
         return "unknown"
-    return head if len(head) == 40 and all(c in "0123456789abcdef" for c in head) else "unknown"
+    return (
+        head
+        if len(head) == 40 and all(c in "0123456789abcdef" for c in head)
+        else "unknown"
+    )
 
 
-def _base_snapshot(store: WorkspaceStore, base_generation: str) -> tuple[object, Path, str]:
+def _base_snapshot(
+    store: WorkspaceStore, base_generation: str
+) -> tuple[object, Path, str]:
     base = store.manifest(base_generation)
     if base.schema != MANIFEST_SCHEMA:
         raise DeltaError("base_schema_mismatch")
@@ -215,14 +237,18 @@ def _base_snapshot(store: WorkspaceStore, base_generation: str) -> tuple[object,
     if base_root != store.root:
         base_common_dir = _git_common_dir(base_root) if base_root is not None else None
         store_common_dir = _git_common_dir(store.root)
-        canonical_commit = _git_commit(base_root) if base_root is not None else "unknown"
+        canonical_commit = (
+            _git_commit(base_root) if base_root is not None else "unknown"
+        )
         expected_commit = base.commit if base.commit != "unknown" else canonical_commit
         same_commit = (
             expected_commit != "unknown"
             and canonical_commit == expected_commit
             and _git_commit(store.root) == expected_commit
         )
-        same_repository = base_common_dir is not None and base_common_dir == store_common_dir
+        same_repository = (
+            base_common_dir is not None and base_common_dir == store_common_dir
+        )
         if not same_commit or not same_repository:
             raise DeltaError("base_root_mismatch")
     if not _is_digest(base.snapshot_sha256) or not _is_digest(base.source_tree_sha256):
@@ -275,15 +301,38 @@ def create_delta(
     base, _, snapshot_sha256 = _base_snapshot(store, base_generation)
     if config_fingerprint is not None and config_fingerprint != base.config_fingerprint:
         raise DeltaError("config_fingerprint_mismatch")
-    current_paths = {
-        path.relative_to(store.root).as_posix(): path for path in source_files(store.root)
-    }
-    requested = None if changed_paths is None else sorted({_normal_path(path) for path in changed_paths})
+    requested = (
+        None
+        if changed_paths is None
+        else sorted({_normal_path(path) for path in changed_paths})
+    )
+    if requested is None:
+        current_paths = {
+            path.relative_to(store.root).as_posix(): path
+            for path in source_files(store.root)
+        }
+    else:
+        current_paths = {}
+        root = store.root.resolve()
+        for relative in requested:
+            path = (root / relative).resolve()
+            if not path.is_relative_to(root):
+                raise DeltaError("delta_path_invalid", relative)
+            if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
+                current_paths[relative] = path
     if requested is not None:
-        missing = [path for path in requested if path not in current_paths and path not in base.source_hashes]
+        missing = [
+            path
+            for path in requested
+            if path not in current_paths and path not in base.source_hashes
+        ]
         if missing:
             raise DeltaError("delta_path_missing", missing[0])
-    candidates = sorted(set(current_paths) | set(base.source_hashes) if requested is None else set(requested))
+    candidates = sorted(
+        set(current_paths) | set(base.source_hashes)
+        if requested is None
+        else set(requested)
+    )
     changed: dict[str, dict[str, object]] = {}
     for relative in candidates:
         path = current_paths.get(relative)
@@ -311,9 +360,17 @@ def create_delta(
     }
     generation = _digest(identity)
     delta = Delta(
-        DELTA_SCHEMA, generation, base_generation, base.commit, base.config_fingerprint,
-        base.schema, snapshot_sha256, worktree_id, changed,
-        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), generation,
+        DELTA_SCHEMA,
+        generation,
+        base_generation,
+        base.commit,
+        base.config_fingerprint,
+        base.schema,
+        snapshot_sha256,
+        worktree_id,
+        changed,
+        time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        generation,
     )
     path = store.delta_dir / worktree_id / f"{generation}.json"
     if path.is_file():
@@ -322,10 +379,15 @@ def create_delta(
         except DeltaError:
             pass
     _atomic_json(path, delta.to_dict())
-    store._receipt("delta", {
-        "base_generation": base_generation, "delta_generation": generation,
-        "worktree_id": worktree_id, "changed_files": sorted(changed),
-    })
+    store._receipt(
+        "delta",
+        {
+            "base_generation": base_generation,
+            "delta_generation": generation,
+            "worktree_id": worktree_id,
+            "changed_files": sorted(changed),
+        },
+    )
     return delta
 
 
@@ -362,10 +424,14 @@ def compose_delta(
         raise DeltaError("config_fingerprint_mismatch")
     if config_fingerprint is not None and config_fingerprint != base.config_fingerprint:
         raise DeltaError("config_fingerprint_mismatch")
-    if delta.base_schema != base.schema or delta.base_snapshot_sha256 != snapshot_sha256:
+    if (
+        delta.base_schema != base.schema
+        or delta.base_snapshot_sha256 != snapshot_sha256
+    ):
         raise DeltaError("base_artifact_digest_mismatch")
     current_hashes = {
-        path.relative_to(store.root).as_posix(): _hash_source(path) for path in source_files(store.root)
+        path.relative_to(store.root).as_posix(): _hash_source(path)
+        for path in source_files(store.root)
     }
     expected_hashes = _composed_source_hashes(store, base, delta)
     for relative in sorted(set(current_hashes) | set(expected_hashes)):
@@ -375,13 +441,19 @@ def compose_delta(
             raise DeltaError("delta_source_unlisted", relative)
         raise DeltaError("delta_source_stale", relative)
     overlay = Overlay(
-        OVERLAY_SCHEMA, delta.delta_generation, base_generation, worktree_id,
-        delta.changed, delta.created_at,
+        OVERLAY_SCHEMA,
+        delta.delta_generation,
+        base_generation,
+        worktree_id,
+        delta.changed,
+        delta.created_at,
     )
     return EffectiveSnapshot(store.root, snapshot_path, base, overlay)
 
 
-def _composed_source_hashes(store: WorkspaceStore, base, delta: Delta) -> dict[str, str]:
+def _composed_source_hashes(
+    store: WorkspaceStore, base, delta: Delta
+) -> dict[str, str]:
     hashes = dict(base.source_hashes)
     for relative, record in delta.changed.items():
         if bool(record.get("tombstone")):
@@ -408,17 +480,32 @@ def handoff(
         canonical_files = canonical.files()
     cold_ms = (perf_counter() - cold_start) * 1000
     incremental_start = perf_counter()
-    delta = load_delta(store, worktree_id, delta_generation) if delta_generation else create_delta(
-        store, base_generation, worktree_id, changed_paths, config_fingerprint=config_fingerprint,
+    delta = (
+        load_delta(store, worktree_id, delta_generation)
+        if delta_generation
+        else create_delta(
+            store,
+            base_generation,
+            worktree_id,
+            changed_paths,
+            config_fingerprint=config_fingerprint,
+        )
     )
     incremental_ms = (perf_counter() - incremental_start) * 1000
     warm_start = perf_counter()
-    with compose_delta(store, base_generation, worktree_id, delta.delta_generation, config_fingerprint=config_fingerprint) as composed:
+    with compose_delta(
+        store,
+        base_generation,
+        worktree_id,
+        delta.delta_generation,
+        config_fingerprint=config_fingerprint,
+    ) as composed:
         composed_symbols = len(composed.symbols())
     warm_ms = (perf_counter() - warm_start) * 1000
     merged = _composed_source_hashes(store, base, delta)
     current = {
-        path.relative_to(store.root).as_posix(): _hash_source(path) for path in source_files(store.root)
+        path.relative_to(store.root).as_posix(): _hash_source(path)
+        for path in source_files(store.root)
     }
     target = current
     parity_snapshot_hash = None
@@ -442,11 +529,19 @@ def handoff(
         "parity_snapshot_hash": parity_snapshot_hash,
         "parity": parity,
         "parity_result": {
-            "source_tree_sha256": _digest(merged), "target_tree_sha256": _digest(target),
-            "canonical_file_count": len(canonical_files), "composed_symbol_count": composed_symbols,
+            "source_tree_sha256": _digest(merged),
+            "target_tree_sha256": _digest(target),
+            "canonical_file_count": len(canonical_files),
+            "composed_symbol_count": composed_symbols,
         },
         "changed_paths": sorted(delta.changed),
-        "files_parsed": sum(1 for record in delta.changed.values() if not bool(record.get("tombstone"))),
+        "files_parsed": sum(
+            1 for record in delta.changed.values() if not bool(record.get("tombstone"))
+        ),
         "cache_reuse": len(set(base.source_hashes) - set(delta.changed)),
-        "timings_ms": {"cold_ms": round(cold_ms, 3), "warm_ms": round(warm_ms, 3), "incremental_ms": round(incremental_ms, 3)},
+        "timings_ms": {
+            "cold_ms": round(cold_ms, 3),
+            "warm_ms": round(warm_ms, 3),
+            "incremental_ms": round(incremental_ms, 3),
+        },
     }

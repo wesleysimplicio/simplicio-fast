@@ -61,12 +61,30 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             self.assertEqual(64, len(base.source_tree_sha256))
             delta = store.create_delta(base.generation_id, "issue-230", ["one.py"])
             self.assertEqual({}, delta.changed)
-            report = store.handoff(base.generation_id, "issue-230", delta_generation=delta.delta_generation)
+            report = store.handoff(
+                base.generation_id, "issue-230", delta_generation=delta.delta_generation
+            )
             self.assertTrue(report["parity"])
-            self.assertEqual(["cold_ms", "incremental_ms", "warm_ms"], sorted(report["timings_ms"]))
+            self.assertEqual(
+                ["cold_ms", "incremental_ms", "warm_ms"], sorted(report["timings_ms"])
+            )
             self.assertEqual(2, report["cache_reuse"])
             self.assertGreater(report["mapped_bytes"], 0)
             self.assertGreaterEqual(report["cpu_ms"], 0)
+
+    def test_explicit_changed_paths_do_not_scan_the_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            (root / "one.py").write_text(
+                "def one():\n    return 10\n", encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.delta.source_files",
+                side_effect=AssertionError("explicit delta scanned the repository"),
+            ):
+                delta = store.create_delta(base.generation_id, "scoped", ["one.py"])
+            self.assertEqual(["one.py"], sorted(delta.changed))
 
     def test_repeated_identical_delta_is_content_addressed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -90,7 +108,9 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             full = root / "full.sfast"
             build_snapshot(root, full)
             delta = store.create_delta(base.generation_id, "issue-230", ["one.py"])
-            with store.compose_delta(base.generation_id, "issue-230", delta.delta_generation) as view:
+            with store.compose_delta(
+                base.generation_id, "issue-230", delta.delta_generation
+            ) as view:
                 self.assertEqual(1, len(view.find("added")))
                 self.assertEqual(1, len(view.find("two")))
             report = store.handoff(
@@ -115,7 +135,9 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             build_snapshot(root, full)
             delta = store.create_delta(base.generation_id, "delete", ["two.py"])
             self.assertTrue(delta.changed["two.py"]["tombstone"])
-            with store.compose_delta(base.generation_id, "delete", delta.delta_generation) as view:
+            with store.compose_delta(
+                base.generation_id, "delete", delta.delta_generation
+            ) as view:
                 self.assertEqual([], view.find("two"))
             report = store.handoff(
                 base.generation_id,
@@ -149,19 +171,28 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root, store = self._store(directory)
             base = store.build_base()
-            (root / "one.py").write_text("def one_a():\n    return 10\n", encoding="utf-8")
+            (root / "one.py").write_text(
+                "def one_a():\n    return 10\n", encoding="utf-8"
+            )
             delta_a = store.create_delta(base.generation_id, "slot-a", ["one.py"])
-            with store.compose_delta(base.generation_id, "slot-a", delta_a.delta_generation) as view:
+            with store.compose_delta(
+                base.generation_id, "slot-a", delta_a.delta_generation
+            ) as view:
                 self.assertEqual(1, len(view.find("one_a")))
             (root / "one.py").write_text("def one():\n    return 1\n", encoding="utf-8")
-            (root / "two.py").write_text("def two_b():\n    return 20\n", encoding="utf-8")
+            (root / "two.py").write_text(
+                "def two_b():\n    return 20\n", encoding="utf-8"
+            )
             delta_b = store.create_delta(base.generation_id, "slot-b", ["two.py"])
             self.assertEqual(["one.py"], sorted(delta_a.changed))
             self.assertEqual(["two.py"], sorted(delta_b.changed))
             self.assertNotEqual(delta_a.delta_generation, delta_b.delta_generation)
             self.assertTrue((store.delta_dir / "slot-a").is_dir())
             self.assertTrue((store.delta_dir / "slot-b").is_dir())
-            self.assertEqual(["one.py"], sorted(store.delta("slot-a", delta_a.delta_generation).changed))
+            self.assertEqual(
+                ["one.py"],
+                sorted(store.delta("slot-a", delta_a.delta_generation).changed),
+            )
 
     def test_active_lease_protects_generation_from_gc(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -185,23 +216,35 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             root, store = self._store(directory)
             base = store.build_base()
             with self.assertRaises(DeltaError) as config_error:
-                store.create_delta(base.generation_id, "issue-230", config_fingerprint="0" * 64)
-            self.assertEqual("config_fingerprint_mismatch", config_error.exception.reason_code)
+                store.create_delta(
+                    base.generation_id, "issue-230", config_fingerprint="0" * 64
+                )
+            self.assertEqual(
+                "config_fingerprint_mismatch", config_error.exception.reason_code
+            )
             snapshot = store.base_dir / base.generation_id / base.snapshot
             snapshot.write_bytes(snapshot.read_bytes() + b"tamper")
             with self.assertRaises(DeltaError) as digest_error:
                 store.create_delta(base.generation_id, "issue-230")
-            self.assertEqual("base_artifact_digest_mismatch", digest_error.exception.reason_code)
+            self.assertEqual(
+                "base_artifact_digest_mismatch", digest_error.exception.reason_code
+            )
 
     def test_rejects_stale_source_and_tampered_delta(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, store = self._store(directory)
             base = store.build_base()
-            (root / "one.py").write_text("def one():\n    return 10\n", encoding="utf-8")
+            (root / "one.py").write_text(
+                "def one():\n    return 10\n", encoding="utf-8"
+            )
             delta = store.create_delta(base.generation_id, "issue-230", ["one.py"])
-            (root / "one.py").write_text("def one():\n    return 11\n", encoding="utf-8")
+            (root / "one.py").write_text(
+                "def one():\n    return 11\n", encoding="utf-8"
+            )
             with self.assertRaises(DeltaError) as stale_error:
-                store.compose_delta(base.generation_id, "issue-230", delta.delta_generation)
+                store.compose_delta(
+                    base.generation_id, "issue-230", delta.delta_generation
+                )
             self.assertEqual("delta_source_stale", stale_error.exception.reason_code)
             path = store.delta_dir / "issue-230" / f"{delta.delta_generation}.json"
             value = json.loads(path.read_text(encoding="utf-8"))
@@ -209,7 +252,9 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             path.write_text(json.dumps(value), encoding="utf-8")
             with self.assertRaises(DeltaError) as digest_error:
                 store.delta("issue-230", delta.delta_generation)
-            self.assertEqual("delta_digest_mismatch", digest_error.exception.reason_code)
+            self.assertEqual(
+                "delta_digest_mismatch", digest_error.exception.reason_code
+            )
 
     def test_rejects_truncated_delta(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -232,7 +277,9 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             manifest_path.write_text(json.dumps(value), encoding="utf-8")
             with self.assertRaises(DeltaError) as missing:
                 store.create_delta(base.generation_id, "issue-230")
-            self.assertEqual("base_artifact_digest_missing", missing.exception.reason_code)
+            self.assertEqual(
+                "base_artifact_digest_missing", missing.exception.reason_code
+            )
 
         with tempfile.TemporaryDirectory() as directory:
             root, store = self._store(directory)
@@ -254,22 +301,29 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             manifest_path.write_text(json.dumps(value), encoding="utf-8")
             with self.assertRaises(DeltaError) as path_error:
                 store.create_delta(base.generation_id, "issue-230")
-            self.assertEqual("base_snapshot_path_invalid", path_error.exception.reason_code)
+            self.assertEqual(
+                "base_snapshot_path_invalid", path_error.exception.reason_code
+            )
 
     def test_cli_delta_and_handoff_are_real_system_path(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, store = self._store(directory)
             base = store.build_base()
-            (root / "one.py").write_text("def one_cli():\n    return 30\n", encoding="utf-8")
+            (root / "one.py").write_text(
+                "def one_cli():\n    return 30\n", encoding="utf-8"
+            )
             parity = root / "cli-parity.sfast"
             build_snapshot(root, parity)
             environment = os.environ.copy()
             environment["PYTHONPATH"] = str(Path(__file__).parents[1] / "src")
+
             def run_cli(command: list[str]) -> dict[str, object]:
                 with tempfile.TemporaryDirectory(prefix="simplicio-fast-cli-") as logs:
                     stdout_path = Path(logs) / "stdout.json"
                     stderr_path = Path(logs) / "stderr.txt"
-                    result = _run_external(command, stdout_path, stderr_path, environment)
+                    result = _run_external(
+                        command, stdout_path, stderr_path, environment
+                    )
                     self.assertEqual(0, result, stderr_path.read_text(encoding="utf-8"))
                     return json.loads(stdout_path.read_text(encoding="utf-8"))
 
@@ -316,7 +370,9 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
         receipt = run_delta_benchmark(files=4, repetitions=10)
         self.assertEqual("pass", receipt["status"])
         self.assertEqual(10, receipt["workload"]["repetitions"])
-        self.assertEqual(["cold", "warm", "unchanged", "one_file"], receipt["workload"]["categories"])
+        self.assertEqual(
+            ["cold", "warm", "unchanged", "one_file"], receipt["workload"]["categories"]
+        )
         for category in receipt["workload"]["categories"]:
             summary = receipt["categories"][category]["summary"]
             self.assertEqual(10, summary["repetitions"])
@@ -342,26 +398,37 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
     def test_rejects_dirty_git_canonical_base(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, store = self._store(directory)
-            with patch(
-                "simplicio_fast.workspace._commit",
-                return_value="a" * 40,
-            ), patch(
-                "simplicio_fast.workspace._git_status",
-                return_value=" M one.py",
+            with (
+                patch(
+                    "simplicio_fast.workspace._commit",
+                    return_value="a" * 40,
+                ),
+                patch(
+                    "simplicio_fast.workspace._git_status",
+                    return_value=" M one.py",
+                ),
             ):
                 with self.assertRaisesRegex(ValueError, "canonical_base_dirty"):
                     store.build_base()
 
-    def test_physical_git_worktrees_share_immutable_base_without_cross_contamination(self) -> None:
-        with tempfile.TemporaryDirectory(prefix="simplicio-fast-worktrees-") as directory:
+    def test_physical_git_worktrees_share_immutable_base_without_cross_contamination(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="simplicio-fast-worktrees-"
+        ) as directory:
             root = Path(directory)
             canonical = root / "canonical"
             worktree_a = root / "worktree-a"
             worktree_b = root / "worktree-b"
             storage = root / "shared-fast"
             canonical.mkdir()
-            (canonical / "one.py").write_text("def one_base():\n    return 1\n", encoding="utf-8")
-            (canonical / "two.py").write_text("def two_base():\n    return 2\n", encoding="utf-8")
+            (canonical / "one.py").write_text(
+                "def one_base():\n    return 1\n", encoding="utf-8"
+            )
+            (canonical / "two.py").write_text(
+                "def two_base():\n    return 2\n", encoding="utf-8"
+            )
 
             def run_git(*arguments: str, cwd: Path = canonical) -> None:
                 result = _run_external(
@@ -370,7 +437,9 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                     Path(os.devnull),
                 )
                 if result != 0:
-                    raise AssertionError(f"git command failed with status {result}: {arguments}")
+                    raise AssertionError(
+                        f"git command failed with status {result}: {arguments}"
+                    )
 
             run_git("init")
             run_git("config", "user.name", "simplicio-fast-test")
@@ -388,7 +457,9 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                     "def two_slot_b():\n    return 20\n", encoding="utf-8"
                 )
                 canonical_store = WorkspaceStore(canonical, storage=storage)
-                base = canonical_store.build_base(config={"profile": "physical-worktrees"})
+                base = canonical_store.build_base(
+                    config={"profile": "physical-worktrees"}
+                )
                 base_path = storage / "base" / base.generation_id / base.snapshot
                 base_bytes = base_path.read_bytes()
                 base_digest = hashlib.sha256(base_bytes).hexdigest()
@@ -406,37 +477,74 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=20) as pool:
                     reader_results = list(pool.map(read_base, reader_stores))
-                expected_reader = (base.generation_id, base.snapshot_sha256, ["one_base", "two_base"])
+                expected_reader = (
+                    base.generation_id,
+                    base.snapshot_sha256,
+                    ["one_base", "two_base"],
+                )
                 self.assertEqual([expected_reader] * 20, reader_results)
 
                 with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-                    future_a = pool.submit(store_a.create_delta, base.generation_id, "slot-a", ["one.py"])
-                    future_b = pool.submit(store_b.create_delta, base.generation_id, "slot-b", ["two.py"])
+                    future_a = pool.submit(
+                        store_a.create_delta, base.generation_id, "slot-a", ["one.py"]
+                    )
+                    future_b = pool.submit(
+                        store_b.create_delta, base.generation_id, "slot-b", ["two.py"]
+                    )
                     delta_a = future_a.result(timeout=30)
                     delta_b = future_b.result(timeout=30)
 
                 self.assertEqual(["one.py"], sorted(delta_a.changed))
                 self.assertEqual(["two.py"], sorted(delta_b.changed))
-                with store_a.compose_delta(base.generation_id, "slot-a", delta_a.delta_generation) as view_a:
-                    self.assertEqual(["one_slot_a"], [symbol.name for symbol in view_a.find("one_slot")])
+                with store_a.compose_delta(
+                    base.generation_id, "slot-a", delta_a.delta_generation
+                ) as view_a:
+                    self.assertEqual(
+                        ["one_slot_a"],
+                        [symbol.name for symbol in view_a.find("one_slot")],
+                    )
                     self.assertEqual([], view_a.find("two_slot"))
-                    self.assertEqual(["two_base"], [symbol.name for symbol in view_a.find("two")])
-                with store_b.compose_delta(base.generation_id, "slot-b", delta_b.delta_generation) as view_b:
-                    self.assertEqual(["two_slot_b"], [symbol.name for symbol in view_b.find("two_slot")])
+                    self.assertEqual(
+                        ["two_base"], [symbol.name for symbol in view_a.find("two")]
+                    )
+                with store_b.compose_delta(
+                    base.generation_id, "slot-b", delta_b.delta_generation
+                ) as view_b:
+                    self.assertEqual(
+                        ["two_slot_b"],
+                        [symbol.name for symbol in view_b.find("two_slot")],
+                    )
                     self.assertEqual([], view_b.find("one_slot"))
-                    self.assertEqual(["one_base"], [symbol.name for symbol in view_b.find("one")])
+                    self.assertEqual(
+                        ["one_base"], [symbol.name for symbol in view_b.find("one")]
+                    )
 
                 with self.assertRaises(DeltaError) as crossed:
-                    store_a.compose_delta(base.generation_id, "slot-b", delta_b.delta_generation)
+                    store_a.compose_delta(
+                        base.generation_id, "slot-b", delta_b.delta_generation
+                    )
                 self.assertEqual("delta_source_unlisted", crossed.exception.reason_code)
-                self.assertEqual(base.generation_id, canonical_store.manifest(base.generation_id).generation_id)
+                self.assertEqual(
+                    base.generation_id,
+                    canonical_store.manifest(base.generation_id).generation_id,
+                )
                 self.assertEqual(base_bytes, base_path.read_bytes())
-                self.assertEqual(base_digest, hashlib.sha256(base_path.read_bytes()).hexdigest())
+                self.assertEqual(
+                    base_digest, hashlib.sha256(base_path.read_bytes()).hexdigest()
+                )
             finally:
                 for worktree in (worktree_a, worktree_b):
                     if worktree.exists():
                         _run_external(
-                            ["git", "-C", str(canonical), "worktree", "remove", "--force", str(worktree)],
+                            [
+                                "git",
+                                "-C",
+                                str(canonical),
+                                "worktree",
+                                "remove",
+                                "--force",
+                                str(worktree),
+                            ],
                             Path(os.devnull),
                             Path(os.devnull),
                         )
@@ -445,6 +553,7 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                     Path(os.devnull),
                     Path(os.devnull),
                 )
+
 
 if __name__ == "__main__":
     unittest.main()

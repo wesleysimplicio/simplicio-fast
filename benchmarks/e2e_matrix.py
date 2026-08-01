@@ -16,7 +16,17 @@ except ModuleNotFoundError:
 
 SCHEMA = "simplicio.fast.s0-s3-benchmark/v1"
 SCENARIOS = ("S0_BASELINE", "S1_RUNTIME", "S2_RUNTIME_LOOP", "S3_FULL_STACK")
-_NULL_METRICS = ("wall_ms", "cpu_ms", "peak_rss_kib", "page_faults", "input_tokens", "output_tokens", "cache_tokens", "tool_tokens", "cost")
+_NULL_METRICS = (
+    "wall_ms",
+    "cpu_ms",
+    "peak_rss_kib",
+    "page_faults",
+    "input_tokens",
+    "output_tokens",
+    "cache_tokens",
+    "tool_tokens",
+    "cost",
+)
 
 
 def _positive(value: int, name: str) -> None:
@@ -104,36 +114,84 @@ def run_matrix(
         "valid_repetitions": repetitions,
         "operation": "local_ast_reparse_without_fast",
         "metrics": s0_metrics,
-        "metric_reason_codes": {"cpu_ms": "counter_not_collected", "peak_rss_kib": "counter_not_collected", "page_faults": "counter_not_collected", "output_tokens": "provider_not_present", "cache_tokens": "provider_not_present", "tool_tokens": "provider_not_present", "cost": "provider_not_present"},
+        "metric_reason_codes": {
+            "cpu_ms": "counter_not_collected",
+            "peak_rss_kib": "counter_not_collected",
+            "page_faults": "counter_not_collected",
+            "output_tokens": "provider_not_present",
+            "cache_tokens": "provider_not_present",
+            "tool_tokens": "provider_not_present",
+            "cost": "provider_not_present",
+        },
         "token_measurement": "whitespace-v1-estimate",
         "tokens_observed": False,
         "raw": {"wall_ms": baseline["wall_ms"], "source_schema": local["schema"]},
     }
     scenarios = {
         "S0_BASELINE": s0,
-        "S1_RUNTIME": _blocked("runtime_capability_unavailable", "simplicio-runtime capability handshake was not provided to this local run"),
-        "S2_RUNTIME_LOOP": _blocked("runtime_loop_integration_unavailable", "Runtime + Loop delivery integration was not provided to this local run"),
-        "S3_FULL_STACK": _blocked("full_stack_integration_unavailable", "Runtime + Loop + Mapper + Dev CLI integration was not provided to this local run"),
+        "S1_RUNTIME": _blocked(
+            "runtime_capability_unavailable",
+            "simplicio-runtime capability handshake was not provided to this local run",
+        ),
+        "S2_RUNTIME_LOOP": _blocked(
+            "runtime_loop_integration_unavailable",
+            "Runtime + Loop delivery integration was not provided to this local run",
+        ),
+        "S3_FULL_STACK": _blocked(
+            "full_stack_integration_unavailable",
+            "Runtime + Loop + Mapper + Dev CLI integration was not provided to this local run",
+        ),
     }
     return {
         "schema": SCHEMA,
         "status": "partial",
-        "protocol": {"version": "python-s0-s3-v1", "warmup_repetitions": 0, "order": [*SCENARIOS]},
+        "protocol": {
+            "version": "python-s0-s3-v1",
+            "warmup_repetitions": 0,
+            "order": [*SCENARIOS],
+        },
         "source_commit": commit,
         "source_commit_reason": commit_reason,
-        "corpus": {"files": files, "functions_per_file": functions, "term": term, "sha256": _corpus_digest(files, functions)},
+        "corpus": {
+            "files": files,
+            "functions_per_file": functions,
+            "term": term,
+            "sha256": _corpus_digest(files, functions),
+        },
         "environment": local["environment"],
         "scenarios": scenarios,
-        "limitations": ["S0 is a deterministic local Python fixture, not an LLM/provider delivery run.", "Unavailable metrics are null with reason codes.", "S1-S3 remain blocked until their cross-repository capability handshakes are supplied.", "Token values are whitespace-v1 estimates, not provider billing telemetry."],
+        "limitations": [
+            "S0 is a deterministic local Python fixture, not an LLM/provider delivery run.",
+            "Unavailable metrics are null with reason codes.",
+            "S1-S3 remain blocked until their cross-repository capability handshakes are supplied.",
+            "Token values are whitespace-v1 estimates, not provider billing telemetry.",
+        ],
     }
 
 
 def markdown_report(result: dict[str, Any]) -> str:
-    lines = ["# Python S0-S3 benchmark", "", f"- Status: {result['status']}", f"- Source commit: {result['source_commit'] or 'unavailable'}", f"- Corpus SHA-256: {result['corpus']['sha256']}", "", "| Scenario | Status | Valid repetitions | Reason |", "|---|---:|---:|---|"]
+    lines = [
+        "# Python S0-S3 benchmark",
+        "",
+        f"- Status: {result['status']}",
+        f"- Source commit: {result['source_commit'] or 'unavailable'}",
+        f"- Corpus SHA-256: {result['corpus']['sha256']}",
+        "",
+        "| Scenario | Status | Valid repetitions | Reason |",
+        "|---|---:|---:|---|",
+    ]
     for name in SCENARIOS:
         scenario = result["scenarios"][name]
-        lines.append(f"| {name} | {scenario['status']} | {scenario['valid_repetitions']} | {scenario.get('reason_code', 'observed')} |")
-    lines.extend(["", "Unavailable metrics are null with explicit reason codes. S0 token values use whitespace-v1 estimates; they are not provider billing telemetry.", ""])
+        lines.append(
+            f"| {name} | {scenario['status']} | {scenario['valid_repetitions']} | {scenario.get('reason_code', 'observed')} |"
+        )
+    lines.extend(
+        [
+            "",
+            "Unavailable metrics are null with explicit reason codes. S0 token values use whitespace-v1 estimates; they are not provider billing telemetry.",
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -146,7 +204,12 @@ def main() -> int:
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--markdown-out", type=Path)
     args = parser.parse_args()
-    result = run_matrix(files=args.files, functions=args.functions, repetitions=args.repetitions, repo_root=args.repo_root)
+    result = run_matrix(
+        files=args.files,
+        functions=args.functions,
+        repetitions=args.repetitions,
+        repo_root=args.repo_root,
+    )
     payload = json.dumps(result, indent=2, sort_keys=True) + "\n"
     if args.json_out:
         args.json_out.write_text(payload, encoding="utf-8")

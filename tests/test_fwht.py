@@ -6,7 +6,9 @@ from simplicio_fast.fwht import fwht
 
 class FwhtReferenceTest(unittest.TestCase):
     def test_unscaled_golden_vector_uses_addition_subtraction_butterfly(self) -> None:
-        self.assertEqual((10.0, -2.0, -4.0, 0.0), fwht((1, 2, 3, 4), normalization="none"))
+        self.assertEqual(
+            (10.0, -2.0, -4.0, 0.0), fwht((1, 2, 3, 4), normalization="none")
+        )
 
     def test_orthonormal_golden_vector_has_unitary_scale(self) -> None:
         result = fwht((1, 2, 3, 4))

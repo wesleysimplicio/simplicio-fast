@@ -20,7 +20,6 @@ class IncrementalRefreshBenchmarkTest(unittest.TestCase):
         self.assertEqual(2, len(receipt["raw"]["metadata_phase_timings_ms"]))
         self.assertGreater(receipt["totals"]["speedup"], 0)
 
-
     def test_validation_and_cli_json_output(self) -> None:
         with self.assertRaisesRegex(ValueError, "repetitions"):
             run(files=1, repetitions=1)

@@ -29,13 +29,17 @@ def skill(name: str, content: str, *, scope: str = "repo-a") -> AuthorizedSkill:
 class KnowledgeFacadeTest(unittest.TestCase):
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
-        catalog = SkillCatalog(Path(self.directory.name), "generation-1", scope="repo-a")
+        catalog = SkillCatalog(
+            Path(self.directory.name), "generation-1", scope="repo-a"
+        )
         self.knowledge = KnowledgeFacade(catalog)
 
     def tearDown(self) -> None:
         self.directory.cleanup()
 
-    def test_resolve_returns_bounded_skill_t0_and_explicit_unavailable_sources(self) -> None:
+    def test_resolve_returns_bounded_skill_t0_and_explicit_unavailable_sources(
+        self,
+    ) -> None:
         handle = self.knowledge.register(skill("pytest", "SECRET BODY"))
 
         result = self.knowledge.resolve("run pytest")
@@ -61,12 +65,17 @@ class KnowledgeFacadeTest(unittest.TestCase):
         first = self.knowledge.register(skill("first", "one two"))
         second = self.knowledge.register(skill("second", "three four"))
 
-        result = self.knowledge.expand_handles((first, second), max_entries=2, max_bytes=100, max_tokens=2)
+        result = self.knowledge.expand_handles(
+            (first, second), max_entries=2, max_bytes=100, max_tokens=2
+        )
 
         self.assertEqual(KNOWLEDGE_MATERIALIZATION_SCHEMA, result["schema"])
         self.assertEqual([first], result["references"])
         self.assertEqual(2, result["estimated_tokens"])
-        self.assertEqual(hashlib.sha256(b"one two").hexdigest(), result["materialized"][0]["content_sha256"])
+        self.assertEqual(
+            hashlib.sha256(b"one two").hexdigest(),
+            result["materialized"][0]["content_sha256"],
+        )
         self.assertTrue(result["truncated"])
         self.assertEqual("token_budget_exceeded", result["reason_code"])
         self.assertEqual("repo-a", result["provenance"]["scope"])

@@ -59,13 +59,17 @@ def _canonical_id(skill: AuthorizedSkill, content_sha256: str) -> str:
         "triggers": sorted(skill.triggers),
         "version": skill.version,
     }
-    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return hashlib.sha256(
+        json.dumps(identity, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
 
 
 class SkillCatalog:
     """Bounded catalog for one repository, generation and authorization scope."""
 
-    def __init__(self, repository: str, generation: str, *, scope: str = "default") -> None:
+    def __init__(
+        self, repository: str, generation: str, *, scope: str = "default"
+    ) -> None:
         if not scope:
             raise ValueError("scope must not be empty")
         self.repository = repository
@@ -91,7 +95,9 @@ class SkillCatalog:
             source_sha256=content_sha256,
             segment_id=skill.origin,
         )
-        self._skills[entry.handle] = _RegisteredSkill(skill, entry.handle, content_sha256)
+        self._skills[entry.handle] = _RegisteredSkill(
+            skill, entry.handle, content_sha256
+        )
         return entry.handle
 
     def register_many(self, skills: Iterable[AuthorizedSkill]) -> list[str]:
@@ -107,14 +113,22 @@ class SkillCatalog:
             definition = skill.definition
             trigger_terms = _tokens(" ".join(definition.triggers))
             metadata_terms = _tokens(
-                " ".join((definition.name, definition.description, *definition.capabilities))
+                " ".join(
+                    (definition.name, definition.description, *definition.capabilities)
+                )
             )
             matched_triggers = sorted(task_terms & trigger_terms)
             matched_metadata = sorted(task_terms & metadata_terms)
             score = len(matched_triggers) * 4 + len(matched_metadata)
             if score:
                 candidates.append((score, skill, matched_triggers, matched_metadata))
-        candidates.sort(key=lambda item: (-item[0], item[1].definition.name, item[1].definition.version))
+        candidates.sort(
+            key=lambda item: (
+                -item[0],
+                item[1].definition.name,
+                item[1].definition.version,
+            )
+        )
         selected = candidates[:max_results]
         skills = [
             {
@@ -136,14 +150,20 @@ class SkillCatalog:
         truncated = len(selected) < len(candidates)
         return {
             "schema": SKILL_CATALOG_SCHEMA,
-            "source": {"kind": SKILL_NAMESPACE, "status": "available", "runtime_required": False},
+            "source": {
+                "kind": SKILL_NAMESPACE,
+                "status": "available",
+                "runtime_required": False,
+            },
             "repository": self.repository,
             "generation": self.generation,
             "scope": self.scope,
             "skills": skills,
             "handles": [item["handle"] for item in skills],
             "truncated": truncated,
-            "reason_code": "skill_catalog_bounded" if truncated else "skill_catalog_complete",
+            "reason_code": "skill_catalog_bounded"
+            if truncated
+            else "skill_catalog_complete",
         }
 
     def materialize(
@@ -164,7 +184,9 @@ class SkillCatalog:
             namespace=SKILL_NAMESPACE,
         )
         materialized = []
-        for reference, item in zip(resolved["references"], resolved["materialized"], strict=True):
+        for reference, item in zip(
+            resolved["references"], resolved["materialized"], strict=True
+        ):
             registered = self._skills[reference["handle"]]
             materialized.append(
                 {
@@ -179,7 +201,11 @@ class SkillCatalog:
             )
         return {
             "schema": SKILL_MATERIALIZATION_SCHEMA,
-            "source": {"kind": SKILL_NAMESPACE, "status": "available", "runtime_required": False},
+            "source": {
+                "kind": SKILL_NAMESPACE,
+                "status": "available",
+                "runtime_required": False,
+            },
             "repository": self.repository,
             "generation": self.generation,
             "scope": self.scope,

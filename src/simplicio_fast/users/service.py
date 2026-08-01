@@ -57,7 +57,9 @@ class UserService:
             active=current.active if active is None else active,
             updated_at=datetime.now(UTC).isoformat(),
         )
-        self.repository.save_all([updated if user.id == user_id else user for user in users])
+        self.repository.save_all(
+            [updated if user.id == user_id else user for user in users]
+        )
         return updated
 
     def delete(self, user_id: str) -> None:

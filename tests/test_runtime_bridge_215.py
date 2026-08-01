@@ -102,18 +102,14 @@ def test_discovery_without_manifest_never_spawns_echo(monkeypatch):
         raise AssertionError("unmanifested executable was spawned")
 
     monkeypatch.setattr("simplicio_fast.runtime_backend.subprocess.Popen", forbidden)
-    result = discover_native_binary(
-        environment={"SIMPLICIO_RUNTIME_BIN": "/bin/echo"}
-    )
+    result = discover_native_binary(environment={"SIMPLICIO_RUNTIME_BIN": "/bin/echo"})
     assert result["cargo_used"] is False
     assert result["status"] == "rejected"
     assert result["reason_code"] == "RUNTIME_MISSING"
     assert spawned is False
 
 
-def test_manifest_without_explicit_abi_is_rejected_before_spawn(
-    tmp_path, monkeypatch
-):
+def test_manifest_without_explicit_abi_is_rejected_before_spawn(tmp_path, monkeypatch):
     spawned = False
 
     def forbidden(*args, **kwargs):
