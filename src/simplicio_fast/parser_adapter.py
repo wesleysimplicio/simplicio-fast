@@ -18,6 +18,12 @@ from .snapshot import _parse_file, stable_id
 
 SCHEMA = "simplicio.fast.parser-adapter/v1"
 SUPPORTED_MODES = {"bootstrap", "integrated"}
+DEFAULT_LIMITS = {
+    "max_files": 10_000,
+    "max_symbols": 1_000_000,
+    "max_relations": 2_000_000,
+    "max_payload_bytes": 64 * 1024 * 1024,
+}
 
 
 class ParserAdapterError(ValueError):
@@ -41,6 +47,18 @@ def _safe_relative(path: str) -> str:
     if candidate.is_absolute() or ".." in candidate.parts or not path:
         raise ParserAdapterError("path_escape", path)
     return candidate.as_posix()
+
+
+def _adapter_limits(limits: Mapping[str, int] | None) -> dict[str, int]:
+    selected = dict(DEFAULT_LIMITS)
+    if limits is not None:
+        for name, value in limits.items():
+            if name not in selected or isinstance(value, bool) or not isinstance(value, int):
+                raise ParserAdapterError("limit_invalid", name)
+            if value < 1:
+                raise ParserAdapterError("limit_invalid", name)
+            selected[name] = value
+    return selected
 
 
 def _source_files(root: Path, changed_paths: Iterable[str] | None) -> list[Path]:
@@ -81,6 +99,7 @@ def build_payload(
     config_fingerprint: str | None = None,
     changed_paths: Iterable[str] | None = None,
     mode: str = "bootstrap",
+    limits: Mapping[str, int] | None = None,
 ) -> dict[str, Any]:
     """Build a deterministic, bounded contract payload from existing adapters."""
 
@@ -94,12 +113,15 @@ def build_payload(
         or len(commit) != 40
     ):
         raise ParserAdapterError("mapper_required")
+    selected_limits = _adapter_limits(limits)
     files: list[dict[str, Any]] = []
     symbols: list[dict[str, Any]] = []
     relations: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     diagnostics: list[dict[str, Any]] = []
     for path in _source_files(root, changed_paths):
+        if len(files) >= selected_limits["max_files"]:
+            raise ParserAdapterError("file_limit_exceeded")
         relative = path.relative_to(root).as_posix()
         raw = path.read_bytes()
         try:
@@ -134,6 +156,8 @@ def build_payload(
             )
             continue
         for item in parsed:
+            if len(symbols) >= selected_limits["max_symbols"]:
+                raise ParserAdapterError("symbol_limit_exceeded")
             signature = item.signature or item.kind
             symbol_id = stable_id(
                 str(root), relative, language, item.qualified_name, signature
@@ -158,6 +182,8 @@ def build_payload(
             item.qualified_name: item.symbol_id for item in parsed if item.symbol_id
         }
         for relation in parsed_relations:
+            if len(relations) >= selected_limits["max_relations"]:
+                raise ParserAdapterError("relation_limit_exceeded")
             destination = relation.destination
             destination_id = relation.destination_id or symbol_ids.get(destination, "")
             relations.append(
@@ -189,6 +215,8 @@ def build_payload(
         "completeness": "complete" if not diagnostics else "partial",
     }
     payload["payload_sha256"] = _digest(payload)
+    if len(_canonical(payload)) > selected_limits["max_payload_bytes"]:
+        raise ParserAdapterError("payload_limit_exceeded")
     return payload
 
 
@@ -210,6 +238,13 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
         or not isinstance(relations, list)
     ):
         raise ParserAdapterError("payload_shape_invalid")
+    limits = _adapter_limits(None)
+    if len(files) > limits["max_files"]:
+        raise ParserAdapterError("file_limit_exceeded")
+    if len(symbols) > limits["max_symbols"]:
+        raise ParserAdapterError("symbol_limit_exceeded")
+    if len(relations) > limits["max_relations"]:
+        raise ParserAdapterError("relation_limit_exceeded")
     file_paths = set()
     for item in files:
         if not isinstance(item, Mapping):
@@ -242,6 +277,8 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
     unsigned.pop("payload_sha256", None)
     if not isinstance(supplied, str) or supplied != _digest(unsigned):
         raise ParserAdapterError("payload_digest_mismatch")
+    if len(_canonical(value)) > limits["max_payload_bytes"]:
+        raise ParserAdapterError("payload_limit_exceeded")
     return {
         "schema": SCHEMA,
         "status": "valid",
@@ -252,4 +289,10 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-__all__ = ["SCHEMA", "ParserAdapterError", "build_payload", "validate_payload"]
+__all__ = [
+    "DEFAULT_LIMITS",
+    "SCHEMA",
+    "ParserAdapterError",
+    "build_payload",
+    "validate_payload",
+]
