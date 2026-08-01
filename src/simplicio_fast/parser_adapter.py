@@ -14,7 +14,14 @@ from pathlib import Path
 import re
 from typing import Any, Iterable, Mapping
 
-from .adapters import SUPPORTED_EXTENSIONS, language_for_path, parse_path
+from .adapters import (
+    SUPPORTED_EXTENSIONS,
+    csharp_workspace_fingerprint,
+    language_for_path,
+    parse_path,
+    rust_workspace_fingerprint,
+    typescript_workspace_fingerprint,
+)
 from .snapshot import _parse_file, stable_id
 
 SCHEMA = "simplicio.fast.parser-adapter/v1"
@@ -301,6 +308,7 @@ def build_payload(
             )
     payload: dict[str, Any] = {
         "schema": SCHEMA,
+        "adapter_version": "1",
         "mode": mode,
         "producer": "simplicio-fast-python-adapter",
         "repository": str(root),
@@ -315,6 +323,16 @@ def build_payload(
         "relations": relations,
         "diagnostics": diagnostics,
         "completeness": "complete" if not diagnostics else "partial",
+    }
+    languages = {item["language"] for item in files}
+    payload["workspace_fingerprints"] = {
+        language: fingerprint
+        for language, fingerprint in (
+            ("csharp", csharp_workspace_fingerprint(root)),
+            ("rust", rust_workspace_fingerprint(root)),
+            ("typescript", typescript_workspace_fingerprint(root)),
+        )
+        if language in languages
     }
     payload["payload_sha256"] = _digest(payload)
     if len(_canonical(payload)) > selected_limits["max_payload_bytes"]:
@@ -331,6 +349,8 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ParserAdapterError("mode_invalid")
     if value.get("producer") != "simplicio-fast-python-adapter":
         raise ParserAdapterError("producer_invalid")
+    if value.get("adapter_version") != "1":
+        raise ParserAdapterError("adapter_version_unsupported")
     mode = value.get("mode")
     commit = value.get("commit")
     mapper_generation = value.get("mapper_generation")
@@ -362,6 +382,17 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
     diagnostics = value.get("diagnostics")
     if not isinstance(diagnostics, list):
         raise ParserAdapterError("diagnostics_invalid")
+    workspace_fingerprints = value.get("workspace_fingerprints")
+    if not isinstance(workspace_fingerprints, Mapping):
+        raise ParserAdapterError("workspace_fingerprints_invalid")
+    for language, fingerprint in workspace_fingerprints.items():
+        if (
+            language not in {"csharp", "rust", "typescript"}
+            or not isinstance(fingerprint, str)
+            or len(fingerprint) != 64
+            or any(character not in "0123456789abcdef" for character in fingerprint)
+        ):
+            raise ParserAdapterError("workspace_fingerprint_invalid")
     files = value.get("files")
     symbols = value.get("symbols")
     relations = value.get("relations")

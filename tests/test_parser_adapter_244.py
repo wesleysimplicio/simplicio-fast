@@ -56,6 +56,8 @@ class ParserAdapter244Test(unittest.TestCase):
             self.assertEqual(2, receipt["symbols"])
             self.assertGreaterEqual(receipt["relations"], 2)
             self.assertIn("definition", {item["kind"] for item in first["relations"]})
+            self.assertEqual("1", first["adapter_version"])
+            self.assertEqual({}, first["workspace_fingerprints"])
 
     def test_python_relations_preserve_calls_and_tests(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -90,6 +92,10 @@ class ParserAdapter244Test(unittest.TestCase):
             self.assertIn("import", by_language["typescript"])
             self.assertIn("definition", by_language["rust"])
             self.assertIn("import", by_language["csharp"])
+            self.assertEqual(
+                {"csharp", "rust", "typescript"},
+                set(payload["workspace_fingerprints"]),
+            )
 
     def test_changed_paths_are_scoped_and_invalid_payloads_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
