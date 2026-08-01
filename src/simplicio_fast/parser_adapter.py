@@ -166,11 +166,11 @@ def build_payload_from_mapper(
         if not isinstance(item, dict):
             raise ParserAdapterError("mapper_symbols_invalid")
         qualified = item.get("qualified_name")
-        relative = item.get("defined_in")
+        relative_value = item.get("defined_in")
         line = item.get("line")
         if (
             not isinstance(qualified, str)
-            or not isinstance(relative, str)
+            or not isinstance(relative_value, str)
             or not isinstance(line, int)
             or isinstance(line, bool)
             or relative not in file_languages
@@ -179,6 +179,7 @@ def build_payload_from_mapper(
             or item.get("language", file_languages[relative]) not in set(SUPPORTED_EXTENSIONS.values())
         ):
             raise ParserAdapterError("mapper_symbols_invalid")
+        relative = relative_value
         symbol_id = f"symbol:{qualified}"
         node = mapper_nodes.get(symbol_id)
         source = node.get("source") if isinstance(node, dict) else None
@@ -240,9 +241,11 @@ def build_payload_from_mapper(
             {
                 "origin": origin,
                 "destination": destination,
-                "kind": {"calls": "call", "defined_in": "definition", "member_of": "reference"}.get(
-                    edge.get("type"), "reference"
-                ),
+                "kind": {
+                    "calls": "call",
+                    "defined_in": "definition",
+                    "member_of": "reference",
+                }.get(str(edge.get("type")), "reference"),
                 "confidence": confidence,
                 "origin_id": origin_id,
                 "destination_id": destination_id,
@@ -569,15 +572,15 @@ def build_payload(
             str(item["path"]): item for item in previous["files"]
         }
         current_paths = {str(item["path"]) for item in files}
-        for path, item in previous_files.items():
-            if path in changed_set:
-                if not (root / path).is_file():
-                    deleted_paths.add(path)
+        for path_name, item in previous_files.items():
+            if path_name in changed_set:
+                if not (root / path_name).is_file():
+                    deleted_paths.add(path_name)
                 continue
-            if path in current_paths:
+            if path_name in current_paths:
                 continue
             files.append(dict(item))
-            reused_paths.add(path)
+            reused_paths.add(path_name)
         for item in previous["symbols"]:
             if item.get("file") in reused_paths:
                 symbols.append(dict(item))
@@ -762,6 +765,8 @@ def validate_payload(
                 raise ParserAdapterError("source_digest_mismatch", normalized_path)
     ids: set[str] = set()
     for item in symbols:
+        line_value = item.get("line") if isinstance(item, Mapping) else None
+        end_line_value = item.get("end_line") if isinstance(item, Mapping) else None
         if (
             not isinstance(item, Mapping)
             or not isinstance(item.get("id"), str)
@@ -769,12 +774,12 @@ def validate_payload(
             or not isinstance(item.get("qualified_name"), str)
             or not isinstance(item.get("kind"), str)
             or not isinstance(item.get("language"), str)
-            or not isinstance(item.get("line"), int)
-            or isinstance(item.get("line"), bool)
-            or not isinstance(item.get("end_line"), int)
-            or isinstance(item.get("end_line"), bool)
-            or item.get("line") < 1
-            or item.get("end_line") < item.get("line")
+            or not isinstance(line_value, int)
+            or isinstance(line_value, bool)
+            or not isinstance(end_line_value, int)
+            or isinstance(end_line_value, bool)
+            or line_value < 1
+            or end_line_value < line_value
         ):
             raise ParserAdapterError("symbol_invalid")
         if item["id"] in ids:
@@ -785,6 +790,7 @@ def validate_payload(
         ):
             raise ParserAdapterError("symbol_file_missing")
     for item in relations:
+        confidence_value = item.get("confidence") if isinstance(item, Mapping) else None
         if (
             not isinstance(item, Mapping)
             or item.get("file") not in file_paths
@@ -792,9 +798,9 @@ def validate_payload(
             or not isinstance(item.get("destination"), str)
             or not isinstance(item.get("origin_id"), str)
             or not isinstance(item.get("destination_id"), str)
-            or not isinstance(item.get("confidence"), (int, float))
-            or isinstance(item.get("confidence"), bool)
-            or not 0 <= item.get("confidence") <= 1
+            or not isinstance(confidence_value, (int, float))
+            or isinstance(confidence_value, bool)
+            or not 0 <= confidence_value <= 1
         ):
             raise ParserAdapterError("relation_file_missing")
         if item.get("kind") not in {
