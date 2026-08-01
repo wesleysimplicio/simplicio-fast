@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping
 
 from .adapters import SUPPORTED_EXTENSIONS, language_for_path, parse_path
-from .snapshot import stable_id
+from .snapshot import _parse_file, stable_id
 
 SCHEMA = "simplicio.fast.parser-adapter/v1"
 SUPPORTED_MODES = {"bootstrap", "integrated"}
@@ -96,6 +96,7 @@ def build_payload(
         raise ParserAdapterError("mapper_required")
     files: list[dict[str, Any]] = []
     symbols: list[dict[str, Any]] = []
+    relations: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
     diagnostics: list[dict[str, Any]] = []
     for path in _source_files(root, changed_paths):
@@ -118,7 +119,11 @@ def build_payload(
             }
         )
         try:
-            parsed = parse_path(path, relative)
+            if language == "python":
+                parsed, parsed_relations = _parse_file(path, relative, str(root))
+            else:
+                parsed = parse_path(path, relative)
+                parsed_relations = []
         except (OSError, SyntaxError, UnicodeDecodeError) as error:
             diagnostics.append(
                 {
@@ -149,6 +154,23 @@ def build_payload(
                     "signature": item.signature,
                 }
             )
+        symbol_ids = {
+            item.qualified_name: item.symbol_id for item in parsed if item.symbol_id
+        }
+        for relation in parsed_relations:
+            destination = relation.destination
+            destination_id = relation.destination_id or symbol_ids.get(destination, "")
+            relations.append(
+                {
+                    "origin": relation.origin,
+                    "destination": destination,
+                    "kind": relation.kind,
+                    "confidence": relation.confidence,
+                    "origin_id": relation.origin_id,
+                    "destination_id": destination_id,
+                    "file": relative,
+                }
+            )
     payload: dict[str, Any] = {
         "schema": SCHEMA,
         "mode": mode,
@@ -162,7 +184,7 @@ def build_payload(
         ),
         "files": files,
         "symbols": symbols,
-        "relations": [],
+        "relations": relations,
         "diagnostics": diagnostics,
         "completeness": "complete" if not diagnostics else "partial",
     }
@@ -181,7 +203,12 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ParserAdapterError("producer_invalid")
     files = value.get("files")
     symbols = value.get("symbols")
-    if not isinstance(files, list) or not isinstance(symbols, list):
+    relations = value.get("relations")
+    if (
+        not isinstance(files, list)
+        or not isinstance(symbols, list)
+        or not isinstance(relations, list)
+    ):
         raise ParserAdapterError("payload_shape_invalid")
     file_paths = set()
     for item in files:
@@ -199,6 +226,17 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
         ids.add(item["id"])
         if item.get("file") not in file_paths:
             raise ParserAdapterError("symbol_file_missing")
+    for item in relations:
+        if not isinstance(item, Mapping) or item.get("file") not in file_paths:
+            raise ParserAdapterError("relation_file_missing")
+        if item.get("kind") not in {
+            "import",
+            "reference",
+            "call",
+            "definition",
+            "test",
+        }:
+            raise ParserAdapterError("relation_kind_invalid")
     supplied = value.get("payload_sha256")
     unsigned = dict(value)
     unsigned.pop("payload_sha256", None)
@@ -209,6 +247,7 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
         "status": "valid",
         "files": len(files),
         "symbols": len(symbols),
+        "relations": len(relations),
         "completeness": value.get("completeness"),
     }
 
