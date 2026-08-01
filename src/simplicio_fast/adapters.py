@@ -113,6 +113,24 @@ def rust_workspace_fingerprint(root: Path) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def discover_csharp_projects(root: Path) -> list[Path]:
+    """Return deterministic .NET solution/project/config inputs."""
+    names = {
+        "Directory.Build.props",
+        "Directory.Build.targets",
+        "Directory.Packages.props",
+    }
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and (
+            path.suffix.casefold() in {".sln", ".slnx", ".csproj"} or path.name in names
+        )
+        and not any(part in {".git", ".simplicio", "bin", "obj"} for part in path.parts)
+    )
+
+
 def parse_path(path: Path, relative_path: str | None = None) -> list[Symbol]:
     relative = relative_path or path.as_posix()
     language = language_for_path(path)
@@ -241,26 +259,90 @@ def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
         ]
     else:
         patterns = [
-            ("using", "import", re.compile(r"^\s*using\s+(?:static\s+)?([^;=]+)")),
-            ("namespace", "namespace", re.compile(r"^\s*namespace\s+([\w.]+)")),
+            ("attribute", "attribute", re.compile(r"^\s*\[\s*([\w.]+)")),
             (
-                "interface",
-                "interface",
-                re.compile(r"^\s*(?:public\s+)?interface\s+(\w+)"),
+                "using",
+                "import",
+                re.compile(r"^\s*(?:global\s+)?using\s+(?:static\s+)?([^;=]+)"),
             ),
             (
-                "class",
-                "class",
+                "namespace",
+                "namespace",
+                re.compile(r"^\s*(?:file\s+)?namespace\s+([\w.]+)"),
+            ),
+            (
+                "delegate",
+                "delegate",
                 re.compile(
-                    r"^\s*(?:public\s+|internal\s+|private\s+)?(?:abstract\s+)?class\s+(\w+)"
+                    r"^\s*(?:public\s+|internal\s+|private\s+)?delegate\s+[^\s]+\s+(\w+)"
                 ),
             ),
-            ("struct", "struct", re.compile(r"^\s*(?:public\s+)?struct\s+(\w+)")),
             (
-                "function",
+                "interface",
+                "interface",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*interface\s+(\w+)"
+                ),
+            ),
+            (
+                "record",
+                "record",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*(?:record\s+(?:class\s+|struct\s+)?)(\w+)"
+                ),
+            ),
+            (
+                "class",
+                "class",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*(?:abstract\s+)?class\s+(\w+)"
+                ),
+            ),
+            (
+                "struct",
+                "struct",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*struct\s+(\w+)"
+                ),
+            ),
+            (
+                "enum",
+                "enum",
+                re.compile(r"^\s*(?:public\s+|internal\s+|private\s+)*enum\s+(\w+)"),
+            ),
+            (
+                "event",
+                "event",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+)*event\s+[^\s]+\s+(\w+)"
+                ),
+            ),
+            (
+                "property",
+                "property",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+|virtual\s+|override\s+|required\s+)*[\w<>?,.\[\]]+\s+(\w+)\s*\{\s*(?:get|set|init)"
+                ),
+            ),
+            (
+                "constructor",
+                "constructor",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+|static\s+|async\s+)*([A-Z]\w*)\s*\([^;]*\)"
+                ),
+            ),
+            (
+                "method",
                 "function",
                 re.compile(
-                    r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+)?(?:static\s+)?[\w<>?\[\]]+\s+(\w+)\s*\([^;]*\)"
+                    r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+|static\s+|async\s+|virtual\s+|override\s+|partial\s+)*[\w<>?,.\[\]]+\s+(\w+)\s*\([^;]*\)"
+                ),
+            ),
+            (
+                "field",
+                "field",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+|readonly\s+|const\s+)+[\w<>?,.\[\]]+\s+(\w+)\s*(?:=|;)"
                 ),
             ),
         ]
