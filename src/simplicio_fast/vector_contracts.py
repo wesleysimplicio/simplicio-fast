@@ -1,4 +1,5 @@
 """Versioned contracts for the bounded TurboQuant vector-index slice."""
+
 from __future__ import annotations
 
 import math
@@ -43,19 +44,30 @@ def _text(value: Any, name: str) -> str:
 
 def _integer(value: Any, name: str, *, minimum: int = 0) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
-        raise VectorContractError("field_invalid", f"{name} must be an integer >= {minimum}")
+        raise VectorContractError(
+            "field_invalid", f"{name} must be an integer >= {minimum}"
+        )
     return value
 
 
 def _number(value: Any, name: str, *, minimum: float = 0.0) -> float:
-    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < minimum:
-        raise VectorContractError("field_invalid", f"{name} must be a finite number >= {minimum}")
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or not math.isfinite(value)
+        or value < minimum
+    ):
+        raise VectorContractError(
+            "field_invalid", f"{name} must be a finite number >= {minimum}"
+        )
     return float(value)
 
 
 def _digest(value: Any, name: str) -> str:
     if not isinstance(value, str) or not _SHA256.fullmatch(value):
-        raise VectorContractError("digest_invalid", f"{name} must be a lowercase SHA-256 digest")
+        raise VectorContractError(
+            "digest_invalid", f"{name} must be a lowercase SHA-256 digest"
+        )
     return value
 
 
@@ -65,26 +77,40 @@ def _schema(payload: Mapping[str, Any], expected: str) -> None:
         return
     prefix = expected.rsplit("/", 1)[0] + "/v"
     if isinstance(actual, str) and actual.startswith(prefix):
-        raise VectorContractError("unsupported_schema", f"unsupported schema version: {actual}")
+        raise VectorContractError(
+            "unsupported_schema", f"unsupported schema version: {actual}"
+        )
     raise VectorContractError("schema_mismatch", f"expected {expected}")
 
 
 def _validate_segment_list(value: Any) -> None:
     if not isinstance(value, list) or not value:
-        raise VectorContractError("segments_invalid", "segments must be a non-empty list")
+        raise VectorContractError(
+            "segments_invalid", "segments must be a non-empty list"
+        )
     ranges: list[tuple[int, int]] = []
     for index, raw in enumerate(value):
         segment = _mapping(raw, "segment_invalid")
         name = _text(_required(segment, "name"), f"segments[{index}].name")
         if not _SEGMENT_NAME.fullmatch(name):
-            raise VectorContractError("segment_name_invalid", f"invalid segment name: {name}")
+            raise VectorContractError(
+                "segment_name_invalid", f"invalid segment name: {name}"
+            )
         offset = _integer(_required(segment, "offset"), f"segments[{index}].offset")
-        size = _integer(_required(segment, "bytes"), f"segments[{index}].bytes", minimum=1)
-        alignment = _integer(_required(segment, "alignment"), f"segments[{index}].alignment", minimum=1)
+        size = _integer(
+            _required(segment, "bytes"), f"segments[{index}].bytes", minimum=1
+        )
+        alignment = _integer(
+            _required(segment, "alignment"), f"segments[{index}].alignment", minimum=1
+        )
         if alignment & (alignment - 1) or offset % alignment:
-            raise VectorContractError("segment_alignment_invalid", f"segments[{index}] is not aligned")
+            raise VectorContractError(
+                "segment_alignment_invalid", f"segments[{index}] is not aligned"
+            )
         if _required(segment, "endianness") != "little":
-            raise VectorContractError("endianness_unsupported", f"segments[{index}] must be little-endian")
+            raise VectorContractError(
+                "endianness_unsupported", f"segments[{index}] must be little-endian"
+            )
         _digest(_required(segment, "sha256"), f"segments[{index}].sha256")
         ranges.append((offset, offset + size))
     ranges.sort()
@@ -105,33 +131,51 @@ def validate_vector_index_manifest(payload: Mapping[str, Any]) -> Mapping[str, A
     if _required(payload, "metric") not in SUPPORTED_METRICS:
         raise VectorContractError("metric_unsupported", "unsupported distance metric")
     if _required(payload, "normalization") not in SUPPORTED_NORMALIZATIONS:
-        raise VectorContractError("normalization_unsupported", "unsupported normalization")
+        raise VectorContractError(
+            "normalization_unsupported", "unsupported normalization"
+        )
     quantizer = _mapping(_required(payload, "quantizer"), "quantizer_invalid")
     if _required(quantizer, "algorithm") != "turboquant-4bit":
-        raise VectorContractError("quantizer_unsupported", "manifest is not TurboQuant 4-bit")
+        raise VectorContractError(
+            "quantizer_unsupported", "manifest is not TurboQuant 4-bit"
+        )
     _text(_required(quantizer, "format_version"), "quantizer.format_version")
     _digest(_required(quantizer, "rotation_seed_hash"), "quantizer.rotation_seed_hash")
     _digest(_required(quantizer, "codebook_hash"), "quantizer.codebook_hash")
     _integer(_required(payload, "vector_count"), "vector_count")
-    mapping = _mapping(_required(payload, "canonical_id_mapping"), "canonical_id_mapping_invalid")
+    mapping = _mapping(
+        _required(payload, "canonical_id_mapping"), "canonical_id_mapping_invalid"
+    )
     if _required(mapping, "owner") != "mapper":
-        raise VectorContractError("canonical_id_owner_invalid", "Mapper must own canonical IDs")
+        raise VectorContractError(
+            "canonical_id_owner_invalid", "Mapper must own canonical IDs"
+        )
     _text(_required(mapping, "format"), "canonical_id_mapping.format")
     _validate_segment_list(_required(payload, "segments"))
     integral = _mapping(_required(payload, "integral_store"), "integral_store_invalid")
     if _required(integral, "format") not in SUPPORTED_INTEGRAL_FORMATS:
-        raise VectorContractError("integral_format_unsupported", "integral store must be fp16 or fp32")
+        raise VectorContractError(
+            "integral_format_unsupported", "integral store must be fp16 or fp32"
+        )
     _text(_required(integral, "location"), "integral_store.location")
     _digest(_required(integral, "sha256"), "integral_store.sha256")
-    source_hashes = _mapping(_required(payload, "build_source_hashes"), "build_source_hashes_invalid")
+    source_hashes = _mapping(
+        _required(payload, "build_source_hashes"), "build_source_hashes_invalid"
+    )
     if not source_hashes:
-        raise VectorContractError("build_source_hashes_empty", "build source hashes are required")
+        raise VectorContractError(
+            "build_source_hashes_empty", "build source hashes are required"
+        )
     for name, digest in source_hashes.items():
         _text(name, "build_source_hashes key")
         _digest(digest, f"build_source_hashes.{name}")
     flags = _required(payload, "compatibility_flags")
-    if not isinstance(flags, list) or any(not isinstance(flag, str) or not flag for flag in flags):
-        raise VectorContractError("compatibility_flags_invalid", "compatibility_flags must be a string list")
+    if not isinstance(flags, list) or any(
+        not isinstance(flag, str) or not flag for flag in flags
+    ):
+        raise VectorContractError(
+            "compatibility_flags_invalid", "compatibility_flags must be a string list"
+        )
     return payload
 
 
@@ -152,7 +196,9 @@ def validate_vector_query_receipt(payload: Mapping[str, Any]) -> Mapping[str, An
     requested_k = _integer(_required(payload, "requested_k"), "requested_k", minimum=1)
     candidate_k = _integer(_required(payload, "candidate_k"), "candidate_k", minimum=1)
     if candidate_k < requested_k:
-        raise VectorContractError("candidate_k_invalid", "candidate_k must cover requested_k")
+        raise VectorContractError(
+            "candidate_k_invalid", "candidate_k must cover requested_k"
+        )
     _number(_required(payload, "oversampling"), "oversampling", minimum=1.0)
     engine = _mapping(_required(payload, "engine"), "engine_invalid")
     _text(_required(engine, "requested"), "engine.requested")
@@ -173,12 +219,22 @@ def validate_vector_query_receipt(payload: Mapping[str, Any]) -> Mapping[str, An
     _text(_required(fallback, "reason_code"), "fallback.reason_code")
     results = _required(payload, "results")
     if not isinstance(results, list) or len(results) > candidate_k:
-        raise VectorContractError("results_invalid", "results must contain at most candidate_k items")
+        raise VectorContractError(
+            "results_invalid", "results must contain at most candidate_k items"
+        )
     for index, raw in enumerate(results):
         result = _mapping(raw, "result_invalid")
         _text(_required(result, "canonical_id"), f"results[{index}].canonical_id")
-        _number(_required(result, "quantized_score"), f"results[{index}].quantized_score", minimum=-math.inf)
-        _number(_required(result, "integral_score"), f"results[{index}].integral_score", minimum=-math.inf)
+        _number(
+            _required(result, "quantized_score"),
+            f"results[{index}].quantized_score",
+            minimum=-math.inf,
+        )
+        _number(
+            _required(result, "integral_score"),
+            f"results[{index}].integral_score",
+            minimum=-math.inf,
+        )
     _validate_resources(_required(payload, "resources"))
     _text(_required(payload, "status"), "status")
     _text(_required(payload, "generation"), "generation")

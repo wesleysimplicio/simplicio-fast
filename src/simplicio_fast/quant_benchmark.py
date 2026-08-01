@@ -427,9 +427,7 @@ class QuantLaneIndex:
             raise AssertionError("mmap touch checksum invariant failed")
         return first_ms, warm_ms
 
-    def query(
-        self, query: Iterable[float]
-    ) -> tuple[tuple[str, ...], dict[str, float]]:
+    def query(self, query: Iterable[float]) -> tuple[tuple[str, ...], dict[str, float]]:
         vector = tuple(float(value) for value in query)
         if len(vector) != self.manifest.dimension:
             raise ValueError("query dimension mismatch")
@@ -456,9 +454,7 @@ class QuantLaneIndex:
                 score = dot / (query_norm * norm) if query_norm and norm else 0.0
                 scores.append((entry.canonical_id, score))
             scores.sort(key=lambda item: (-item[1], item[0]))
-            ranked_ids = tuple(
-                item[0] for item in scores[: self.manifest.result_k]
-            )
+            ranked_ids = tuple(item[0] for item in scores[: self.manifest.result_k])
             elapsed = (time.perf_counter() - started) * 1000
             return ranked_ids, {
                 "query_ms": elapsed,
@@ -513,9 +509,7 @@ class QuantLaneIndex:
         }
 
 
-def build_fixture(
-    size: int, *, dimension: int = 16, seed: int = 198
-) -> QuantDataset:
+def build_fixture(size: int, *, dimension: int = 16, seed: int = 198) -> QuantDataset:
     """Build a frozen relevance fixture with deterministic L2 embeddings."""
     if size < 1 or dimension < 2:
         raise ValueError("size must be positive and dimension >= 2")
@@ -563,9 +557,7 @@ def build_fixture(
     query_hash = digest(
         [{"query_id": item.query_id, "vector": item.vector} for item in queries]
     )
-    judgments_hash = digest(
-        {item.query_id: item.relevant_ids for item in queries}
-    )
+    judgments_hash = digest({item.query_id: item.relevant_ids for item in queries})
     embedding_hash = digest(
         {
             "model": "simplicio-deterministic-cluster-v1",
@@ -602,7 +594,9 @@ def repository_corpus_receipt(root: str | Path) -> dict[str, Any]:
     base = Path(root).resolve()
     suffixes = {".py", ".md", ".toml", ".json", ".yaml", ".yml"}
     try:
-        commit = _run_git(["rev-parse", "HEAD"], cwd=base, timeout=5, text=True).stdout.strip()
+        commit = _run_git(
+            ["rev-parse", "HEAD"], cwd=base, timeout=5, text=True
+        ).stdout.strip()
         tree = _run_git(
             ["rev-parse", "HEAD^{tree}"], cwd=base, timeout=5, text=True
         ).stdout.strip()
@@ -626,7 +620,9 @@ def repository_corpus_receipt(root: str | Path) -> dict[str, Any]:
         ):
             continue
         try:
-            payload = _run_git(["cat-file", "blob", object_id], cwd=base, timeout=10).stdout
+            payload = _run_git(
+                ["cat-file", "blob", object_id], cwd=base, timeout=10
+            ).stdout
         except (OSError, subprocess.SubprocessError) as error:
             raise QuantBenchmarkError(
                 "SOURCE_TREE_UNAVAILABLE",
@@ -664,10 +660,7 @@ def quality_metrics(
         (1.0 if item in relevant else 0.0) / math.log2(index + 2)
         for index, item in enumerate(top_ten)
     )
-    ideal = sum(
-        1.0 / math.log2(index + 2)
-        for index in range(min(10, len(relevant)))
-    )
+    ideal = sum(1.0 / math.log2(index + 2) for index in range(min(10, len(relevant))))
     output["ndcg_at_10"] = dcg / ideal if ideal else 1.0
     output["mrr"] = next(
         (
@@ -683,9 +676,7 @@ def quality_metrics(
 
 def _mean_metrics(samples: Sequence[Mapping[str, float]]) -> dict[str, float]:
     keys = tuple(samples[0])
-    return {
-        key: statistics.fmean(sample[key] for sample in samples) for key in keys
-    }
+    return {key: statistics.fmean(sample[key] for sample in samples) for key in keys}
 
 
 def _page_size() -> int:
@@ -726,7 +717,12 @@ def _usage() -> dict[str, int]:
 def _usage_delta(before: Mapping[str, int], after: Mapping[str, int]) -> dict[str, int]:
     return {
         key: after[key] - before[key]
-        for key in ("minor_page_faults", "major_page_faults", "input_blocks", "output_blocks")
+        for key in (
+            "minor_page_faults",
+            "major_page_faults",
+            "input_blocks",
+            "output_blocks",
+        )
     }
 
 
@@ -818,14 +814,10 @@ def _measure_lane(
             "rss_before_bytes": rss_before,
             "rss_after_bytes": rss_after,
             "resident_pages_before": (
-                rss_before // _page_size()
-                if rss_before is not None
-                else None
+                rss_before // _page_size() if rss_before is not None else None
             ),
             "resident_pages_after": (
-                rss_after // _page_size()
-                if rss_after is not None
-                else None
+                rss_after // _page_size() if rss_after is not None else None
             ),
             "rss_delta_bytes": (
                 max(0, rss_after - rss_before)
@@ -841,15 +833,11 @@ def _measure_lane(
         samples.append(sample)
         manifests.append(index.manifest.receipt())
     build_values = [sample["build_ms"] for sample in samples]
-    query_values = [
-        latency for sample in samples for latency in sample["query_ms"]
-    ]
+    query_values = [latency for sample in samples for latency in sample["query_ms"]]
     approximate_values = [
         latency for sample in samples for latency in sample["approximate_ms"]
     ]
-    rerank_values = [
-        latency for sample in samples for latency in sample["rerank_ms"]
-    ]
+    rerank_values = [latency for sample in samples for latency in sample["rerank_ms"]]
     first_touch_values = [sample["mmap_first_touch_ms"] for sample in samples]
     warm_values = [sample["mmap_warm_ms"] for sample in samples]
     rss_deltas = [
@@ -868,8 +856,7 @@ def _measure_lane(
         index_bytes if lane == "Q0" else index_bytes + integral_store_bytes
     )
     promotion_memory_bytes = (
-        index_bytes if lane == "Q0" or integral_store_shared
-        else total_storage_bytes
+        index_bytes if lane == "Q0" or integral_store_shared else total_storage_bytes
     )
     return {
         "classification": "MEASURED",
@@ -906,9 +893,7 @@ def _measure_lane(
             ],
         },
         "io_blocks": {
-            "input_raw": [
-                sample["usage_delta"]["input_blocks"] for sample in samples
-            ],
+            "input_raw": [sample["usage_delta"]["input_blocks"] for sample in samples],
             "output_raw": [
                 sample["usage_delta"]["output_blocks"] for sample in samples
             ],
@@ -919,12 +904,8 @@ def _measure_lane(
         "context_tokens_estimate": statistics.fmean(
             sample["context_tokens_estimate"] for sample in samples
         ),
-        "ac_pass_rate": statistics.fmean(
-            sample["ac_pass_rate"] for sample in samples
-        ),
-        "python_deterministic": len(
-            {sample["result_digest"] for sample in samples}
-        )
+        "ac_pass_rate": statistics.fmean(sample["ac_pass_rate"] for sample in samples),
+        "python_deterministic": len({sample["result_digest"] for sample in samples})
         == 1,
         "python_result_digest": samples[0]["result_digest"],
         "rust_parity": None,
@@ -944,12 +925,8 @@ def _promotion_gate(
     minimum_index_reduction: float,
     maximum_latency_ratio: float,
 ) -> dict[str, Any]:
-    recall_regression = (
-        q0["quality"]["recall_at_10"] - q2b["quality"]["recall_at_10"]
-    )
-    ndcg_regression = (
-        q0["quality"]["ndcg_at_10"] - q2b["quality"]["ndcg_at_10"]
-    )
+    recall_regression = q0["quality"]["recall_at_10"] - q2b["quality"]["recall_at_10"]
+    ndcg_regression = q0["quality"]["ndcg_at_10"] - q2b["quality"]["ndcg_at_10"]
     index_reduction = 1 - (q2b["index_bytes"] / q0["index_bytes"])
     total_storage_reduction = 1 - (
         q2b["total_storage_bytes"] / q0["total_storage_bytes"]
@@ -1050,9 +1027,7 @@ def run_quant_benchmark(
         tuple(float(value) for value in query) for query in queries
     )
     corpus_hash = digest(records)
-    embedding_hash = digest(
-        {"model": "compatibility-input/v1", "records": records}
-    )
+    embedding_hash = digest({"model": "compatibility-input/v1", "records": records})
     config_hash = digest(
         {"api": "run_quant_benchmark", "top_k": top_k, "metric": "cosine"}
     )
@@ -1162,9 +1137,7 @@ def run_benchmark(
         "result_k": result_k,
         "seed": seed,
         "storage_policy": (
-            "shared-integral-store"
-            if shared_integral_store
-            else "dedicated-end-to-end"
+            "shared-integral-store" if shared_integral_store else "dedicated-end-to-end"
         ),
         "metric": "cosine",
         "warmup": "one excluded build/query per lane",
@@ -1172,9 +1145,7 @@ def run_benchmark(
         "implementation_hashes": implementation_hashes,
     }
     config_hash = digest(configuration)
-    generation = digest(
-        {"config_hash": config_hash, "source": "issue-198"}
-    )
+    generation = digest({"config_hash": config_hash, "source": "issue-198"})
     measured: list[dict[str, Any]] = []
     unavailable: list[dict[str, Any]] = []
     with tempfile.TemporaryDirectory(prefix="simplicio-fast-quant-") as directory:
@@ -1209,8 +1180,8 @@ def run_benchmark(
             }
             q0 = lanes["Q0"]
             for lane in LANES:
-                lanes[lane]["index_reduction_vs_q0"] = (
-                    1 - (lanes[lane]["index_bytes"] / q0["index_bytes"])
+                lanes[lane]["index_reduction_vs_q0"] = 1 - (
+                    lanes[lane]["index_bytes"] / q0["index_bytes"]
                 )
             reference = QuantLaneIndex.build(
                 dataset.records,
@@ -1276,9 +1247,7 @@ def run_benchmark(
         },
         "corpora": {
             "real": repository_corpus_receipt(root),
-            "synthetic": [
-                case["dataset"] for case in measured
-            ],
+            "synthetic": [case["dataset"] for case in measured],
         },
         "measured": measured,
         "unavailable_sizes": unavailable,

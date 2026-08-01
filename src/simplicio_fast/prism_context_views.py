@@ -56,9 +56,7 @@ def _compatibility_span(item: Mapping[str, Any]) -> dict[str, Any]:
             try:
                 fields[key] = json.loads(encoded)
             except json.JSONDecodeError as error:
-                raise ContextViewError(
-                    "compatibility_binding_invalid", key
-                ) from error
+                raise ContextViewError("compatibility_binding_invalid", key) from error
     if set(fields) != {"start", "end"}:
         raise ContextViewError("compatibility_binding_invalid")
     return {
@@ -146,14 +144,17 @@ def build_context_view(
             or not hmac.compare_digest(expected, source_sha256)
         ):
             raise ContextViewError("item_tampered", path)
-        handle = "legacy-span-" + _digest(
-            {
-                "path": path,
-                "start": span.get("start"),
-                "end": span.get("end"),
-                "source_sha256": source_sha256,
-            }
-        )[:32]
+        handle = (
+            "legacy-span-"
+            + _digest(
+                {
+                    "path": path,
+                    "start": span.get("start"),
+                    "end": span.get("end"),
+                    "source_sha256": source_sha256,
+                }
+            )[:32]
+        )
         item = ContextItem.create(
             kind="span",
             handle=handle,
@@ -168,9 +169,7 @@ def build_context_view(
                     span.get("start"), separators=(",", ":"), ensure_ascii=True
                 ),
                 "compat:end:"
-                + json.dumps(
-                    span.get("end"), separators=(",", ":"), ensure_ascii=True
-                ),
+                + json.dumps(span.get("end"), separators=(",", ":"), ensure_ascii=True),
             ),
         )
         items.append(item)
@@ -263,30 +262,21 @@ def validate_context_view(
         "fence": deep["fence"],
     }
     if any(
-        value.get(field) != expected_value
-        for field, expected_value in expected.items()
+        value.get(field) != expected_value for field, expected_value in expected.items()
     ):
         raise ContextViewError("compatibility_binding_invalid")
-    selected_by_handle = {
-        item["handle"]: item for item in deep["selected"]
-    }
-    expected_spans = [
-        _compatibility_span(item) for item in selected_by_handle.values()
-    ]
+    selected_by_handle = {item["handle"]: item for item in deep["selected"]}
+    expected_spans = [_compatibility_span(item) for item in selected_by_handle.values()]
     if value.get("spans") != expected_spans:
         raise ContextViewError("compatibility_binding_invalid")
     expected_hashes = {
-        span["path"]: span["text_hash"]
-        for span in expected_spans
-        if span["path"]
+        span["path"]: span["text_hash"] for span in expected_spans if span["path"]
     }
     if value.get("source_hashes") != dict(sorted(expected_hashes.items())):
         raise ContextViewError("compatibility_binding_invalid")
     if value.get("budget_tokens") != request.budget.max_tokens:
         raise ContextViewError("compatibility_binding_invalid")
-    if value.get("truncated") is not (
-        deep["quality"]["budget_rejections"] > 0
-    ):
+    if value.get("truncated") is not (deep["quality"]["budget_rejections"] > 0):
         raise ContextViewError("compatibility_binding_invalid")
     return {**value, "view_hash": supplied_hash}
 

@@ -102,16 +102,22 @@ class DeliveryLedger:
     @staticmethod
     def _validate_hash(value: str, field: str) -> None:
         if _SHA256.fullmatch(value) is None:
-            raise LedgerError("invalid_digest", f"{field} must be a lowercase SHA-256 digest")
+            raise LedgerError(
+                "invalid_digest", f"{field} must be a lowercase SHA-256 digest"
+            )
 
     @staticmethod
     def _canonical(value: object) -> bytes:
-        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        return json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
 
     def _check_metadata(self, metadata: dict[str, Any]) -> None:
         def walk(value: Any, key: str = "") -> None:
             if _SECRET_KEY.search(key):
-                raise LedgerError("secret_redaction", "secret-like metadata keys are not allowed")
+                raise LedgerError(
+                    "secret_redaction", "secret-like metadata keys are not allowed"
+                )
             if isinstance(value, dict):
                 for child_key, child_value in value.items():
                     walk(child_value, str(child_key))
@@ -119,7 +125,9 @@ class DeliveryLedger:
                 for child_value in value:
                     walk(child_value, key)
             elif isinstance(value, str) and _SECRET_KEY.search(value):
-                raise LedgerError("secret_redaction", "secret-like metadata values are not allowed")
+                raise LedgerError(
+                    "secret_redaction", "secret-like metadata values are not allowed"
+                )
 
         walk(metadata)
 
@@ -132,18 +140,22 @@ class DeliveryLedger:
         metadata: dict[str, Any],
     ) -> str:
         return hashlib.sha256(
-            self._canonical({
-                "schema": SCHEMA,
-                "event_type": event_type,
-                "task_id": task_id,
-                "attempt_id": attempt_id,
-                "candidate_id": candidate_id,
-                "metadata": metadata,
-            })
+            self._canonical(
+                {
+                    "schema": SCHEMA,
+                    "event_type": event_type,
+                    "task_id": task_id,
+                    "attempt_id": attempt_id,
+                    "candidate_id": candidate_id,
+                    "metadata": metadata,
+                }
+            )
         ).hexdigest()
 
     def _event_hash(self, material: dict[str, Any]) -> str:
-        return hashlib.sha256(b"simplicio.fast.delivery-ledger:event:v1\0" + self._canonical(material)).hexdigest()
+        return hashlib.sha256(
+            b"simplicio.fast.delivery-ledger:event:v1\0" + self._canonical(material)
+        ).hexdigest()
 
     def append_event(
         self,
@@ -162,7 +174,9 @@ class DeliveryLedger:
         metadata: dict[str, Any] | None = None,
     ) -> LedgerEvent:
         if event_type not in EVENT_TYPES:
-            raise LedgerError("unknown_event_type", f"unsupported event type: {event_type}")
+            raise LedgerError(
+                "unknown_event_type", f"unsupported event type: {event_type}"
+            )
         if not task_id or not attempt_id or not producer:
             raise ValueError("task_id, attempt_id and producer are required")
         metadata = dict(metadata or {})
@@ -173,12 +187,20 @@ class DeliveryLedger:
             self._validate_hash(digest, "artifact_digest")
         if payload_digest is not None:
             self._validate_hash(payload_digest, "payload_digest")
-        event_id = self._event_id(event_type, task_id, attempt_id, candidate_id, metadata)
+        event_id = self._event_id(
+            event_type, task_id, attempt_id, candidate_id, metadata
+        )
         with self._lock:
             existing = self._by_id.get(event_id)
             if existing is not None:
-                if existing.material()["event_type"] != event_type or existing.metadata != metadata:
-                    raise LedgerError("idempotency_conflict", "event id was reused with different event data")
+                if (
+                    existing.material()["event_type"] != event_type
+                    or existing.metadata != metadata
+                ):
+                    raise LedgerError(
+                        "idempotency_conflict",
+                        "event id was reused with different event data",
+                    )
                 return existing
             previous = self._events[-1].event_hash if self._events else ZERO_HASH
             event = LedgerEvent(
@@ -205,12 +227,16 @@ class DeliveryLedger:
             self._by_id[event_id] = event
             return event
 
-    def promote_winner(self, task_id: str, attempt_id: str, candidate_id: str, *, producer: str) -> LedgerEvent:
+    def promote_winner(
+        self, task_id: str, attempt_id: str, candidate_id: str, *, producer: str
+    ) -> LedgerEvent:
         key = (task_id, attempt_id)
         with self._lock:
             winner = self._winner.get(key)
             if winner is not None and winner != candidate_id:
-                raise LedgerError("winner_fence", "a different candidate is already promoted")
+                raise LedgerError(
+                    "winner_fence", "a different candidate is already promoted"
+                )
             self._winner[key] = candidate_id
         return self.append_event(
             "WINNER_PROMOTED",
@@ -220,10 +246,14 @@ class DeliveryLedger:
             producer=producer,
         )
 
-    def seal_delivery(self, task_id: str, attempt_id: str, *, producer: str) -> LedgerEvent:
+    def seal_delivery(
+        self, task_id: str, attempt_id: str, *, producer: str
+    ) -> LedgerEvent:
         with self._lock:
             if (task_id, attempt_id) not in self._winner:
-                raise LedgerError("winner_required", "delivery requires a promoted winner")
+                raise LedgerError(
+                    "winner_required", "delivery requires a promoted winner"
+                )
         return self.append_event(
             "DELIVERY_SEALED",
             task_id=task_id,
@@ -237,24 +267,56 @@ class DeliveryLedger:
             target = event or (self._events[-1] if self._events else None)
             if target is None:
                 return {"schema": SCHEMA, "status": "valid", "events": 0, "checked": 0}
-            expected_previous = ZERO_HASH if target.sequence == 0 else self._events[target.sequence - 1].event_hash
-            valid = target.prev_event_hash == expected_previous and target.event_hash == self._event_hash(target.material())
-            return {"schema": SCHEMA, "status": "valid" if valid else "invalid", "events": len(self._events), "checked": target.sequence + 1, "event_hash": target.event_hash}
+            expected_previous = (
+                ZERO_HASH
+                if target.sequence == 0
+                else self._events[target.sequence - 1].event_hash
+            )
+            valid = (
+                target.prev_event_hash == expected_previous
+                and target.event_hash == self._event_hash(target.material())
+            )
+            return {
+                "schema": SCHEMA,
+                "status": "valid" if valid else "invalid",
+                "events": len(self._events),
+                "checked": target.sequence + 1,
+                "event_hash": target.event_hash,
+            }
 
     def verify_all(self) -> dict[str, Any]:
         with self._lock:
             invalid: list[int] = []
             previous = ZERO_HASH
             for sequence, event in enumerate(self._events):
-                if event.sequence != sequence or event.prev_event_hash != previous or event.event_hash != self._event_hash(event.material()):
+                if (
+                    event.sequence != sequence
+                    or event.prev_event_hash != previous
+                    or event.event_hash != self._event_hash(event.material())
+                ):
                     invalid.append(sequence)
                 previous = event.event_hash
-            return {"schema": SCHEMA, "status": "valid" if not invalid else "invalid", "events": len(self._events), "invalid_sequences": invalid, "head": previous}
+            return {
+                "schema": SCHEMA,
+                "status": "valid" if not invalid else "invalid",
+                "events": len(self._events),
+                "invalid_sequences": invalid,
+                "head": previous,
+            }
 
     def lookup_attempt(self, task_id: str, attempt_id: str) -> list[LedgerEvent]:
         with self._lock:
-            return [event for event in self._events if event.task_id == task_id and event.attempt_id == attempt_id]
+            return [
+                event
+                for event in self._events
+                if event.task_id == task_id and event.attempt_id == attempt_id
+            ]
 
     def project_json(self) -> dict[str, Any]:
         with self._lock:
-            return {"schema": SCHEMA, "repository": self.repository, "events": [event.record() for event in self._events], "verification": self.verify_all()}
+            return {
+                "schema": SCHEMA,
+                "repository": self.repository,
+                "events": [event.record() for event in self._events],
+                "verification": self.verify_all(),
+            }

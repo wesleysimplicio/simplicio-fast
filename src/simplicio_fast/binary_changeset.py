@@ -36,17 +36,25 @@ class BinaryChangeSetError(ValueError):
 
 
 def canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode("utf-8")
 
 
 def sha256(data: bytes | str) -> str:
-    return hashlib.sha256(data if isinstance(data, bytes) else data.encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        data if isinstance(data, bytes) else data.encode("utf-8")
+    ).hexdigest()
 
 
 def _sha(value: str | None, *, required: bool = False) -> str | None:
     if value is None and not required:
         return None
-    if not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdef" for c in value.lower()):
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(c not in "0123456789abcdef" for c in value.lower())
+    ):
         raise BinaryChangeSetError("sha256_invalid")
     return value.lower()
 
@@ -64,7 +72,12 @@ def _path(value: str) -> str:
 
 
 def _worktree(value: str) -> str:
-    if not isinstance(value, str) or not value or Path(value).name != value or value in {".", ".."}:
+    if (
+        not isinstance(value, str)
+        or not value
+        or Path(value).name != value
+        or value in {".", ".."}
+    ):
         raise BinaryChangeSetError("worktree_invalid")
     return value
 
@@ -129,7 +142,10 @@ class ChangeOperation:
         line_map: dict[str, int] | None = None
         line_map_sha256: str | None = None
         if op == "replace-range":
-            if any(key in value for key in ("byte_start", "byte_end", "offset", "byte_offset")):
+            if any(
+                key in value
+                for key in ("byte_start", "byte_end", "offset", "byte_offset")
+            ):
                 raise BinaryChangeSetError("ambiguous_byte_offset")
             encoding = str(value.get("encoding", "utf-8"))
             if not encoding:
@@ -143,8 +159,14 @@ class ChangeOperation:
                 line_map = {"start_line": start, "end_line": end}
             if not isinstance(line_map, Mapping):
                 raise BinaryChangeSetError("line_map_invalid")
-            line_map = {"start_line": int(line_map["start_line"]), "end_line": int(line_map["end_line"])}
-            if line_map["start_line"] < 1 or line_map["end_line"] < line_map["start_line"]:
+            line_map = {
+                "start_line": int(line_map["start_line"]),
+                "end_line": int(line_map["end_line"]),
+            }
+            if (
+                line_map["start_line"] < 1
+                or line_map["end_line"] < line_map["start_line"]
+            ):
                 raise BinaryChangeSetError("line_map_invalid")
             supplied_map_hash = value.get("line_map_sha256")
             expected_map_hash = sha256(canonical(line_map))
@@ -152,12 +174,18 @@ class ChangeOperation:
                 raise BinaryChangeSetError("line_map_hash_mismatch")
             line_map_sha256 = expected_map_hash
         else:
-            encoding = str(value["encoding"]) if value.get("encoding") is not None else None
+            encoding = (
+                str(value["encoding"]) if value.get("encoding") is not None else None
+            )
             line_map = None
-            line_map_sha256 = str(value["line_map_sha256"]) if value.get("line_map_sha256") else None
+            line_map_sha256 = (
+                str(value["line_map_sha256"]) if value.get("line_map_sha256") else None
+            )
         if op == "create" and (content_b64 is None or after is None):
             raise BinaryChangeSetError("create_payload_missing")
-        if op == "replace-range" and (content_b64 is None or before is None or after is None):
+        if op == "replace-range" and (
+            content_b64 is None or before is None or after is None
+        ):
             raise BinaryChangeSetError("replace_payload_missing")
         if op == "rename" and (dest is None or before is None or after is None):
             raise BinaryChangeSetError("rename_payload_missing")
@@ -165,7 +193,17 @@ class ChangeOperation:
             raise BinaryChangeSetError("delete_payload_missing")
         if op == "rename" and dest == path:
             raise BinaryChangeSetError("rename_destination_invalid")
-        return cls(op, path, before, after, dest, content_b64, encoding, line_map, line_map_sha256)
+        return cls(
+            op,
+            path,
+            before,
+            after,
+            dest,
+            content_b64,
+            encoding,
+            line_map,
+            line_map_sha256,
+        )
 
     def content(self) -> bytes | None:
         return _unb64(self.content_b64) if self.content_b64 is not None else None
@@ -210,7 +248,12 @@ class BinaryChangeSet:
     def __post_init__(self) -> None:
         if self.schema != SCHEMA:
             raise BinaryChangeSetError("schema_invalid")
-        if not self.repository or not self.base_generation or not self.overlay_generation or not self.attempt:
+        if (
+            not self.repository
+            or not self.base_generation
+            or not self.overlay_generation
+            or not self.attempt
+        ):
             raise BinaryChangeSetError("binding_missing")
         _worktree(self.worktree_id)
         if not self.lease_id or not self.fencing_token:
@@ -225,14 +268,30 @@ class BinaryChangeSet:
                 if path is not None and path not in allowed:
                     raise BinaryChangeSetError("path_not_allowed", path)
         object.__setattr__(self, "allowed_paths", allowed)
-        object.__setattr__(self, "verification_commands", tuple(str(item) for item in self.verification_commands))
+        object.__setattr__(
+            self,
+            "verification_commands",
+            tuple(str(item) for item in self.verification_commands),
+        )
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "BinaryChangeSet":
         if value.get("schema") != SCHEMA:
             raise BinaryChangeSetError("schema_invalid")
-        operations = tuple(ChangeOperation.from_dict(item) for item in value.get("operations", ()))
-        allowed = tuple(value.get("allowed_paths") or sorted({path for operation in operations for path in (operation.path, operation.dest) if path}))
+        operations = tuple(
+            ChangeOperation.from_dict(item) for item in value.get("operations", ())
+        )
+        allowed = tuple(
+            value.get("allowed_paths")
+            or sorted(
+                {
+                    path
+                    for operation in operations
+                    for path in (operation.path, operation.dest)
+                    if path
+                }
+            )
+        )
         result = cls(
             repository=str(value.get("repository", "")),
             base_generation=str(value.get("base_generation", "")),
@@ -272,7 +331,13 @@ class BinaryChangeSet:
     def to_dict(self) -> dict[str, Any]:
         return {**self.identity(), "changeset_id": self.changeset_id}
 
-    def validate(self, root: Path, *, lease_id: str | None = None, fencing_token: str | None = None) -> dict[str, Any]:
+    def validate(
+        self,
+        root: Path,
+        *,
+        lease_id: str | None = None,
+        fencing_token: str | None = None,
+    ) -> dict[str, Any]:
         root = root.resolve()
         if self.repository != str(root):
             raise BinaryChangeSetError("repository_mismatch")
@@ -308,16 +373,26 @@ class BinaryChangeSet:
                 statuses.append({"path": operation.path, "status": "ready"})
             elif operation.op == "rename":
                 if current is None:
-                    destination = state.get(operation.dest or "", _read(root / str(operation.dest)))
-                    if destination is not None and _matches_hash(destination, operation.after_sha256):
-                        statuses.append({"path": operation.path, "status": "idempotent"})
+                    destination = state.get(
+                        operation.dest or "", _read(root / str(operation.dest))
+                    )
+                    if destination is not None and _matches_hash(
+                        destination, operation.after_sha256
+                    ):
+                        statuses.append(
+                            {"path": operation.path, "status": "idempotent"}
+                        )
                         continue
                     raise BinaryChangeSetError("source_missing", operation.path)
                 if not _matches_hash(current, operation.before_sha256):
                     raise BinaryChangeSetError("stale_source", operation.path)
-                destination = state.get(operation.dest or "", _read(root / str(operation.dest)))
+                destination = state.get(
+                    operation.dest or "", _read(root / str(operation.dest))
+                )
                 if destination is not None:
-                    raise BinaryChangeSetError("rename_destination_exists", str(operation.dest))
+                    raise BinaryChangeSetError(
+                        "rename_destination_exists", str(operation.dest)
+                    )
                 state[operation.dest or ""] = current
                 state[operation.path] = None
                 statuses.append({"path": operation.path, "status": "ready"})
@@ -339,10 +414,20 @@ class BinaryChangeSet:
 
     def encode(self) -> bytes:
         metadata = canonical(self.to_dict())
-        records = b"".join(FRAME.pack(len(payload)) + payload + hashlib.sha256(payload).digest()
-                           for payload in (canonical(operation.to_dict()) for operation in self.operations))
+        records = b"".join(
+            FRAME.pack(len(payload)) + payload + hashlib.sha256(payload).digest()
+            for payload in (
+                canonical(operation.to_dict()) for operation in self.operations
+            )
+        )
         digest = hashlib.sha256(metadata + records).digest()
-        return HEADER.pack(MAGIC, 1, 0, len(metadata), len(self.operations), len(records), digest) + metadata + records
+        return (
+            HEADER.pack(
+                MAGIC, 1, 0, len(metadata), len(self.operations), len(records), digest
+            )
+            + metadata
+            + records
+        )
 
     def seal_to(self, path: Path) -> dict[str, Any]:
         payload = self.encode()
@@ -385,24 +470,32 @@ def _replace(current: bytes, operation: ChangeOperation) -> bytes:
     if end > len(lines):
         raise BinaryChangeSetError("line_map_out_of_range", operation.path)
     newline = "\r\n" if "\r\n" in text else "\n"
-    if replacement and not replacement.endswith(("\n", "\r")) and lines[end - 1].endswith(("\n", "\r")):
+    if (
+        replacement
+        and not replacement.endswith(("\n", "\r"))
+        and lines[end - 1].endswith(("\n", "\r"))
+    ):
         replacement += newline
-    replacement = replacement.replace("\r\n", "\n").replace("\r", "\n").replace("\n", newline)
-    lines[start - 1:end] = [replacement]
+    replacement = (
+        replacement.replace("\r\n", "\n").replace("\r", "\n").replace("\n", newline)
+    )
+    lines[start - 1 : end] = [replacement]
     return "".join(lines).encode(operation.encoding)
 
 
 def decode_binary(payload: bytes) -> BinaryChangeSet:
     if len(payload) < HEADER.size:
         raise BinaryChangeSetError("binary_truncated")
-    magic, version, flags, metadata_len, record_count, section_len, digest = HEADER.unpack(payload[:HEADER.size])
+    magic, version, flags, metadata_len, record_count, section_len, digest = (
+        HEADER.unpack(payload[: HEADER.size])
+    )
     if magic != MAGIC or version != 1 or flags != 0:
         raise BinaryChangeSetError("binary_header_invalid")
     end_metadata = HEADER.size + metadata_len
     end_section = end_metadata + section_len
     if end_section != len(payload):
         raise BinaryChangeSetError("binary_length_mismatch")
-    metadata = payload[HEADER.size:end_metadata]
+    metadata = payload[HEADER.size : end_metadata]
     section = payload[end_metadata:end_section]
     if hashlib.sha256(metadata + section).digest() != digest:
         raise BinaryChangeSetError("binary_checksum_mismatch")
@@ -415,13 +508,13 @@ def decode_binary(payload: bytes) -> BinaryChangeSet:
     for _ in range(record_count):
         if offset + FRAME.size > len(section):
             raise BinaryChangeSetError("record_truncated")
-        length = FRAME.unpack(section[offset:offset + FRAME.size])[0]
+        length = FRAME.unpack(section[offset : offset + FRAME.size])[0]
         offset += FRAME.size
         end = offset + length
         if end + 32 > len(section):
             raise BinaryChangeSetError("record_truncated")
         record = section[offset:end]
-        checksum = section[end:end + 32]
+        checksum = section[end : end + 32]
         if hashlib.sha256(record).digest() != checksum:
             raise BinaryChangeSetError("record_checksum_mismatch")
         try:
@@ -461,7 +554,9 @@ def inspect_binary(payload: bytes | Path) -> dict[str, Any]:
 
 
 class BinaryChangeJournal:
-    def __init__(self, path: Path, *, worktree_id: str, lease_id: str, fencing_token: str) -> None:
+    def __init__(
+        self, path: Path, *, worktree_id: str, lease_id: str, fencing_token: str
+    ) -> None:
         self.path = path.resolve()
         self.worktree_id = _worktree(worktree_id)
         self.lease_id = lease_id
@@ -490,7 +585,7 @@ class BinaryChangeJournal:
                 if recover:
                     break
                 raise BinaryChangeSetError("journal_truncated_tail")
-            length = FRAME.unpack(raw[offset:offset + FRAME.size])[0]
+            length = FRAME.unpack(raw[offset : offset + FRAME.size])[0]
             offset += FRAME.size
             end = offset + length
             if end + 32 > len(raw):
@@ -498,25 +593,41 @@ class BinaryChangeJournal:
                     break
                 raise BinaryChangeSetError("journal_truncated_tail")
             body = raw[offset:end]
-            supplied = raw[end:end + 32].hex()
+            supplied = raw[end : end + 32].hex()
             offset = end + 32
             try:
                 event = json.loads(body)
             except json.JSONDecodeError as error:
                 raise BinaryChangeSetError("journal_record_invalid") from error
             previous = events[-1]["record_hash"] if events else ZERO_HASH
-            material = {key: value for key, value in event.items() if key != "record_hash"}
+            material = {
+                key: value for key, value in event.items() if key != "record_hash"
+            }
             expected = sha256(previous + canonical(material).decode())
-            if supplied != expected or event.get("record_hash") != supplied or event.get("prev_hash") != previous:
+            if (
+                supplied != expected
+                or event.get("record_hash") != supplied
+                or event.get("prev_hash") != previous
+            ):
                 raise BinaryChangeSetError("journal_chain_mismatch")
-            if event.get("worktree_id") != self.worktree_id or event.get("lease_id") != self.lease_id or event.get("fencing_token") != self.fencing_token:
+            if (
+                event.get("worktree_id") != self.worktree_id
+                or event.get("lease_id") != self.lease_id
+                or event.get("fencing_token") != self.fencing_token
+            ):
                 raise BinaryChangeSetError("journal_authority_mismatch")
             events.append(event)
             if frame_start == offset:
                 raise BinaryChangeSetError("journal_cursor_stalled")
         return events
 
-    def append(self, changeset: BinaryChangeSet, state: str, *, evidence: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    def append(
+        self,
+        changeset: BinaryChangeSet,
+        state: str,
+        *,
+        evidence: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
         if changeset.worktree_id != self.worktree_id:
             raise BinaryChangeSetError("cross_worktree")
         if changeset.lease_id != self.lease_id:
@@ -525,7 +636,10 @@ class BinaryChangeJournal:
             raise BinaryChangeSetError("fence_mismatch")
         events = self.read()
         for event in events:
-            if event.get("changeset_id") == changeset.changeset_id and event.get("state") == state:
+            if (
+                event.get("changeset_id") == changeset.changeset_id
+                and event.get("state") == state
+            ):
                 return dict(event, idempotent=True)
         previous = events[-1]["record_hash"] if events else ZERO_HASH
         event = {
@@ -545,14 +659,21 @@ class BinaryChangeJournal:
         payload = canonical(event)
         self._ensure_header()
         with self.path.open("ab") as handle:
-            handle.write(FRAME.pack(len(payload)) + payload + bytes.fromhex(event["record_hash"]))
+            handle.write(
+                FRAME.pack(len(payload)) + payload + bytes.fromhex(event["record_hash"])
+            )
             handle.flush()
             os.fsync(handle.fileno())
         return event
 
     def recover(self) -> dict[str, Any]:
         if not self.path.exists():
-            return {"schema": "simplicio.fast.binary-changeset-recovery/v1", "status": "valid", "records": 0, "truncated_bytes": 0}
+            return {
+                "schema": "simplicio.fast.binary-changeset-recovery/v1",
+                "status": "valid",
+                "records": 0,
+                "truncated_bytes": 0,
+            }
         raw = self.path.read_bytes()
         events = self.read(recover=True)
         valid_end = len(JOURNAL_MAGIC) + 1
@@ -591,38 +712,76 @@ class DevCliAdapter:
 
     def materialize(self, changeset: BinaryChangeSet, root: Path) -> dict[str, Any]:
         from simplicio.mechanical_edit import execute_plan
+
         root = root.resolve()
         operations: list[dict[str, Any]] = []
         for operation in changeset.operations:
             if operation.op == "create":
-                operations.append({"op": "create_file", "path": operation.path,
-                                   "text": (operation.content() or b"").decode(operation.encoding or "utf-8")})
+                operations.append(
+                    {
+                        "op": "create_file",
+                        "path": operation.path,
+                        "text": (operation.content() or b"").decode(
+                            operation.encoding or "utf-8"
+                        ),
+                    }
+                )
             elif operation.op == "replace-range":
                 raw = (root / operation.path).read_bytes()
                 selected = _selected_range(raw, operation)
-                operations.append({
-                    "op": "replace_range",
-                    "path": operation.path,
-                    "start_line": operation.line_map["start_line"],
-                    "end_line": operation.line_map["end_line"],
-                    "text": _replacement_text(operation, selected),
-                    "file_sha256": _normalized_sha(raw),
-                    "range_sha256": _normalized_sha(selected),
-                })
+                operations.append(
+                    {
+                        "op": "replace_range",
+                        "path": operation.path,
+                        "start_line": operation.line_map["start_line"],
+                        "end_line": operation.line_map["end_line"],
+                        "text": _replacement_text(operation, selected),
+                        "file_sha256": _normalized_sha(raw),
+                        "range_sha256": _normalized_sha(selected),
+                    }
+                )
             elif operation.op == "rename":
-                operations.append({"op": "move_file", "path": operation.path, "dest": operation.dest,
-                                   "file_sha256": _normalized_sha((root / operation.path).read_bytes())})
+                operations.append(
+                    {
+                        "op": "move_file",
+                        "path": operation.path,
+                        "dest": operation.dest,
+                        "file_sha256": _normalized_sha(
+                            (root / operation.path).read_bytes()
+                        ),
+                    }
+                )
             elif operation.op == "delete":
-                operations.append({"op": "delete_file", "path": operation.path,
-                                   "file_sha256": _normalized_sha((root / operation.path).read_bytes())})
-        result = execute_plan({
-            "schema": "simplicio.mechanical-edit/v1",
-            "touched_files": sorted({path for operation in changeset.operations for path in (operation.path, operation.dest) if path}),
-            "operations": operations,
-            "validation": [],
-        }, root=root, apply=True)
+                operations.append(
+                    {
+                        "op": "delete_file",
+                        "path": operation.path,
+                        "file_sha256": _normalized_sha(
+                            (root / operation.path).read_bytes()
+                        ),
+                    }
+                )
+        result = execute_plan(
+            {
+                "schema": "simplicio.mechanical-edit/v1",
+                "touched_files": sorted(
+                    {
+                        path
+                        for operation in changeset.operations
+                        for path in (operation.path, operation.dest)
+                        if path
+                    }
+                ),
+                "operations": operations,
+                "validation": [],
+            },
+            root=root,
+            apply=True,
+        )
         if result.get("status") != "ok" or not result.get("applied"):
-            raise BinaryChangeSetError("dev_cli_rejected", json.dumps(result, sort_keys=True))
+            raise BinaryChangeSetError(
+                "dev_cli_rejected", json.dumps(result, sort_keys=True)
+            )
         return {"schema": ADAPTER_SCHEMA, "status": "applied", "result": result}
 
 
@@ -640,18 +799,35 @@ def _selected_range(raw: bytes, operation: ChangeOperation) -> bytes:
     end = operation.line_map["end_line"]
     if end > len(lines):
         raise BinaryChangeSetError("line_map_out_of_range")
-    return "".join(lines[start - 1:end]).encode(operation.encoding or "utf-8")
+    return "".join(lines[start - 1 : end]).encode(operation.encoding or "utf-8")
 
 
 def refresh_semantic_inputs(root: Path, paths: Iterable[str]) -> dict[str, Any]:
-    command = ["simplicio-mapper", "delta", str(root), "--json", "--changed-paths", ",".join(sorted(set(paths)))]
+    command = [
+        "simplicio-mapper",
+        "delta",
+        str(root),
+        "--json",
+        "--changed-paths",
+        ",".join(sorted(set(paths))),
+    ]
     try:
-        completed = subprocess.run(command, capture_output=True, text=True, check=False, timeout=120)
+        completed = subprocess.run(
+            command, capture_output=True, text=True, check=False, timeout=120
+        )
     except (OSError, subprocess.TimeoutExpired) as error:
-        return {"status": "unverified", "reason": type(error).__name__, "command": command}
+        return {
+            "status": "unverified",
+            "reason": type(error).__name__,
+            "command": command,
+        }
     if completed.returncode != 0:
-        return {"status": "unverified", "reason": "mapper_delta_failed", "command": command,
-                "stderr": completed.stderr[-1000:]}
+        return {
+            "status": "unverified",
+            "reason": "mapper_delta_failed",
+            "command": command,
+            "stderr": completed.stderr[-1000:],
+        }
     try:
         payload = json.loads(completed.stdout)
     except json.JSONDecodeError:
@@ -669,31 +845,61 @@ def materialize(
 ) -> dict[str, Any]:
     root = root.resolve()
     existing = journal.read()
-    previous = next((event for event in reversed(existing) if event.get("changeset_id") == changeset.changeset_id), None)
+    previous = next(
+        (
+            event
+            for event in reversed(existing)
+            if event.get("changeset_id") == changeset.changeset_id
+        ),
+        None,
+    )
     if previous is not None and previous.get("state") in {"applied", "idempotent"}:
         return {
-            "schema": RECEIPT_SCHEMA, "status": "idempotent", "changeset_id": changeset.changeset_id,
-            "journal": previous, "refresh": {"status": "not-needed"}, "source_writer": "simplicio-dev-cli",
+            "schema": RECEIPT_SCHEMA,
+            "status": "idempotent",
+            "changeset_id": changeset.changeset_id,
+            "journal": previous,
+            "refresh": {"status": "not-needed"},
+            "source_writer": "simplicio-dev-cli",
         }
     try:
         validation = changeset.validate(root)
         journal.append(changeset, "sealed", evidence={"validation": validation})
         if validation["idempotent"]:
-            event = journal.append(changeset, "idempotent", evidence={"validation": validation})
+            event = journal.append(
+                changeset, "idempotent", evidence={"validation": validation}
+            )
             return {
-                "schema": RECEIPT_SCHEMA, "status": "idempotent", "changeset_id": changeset.changeset_id,
-                "journal": event, "validation": validation, "refresh": {"status": "not-needed"},
+                "schema": RECEIPT_SCHEMA,
+                "status": "idempotent",
+                "changeset_id": changeset.changeset_id,
+                "journal": event,
+                "validation": validation,
+                "refresh": {"status": "not-needed"},
                 "source_writer": "simplicio-dev-cli",
             }
         applied = (adapter or DevCliAdapter()).materialize(changeset, root)
         after = changeset.validate(root)
         changed_paths = sorted({operation.path for operation in changeset.operations})
         refresh_receipt = refresh(root, changed_paths)
-        event = journal.append(changeset, "applied", evidence={"adapter": applied, "validation": after, "refresh": refresh_receipt})
+        event = journal.append(
+            changeset,
+            "applied",
+            evidence={
+                "adapter": applied,
+                "validation": after,
+                "refresh": refresh_receipt,
+            },
+        )
         return {
-            "schema": RECEIPT_SCHEMA, "status": "applied", "changeset_id": changeset.changeset_id,
-            "source_writer": "simplicio-dev-cli", "validation": after, "adapter": applied,
-            "refresh": refresh_receipt, "journal": event,
+            "schema": RECEIPT_SCHEMA,
+            "status": "applied",
+            "changeset_id": changeset.changeset_id,
+            "source_writer": "simplicio-dev-cli",
+            "validation": after,
+            "adapter": applied,
+            "refresh": refresh_receipt,
+            "journal": event,
         }
     except BinaryChangeSetError as error:
         evidence = {"reason_code": error.reason_code, "message": str(error)}
@@ -702,19 +908,49 @@ def materialize(
         except BinaryChangeSetError:
             pass
         return {
-            "schema": RECEIPT_SCHEMA, "status": "rejected", "changeset_id": changeset.changeset_id,
-            "reason_code": error.reason_code, "evidence": evidence, "source_writer": "simplicio-dev-cli",
+            "schema": RECEIPT_SCHEMA,
+            "status": "rejected",
+            "changeset_id": changeset.changeset_id,
+            "reason_code": error.reason_code,
+            "evidence": evidence,
+            "source_writer": "simplicio-dev-cli",
         }
 
 
-def prepare_from_json(value: Mapping[str, Any], *, root: Path, base_generation: str, overlay_generation: str,
-                      attempt: str, worktree_id: str, lease_id: str, fencing_token: str,
-                      allowed_paths: Iterable[str] | None = None,
-                      verification_commands: Iterable[str] = ()) -> BinaryChangeSet:
-    operations = tuple(ChangeOperation.from_dict(item) for item in value.get("operations", value.get("changes", ())))
+def prepare_from_json(
+    value: Mapping[str, Any],
+    *,
+    root: Path,
+    base_generation: str,
+    overlay_generation: str,
+    attempt: str,
+    worktree_id: str,
+    lease_id: str,
+    fencing_token: str,
+    allowed_paths: Iterable[str] | None = None,
+    verification_commands: Iterable[str] = (),
+) -> BinaryChangeSet:
+    operations = tuple(
+        ChangeOperation.from_dict(item)
+        for item in value.get("operations", value.get("changes", ()))
+    )
     return BinaryChangeSet(
-        repository=str(root.resolve()), base_generation=base_generation, overlay_generation=overlay_generation,
-        attempt=attempt, worktree_id=worktree_id, lease_id=lease_id, fencing_token=fencing_token,
-        allowed_paths=tuple(allowed_paths or [path for operation in operations for path in (operation.path, operation.dest) if path]),
-        operations=operations, verification_commands=tuple(verification_commands),
+        repository=str(root.resolve()),
+        base_generation=base_generation,
+        overlay_generation=overlay_generation,
+        attempt=attempt,
+        worktree_id=worktree_id,
+        lease_id=lease_id,
+        fencing_token=fencing_token,
+        allowed_paths=tuple(
+            allowed_paths
+            or [
+                path
+                for operation in operations
+                for path in (operation.path, operation.dest)
+                if path
+            ]
+        ),
+        operations=operations,
+        verification_commands=tuple(verification_commands),
     )

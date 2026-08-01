@@ -44,7 +44,9 @@ class ChangeEvent:
 def _sha(value: str | None) -> str | None:
     if value is None:
         return None
-    if len(value) != 64 or any(char not in "0123456789abcdef" for char in value.lower()):
+    if len(value) != 64 or any(
+        char not in "0123456789abcdef" for char in value.lower()
+    ):
         raise ChangeJournalError("sha256_invalid")
     return value.lower()
 
@@ -65,7 +67,11 @@ class ChangeJournal:
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.path.open("wb") as handle:
-            handle.write((json.dumps(HEADER, sort_keys=True, separators=(",", ":")) + "\n").encode())
+            handle.write(
+                (
+                    json.dumps(HEADER, sort_keys=True, separators=(",", ":")) + "\n"
+                ).encode()
+            )
             handle.flush()
             os.fsync(handle.fileno())
 
@@ -97,7 +103,10 @@ class ChangeJournal:
             record_hash="",
         )
         digest = hashlib.sha256(
-            (event.prev_hash + json.dumps(event.material(), sort_keys=True, separators=(",", ":"))).encode()
+            (
+                event.prev_hash
+                + json.dumps(event.material(), sort_keys=True, separators=(",", ":"))
+            ).encode()
         ).hexdigest()
         event = ChangeEvent(**{**asdict(event), "record_hash": digest})
         self._ensure_header()
@@ -136,35 +145,50 @@ class ChangeJournal:
         return events
 
     def events_since(
-        self, *, sequence: int = 0, generation: str | None = None, max_events: int | None = None
+        self,
+        *,
+        sequence: int = 0,
+        generation: str | None = None,
+        max_events: int | None = None,
     ) -> list[ChangeEvent]:
         """Return a verified event window, failing closed when its bound overflows."""
         if not isinstance(sequence, int) or sequence < 0:
             raise ChangeJournalError("sequence_invalid")
         if max_events is not None and (
-            not isinstance(max_events, int) or isinstance(max_events, bool) or max_events < 1
+            not isinstance(max_events, int)
+            or isinstance(max_events, bool)
+            or max_events < 1
         ):
             raise ChangeJournalError("max_events_invalid")
         event_list = self.read()
         selected = [
             event
             for event in event_list
-            if event.sequence > sequence and (generation is None or event.generation == generation)
+            if event.sequence > sequence
+            and (generation is None or event.generation == generation)
         ]
         if max_events is not None and len(selected) > max_events:
             raise ChangeJournalError("event_window_overflow")
         return selected
 
     def changed_paths_since(
-        self, *, sequence: int = 0, generation: str | None = None, max_events: int | None = None
+        self,
+        *,
+        sequence: int = 0,
+        generation: str | None = None,
+        max_events: int | None = None,
     ) -> tuple[str, ...]:
         """Return stable unique paths for a verified bounded event window."""
-        return tuple(sorted({
-            event.path
-            for event in self.events_since(
-                sequence=sequence, generation=generation, max_events=max_events
+        return tuple(
+            sorted(
+                {
+                    event.path
+                    for event in self.events_since(
+                        sequence=sequence, generation=generation, max_events=max_events
+                    )
+                }
             )
-        }))
+        )
 
     def recover(self) -> dict[str, Any]:
         events = self.read(recover=True)
@@ -186,7 +210,10 @@ class ChangeJournal:
         if event.sequence != expected_sequence or event.prev_hash != expected_prev:
             raise ChangeJournalError("chain_mismatch")
         expected = hashlib.sha256(
-            (event.prev_hash + json.dumps(event.material(), sort_keys=True, separators=(",", ":"))).encode()
+            (
+                event.prev_hash
+                + json.dumps(event.material(), sort_keys=True, separators=(",", ":"))
+            ).encode()
         ).hexdigest()
         if event.record_hash != expected:
             raise ChangeJournalError("record_hash_mismatch")

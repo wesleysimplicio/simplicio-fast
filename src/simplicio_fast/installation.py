@@ -43,7 +43,13 @@ def _rust_candidate() -> Path | None:
 
 def _manifest(path: Path) -> tuple[dict[str, Any] | None, str | None]:
     try:
-        result = subprocess.run([str(path), "--version", "--json"], capture_output=True, text=True, check=False, timeout=3)
+        result = subprocess.run(
+            [str(path), "--version", "--json"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=3,
+        )
     except (OSError, subprocess.TimeoutExpired) as error:
         return None, type(error).__name__
     if result.returncode != 0:
@@ -98,7 +104,11 @@ def report() -> dict[str, Any]:
             "manifest": rust_manifest,
             "reason": rust_reason,
         },
-        {"name": "offline_resolution", "status": "pass", "detail": "no download performed"},
+        {
+            "name": "offline_resolution",
+            "status": "pass",
+            "detail": "no download performed",
+        },
     ]
     return {
         "schema": SCHEMA,
@@ -113,7 +123,10 @@ def report() -> dict[str, Any]:
             "offline": True,
         },
         "checks": checks,
-        "rollback": {"supported": False, "reason": "packaging_matrix_not_yet_published"},
+        "rollback": {
+            "supported": False,
+            "reason": "packaging_matrix_not_yet_published",
+        },
     }
 
 
@@ -123,8 +136,8 @@ def _smoke_launcher(environment: dict[str, str]) -> tuple[list[str], str, str | 
         try:
             version = subprocess.run(
                 [candidate, "--version"],
-            capture_output=True,
-            text=True,
+                capture_output=True,
+                text=True,
                 check=False,
                 timeout=5,
                 env=environment,
@@ -132,7 +145,11 @@ def _smoke_launcher(environment: dict[str, str]) -> tuple[list[str], str, str | 
             )
         except (OSError, subprocess.TimeoutExpired):
             version = None
-        if version is not None and version.returncode == 0 and __version__ in version.stdout:
+        if (
+            version is not None
+            and version.returncode == 0
+            and __version__ in version.stdout
+        ):
             return [candidate], "installed-cli", None
         reason = "installed_cli_version_mismatch"
     else:
@@ -212,7 +229,9 @@ def _smoke_step(
             "stderr": completed.stderr[-1_000:],
             "wall_ms": (time.perf_counter_ns() - started) / 1_000_000,
         }
-    status = "pass" if completed.returncode == 0 and isinstance(payload, dict) else "fail"
+    status = (
+        "pass" if completed.returncode == 0 and isinstance(payload, dict) else "fail"
+    )
     return {
         "status": status,
         "engine": engine,
@@ -234,27 +253,110 @@ def python_smoke() -> dict[str, Any]:
     # checkout or a just-built wheel during the release gate.
     source_root = str(Path(__file__).resolve().parents[1])
     existing_pythonpath = environment.get("PYTHONPATH")
-    environment["PYTHONPATH"] = source_root + (os.pathsep + existing_pythonpath if existing_pythonpath else "")
+    environment["PYTHONPATH"] = source_root + (
+        os.pathsep + existing_pythonpath if existing_pythonpath else ""
+    )
     launcher, launcher_kind, launcher_reason = _smoke_launcher(environment)
     steps: list[dict[str, Any]] = []
-    with tempfile.TemporaryDirectory(prefix="simplicio-fast-python-smoke-") as directory:
+    with tempfile.TemporaryDirectory(
+        prefix="simplicio-fast-python-smoke-"
+    ) as directory:
         root = Path(directory)
         source = root / "greetings.py"
-        source.write_text("def greeting(name: str) -> str:\n    return f'hello {name}'\n", encoding="utf-8")
+        source.write_text(
+            "def greeting(name: str) -> str:\n    return f'hello {name}'\n",
+            encoding="utf-8",
+        )
         snapshot = root / "project.sfast"
         environment = environment.copy()
         environment["SIMPLICIO_FAST_RUST"] = str(root / "missing-rust-engine.exe")
 
         for engine in ("auto", "python", "off"):
-            steps.append(_smoke_step(launcher, engine, ["capabilities"], root=root, environment=environment))
-        steps.append(_smoke_step(launcher, "auto", ["build", ".", "--output", str(snapshot)], root=root, environment=environment))
-        steps.append(_smoke_step(launcher, "python", ["query", "greeting", "--snapshot", str(snapshot)], root=root, environment=environment))
-        steps.append(_smoke_step(launcher, "python", ["context", "greeting", "--root", ".", "--snapshot", str(snapshot)], root=root, environment=environment))
-        steps.append(_smoke_step(launcher, "python", ["plan", "review greeting", "--root", ".", "--snapshot", str(snapshot)], root=root, environment=environment))
-        steps.append(_smoke_step(launcher, "python", ["delivery", "review greeting", "--root", ".", "--snapshot", str(snapshot), "--profile", "loop-standalone"], root=root, environment=environment))
-        source.write_text("def greeting(name: str) -> str:\n    return f'hello {name}'\n\ndef farewell(name: str) -> str:\n    return f'bye {name}'\n", encoding="utf-8")
-        steps.append(_smoke_step(launcher, "python", ["refresh", ".", "--output", str(snapshot)], root=root, environment=environment))
-        steps.append(_smoke_step(launcher, "off", ["query", "farewell", "--snapshot", str(snapshot)], root=root, environment=environment))
+            steps.append(
+                _smoke_step(
+                    launcher,
+                    engine,
+                    ["capabilities"],
+                    root=root,
+                    environment=environment,
+                )
+            )
+        steps.append(
+            _smoke_step(
+                launcher,
+                "auto",
+                ["build", ".", "--output", str(snapshot)],
+                root=root,
+                environment=environment,
+            )
+        )
+        steps.append(
+            _smoke_step(
+                launcher,
+                "python",
+                ["query", "greeting", "--snapshot", str(snapshot)],
+                root=root,
+                environment=environment,
+            )
+        )
+        steps.append(
+            _smoke_step(
+                launcher,
+                "python",
+                ["context", "greeting", "--root", ".", "--snapshot", str(snapshot)],
+                root=root,
+                environment=environment,
+            )
+        )
+        steps.append(
+            _smoke_step(
+                launcher,
+                "python",
+                ["plan", "review greeting", "--root", ".", "--snapshot", str(snapshot)],
+                root=root,
+                environment=environment,
+            )
+        )
+        steps.append(
+            _smoke_step(
+                launcher,
+                "python",
+                [
+                    "delivery",
+                    "review greeting",
+                    "--root",
+                    ".",
+                    "--snapshot",
+                    str(snapshot),
+                    "--profile",
+                    "loop-standalone",
+                ],
+                root=root,
+                environment=environment,
+            )
+        )
+        source.write_text(
+            "def greeting(name: str) -> str:\n    return f'hello {name}'\n\ndef farewell(name: str) -> str:\n    return f'bye {name}'\n",
+            encoding="utf-8",
+        )
+        steps.append(
+            _smoke_step(
+                launcher,
+                "python",
+                ["refresh", ".", "--output", str(snapshot)],
+                root=root,
+                environment=environment,
+            )
+        )
+        steps.append(
+            _smoke_step(
+                launcher,
+                "off",
+                ["query", "farewell", "--snapshot", str(snapshot)],
+                root=root,
+                environment=environment,
+            )
+        )
 
     expected_selection = {"auto": "python", "python": "python", "off": "off"}
     capability_steps = steps[:3]
@@ -262,11 +364,19 @@ def python_smoke() -> dict[str, Any]:
     for requested, step in zip(expected_selection, capability_steps):
         payload = step.get("payload")
         receipt = payload.get("engine") if isinstance(payload, dict) else None
-        observed_selection[requested] = receipt.get("selected") if isinstance(receipt, dict) else None
+        observed_selection[requested] = (
+            receipt.get("selected") if isinstance(receipt, dict) else None
+        )
     selection_ok = observed_selection == expected_selection
     failed = [step for step in steps if step["status"] != "pass"]
     all_checks_pass = not failed and selection_ok
-    status = "pass" if all_checks_pass and launcher_kind == "installed-cli" else "partial" if all_checks_pass else "fail"
+    status = (
+        "pass"
+        if all_checks_pass and launcher_kind == "installed-cli"
+        else "partial"
+        if all_checks_pass
+        else "fail"
+    )
     reason_codes = []
     if launcher_reason:
         reason_codes.append(launcher_reason)
@@ -280,12 +390,16 @@ def python_smoke() -> dict[str, Any]:
         "launcher": {"kind": launcher_kind, "reason_code": launcher_reason},
         "engines": ["auto", "python", "off"],
         "engine_selection": observed_selection,
-        "rust_probe": {"forced_unavailable": True, "reason_code": "rust_artifact_missing"},
+        "rust_probe": {
+            "forced_unavailable": True,
+            "reason_code": "rust_artifact_missing",
+        },
         "steps": steps,
         "reason_codes": reason_codes,
         "checks": {
             "build_refresh_query_context_plan_delivery": not failed,
             "python_fallback": selection_ok,
-            "rust_not_loaded": selection_ok and all(value != "rust" for value in observed_selection.values()),
+            "rust_not_loaded": selection_ok
+            and all(value != "rust" for value in observed_selection.values()),
         },
     }

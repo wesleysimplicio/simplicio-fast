@@ -13,7 +13,13 @@ from unittest.mock import patch
 from scripts.perf_gate import _read, evaluate, main
 
 
-def receipt(*, hot: float = 100.0, speedup: float = 1.5, tokens: float = 75.0, repetitions: int = 10) -> dict:
+def receipt(
+    *,
+    hot: float = 100.0,
+    speedup: float = 1.5,
+    tokens: float = 75.0,
+    repetitions: int = 10,
+) -> dict:
     return {
         "schema": "simplicio.fast.e2e-benchmark/v1",
         "environment": {
@@ -35,15 +41,30 @@ def receipt(*, hot: float = 100.0, speedup: float = 1.5, tokens: float = 75.0, r
         "scenarios": {
             "without_fast_alteration": {
                 "repetitions": repetitions,
-                "wall_ms": {"median": 10.0, "p95": 12.0, "p99": 13.0, "samples": [10.0] * repetitions},
+                "wall_ms": {
+                    "median": 10.0,
+                    "p95": 12.0,
+                    "p99": 13.0,
+                    "samples": [10.0] * repetitions,
+                },
             },
             "fast_python_alteration": {
                 "repetitions": repetitions,
-                "wall_ms": {"median": 9.0, "p95": 11.0, "p99": 12.0, "samples": [9.0] * repetitions},
+                "wall_ms": {
+                    "median": 9.0,
+                    "p95": 11.0,
+                    "p99": 12.0,
+                    "samples": [9.0] * repetitions,
+                },
             },
             "fast_python_alteration_refresh": {
                 "repetitions": repetitions,
-                "wall_ms": {"median": 20.0, "p95": 22.0, "p99": 23.0, "samples": [20.0] * repetitions},
+                "wall_ms": {
+                    "median": 20.0,
+                    "p95": 22.0,
+                    "p99": 23.0,
+                    "samples": [20.0] * repetitions,
+                },
             },
             "full_standalone": {"status": "blocked", "reason": "runtime_missing"},
             "loop_standalone": {"status": "blocked", "reason": "runtime_missing"},
@@ -52,7 +73,9 @@ def receipt(*, hot: float = 100.0, speedup: float = 1.5, tokens: float = 75.0, r
 
 
 class PerfGateTest(unittest.TestCase):
-    def test_improvement_is_reported_without_treating_blocked_cells_as_pass(self) -> None:
+    def test_improvement_is_reported_without_treating_blocked_cells_as_pass(
+        self,
+    ) -> None:
         result = evaluate(receipt(), receipt(hot=90.0, speedup=1.6, tokens=80.0))
         self.assertEqual("inconclusive", result["status"])
         self.assertEqual(2, len(result["blocked_scenarios"]))
@@ -80,7 +103,11 @@ class PerfGateTest(unittest.TestCase):
         del candidate["totals"]["alteration_speedup_hot"]
         result = evaluate(receipt(), candidate)
         self.assertEqual("inconclusive", result["status"])
-        speedup = next(check for check in result["checks"] if check["metric"] == "alteration_speedup_hot")
+        speedup = next(
+            check
+            for check in result["checks"]
+            if check["metric"] == "alteration_speedup_hot"
+        )
         self.assertEqual("inconclusive", speedup["status"])
 
     def test_environment_drift_is_inconclusive_before_metric_budget(self) -> None:
@@ -118,11 +145,15 @@ class PerfGateTest(unittest.TestCase):
     def test_missing_scenarios_are_inconclusive(self) -> None:
         candidate = copy.deepcopy(receipt())
         candidate["scenarios"] = None
-        self.assertEqual("minimum_repetitions_not_met", evaluate(receipt(), candidate)["reason"])
+        self.assertEqual(
+            "minimum_repetitions_not_met", evaluate(receipt(), candidate)["reason"]
+        )
 
         candidate = copy.deepcopy(receipt())
         candidate["scenarios"]["fast_python_alteration"] = None
-        self.assertEqual("minimum_repetitions_not_met", evaluate(receipt(), candidate)["reason"])
+        self.assertEqual(
+            "minimum_repetitions_not_met", evaluate(receipt(), candidate)["reason"]
+        )
 
     def test_reader_rejects_unreadable_and_wrong_schema_receipts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -157,10 +188,16 @@ class PerfGateTest(unittest.TestCase):
             ]
             with patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
                 self.assertEqual(2, main())
-            self.assertEqual(json.loads(output.getvalue()), json.loads(output_path.read_text(encoding="utf-8")))
+            self.assertEqual(
+                json.loads(output.getvalue()),
+                json.loads(output_path.read_text(encoding="utf-8")),
+            )
 
             candidate.write_text("{}", encoding="utf-8")
-            with patch.object(sys, "argv", argv[:-2]), contextlib.redirect_stdout(io.StringIO()):
+            with (
+                patch.object(sys, "argv", argv[:-2]),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
                 self.assertEqual(2, main())
 
 

@@ -60,11 +60,31 @@ def negotiate(language: str) -> AdapterCapability:
 
 
 def capability_report() -> list[AdapterCapability]:
-    return [negotiate(language) for language in ("python", "typescript", "rust", "csharp")]
+    return [
+        negotiate(language) for language in ("python", "typescript", "rust", "csharp")
+    ]
 
 
 def language_for_path(path: Path) -> str | None:
     return SUPPORTED_EXTENSIONS.get(path.suffix.casefold())
+
+
+def discover_csharp_projects(root: Path) -> list[Path]:
+    """Return deterministic .NET solution/project/config inputs."""
+    names = {
+        "Directory.Build.props",
+        "Directory.Build.targets",
+        "Directory.Packages.props",
+    }
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and (
+            path.suffix.casefold() in {".sln", ".slnx", ".csproj"} or path.name in names
+        )
+        and not any(part in {".git", ".simplicio", "bin", "obj"} for part in path.parts)
+    )
 
 
 def parse_path(path: Path, relative_path: str | None = None) -> list[Symbol]:
@@ -113,18 +133,45 @@ def _parse_python(path: Path, relative: str) -> list[Symbol]:
     visit(tree)
     return result
 
+
 def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
     patterns: list[tuple[str, str, re.Pattern[str]]] = []
     if language == "typescript":
         patterns = [
-            ("import", "import", re.compile(r"^\s*import\s+(?:type\s+)?(?:.+?from\s+)?[\"']([^\"']+)[\"']")),
-            ("namespace", "namespace", re.compile(r"^\s*(?:export\s+)?(?:declare\s+)?namespace\s+(\w+)")),
-            ("interface", "interface", re.compile(r"^\s*(?:export\s+)?interface\s+(\w+)")),
-            ("class", "class", re.compile(r"^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)")),
-            ("function", "function", re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)")),
-            ("function", "function", re.compile(r"^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\(")),
+            (
+                "import",
+                "import",
+                re.compile(
+                    r"^\s*import\s+(?:type\s+)?(?:.+?from\s+)?[\"']([^\"']+)[\"']"
+                ),
+            ),
+            (
+                "namespace",
+                "namespace",
+                re.compile(r"^\s*(?:export\s+)?(?:declare\s+)?namespace\s+(\w+)"),
+            ),
+            (
+                "interface",
+                "interface",
+                re.compile(r"^\s*(?:export\s+)?interface\s+(\w+)"),
+            ),
+            (
+                "class",
+                "class",
+                re.compile(r"^\s*(?:export\s+)?(?:abstract\s+)?class\s+(\w+)"),
+            ),
+            (
+                "function",
+                "function",
+                re.compile(r"^\s*(?:export\s+)?(?:async\s+)?function\s+(\w+)"),
+            ),
+            (
+                "function",
+                "function",
+                re.compile(r"^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\("),
+            ),
         ]
     elif language == "rust":
         patterns = [
@@ -133,16 +180,100 @@ def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
             ("struct", "struct", re.compile(r"^\s*(?:pub\s+)?struct\s+(\w+)")),
             ("trait", "trait", re.compile(r"^\s*(?:pub\s+)?trait\s+(\w+)")),
             ("enum", "enum", re.compile(r"^\s*(?:pub\s+)?enum\s+(\w+)")),
-            ("function", "function", re.compile(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)")),
+            (
+                "function",
+                "function",
+                re.compile(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)"),
+            ),
         ]
     else:
         patterns = [
-            ("using", "import", re.compile(r"^\s*using\s+(?:static\s+)?([^;=]+)")),
-            ("namespace", "namespace", re.compile(r"^\s*namespace\s+([\w.]+)")),
-            ("interface", "interface", re.compile(r"^\s*(?:public\s+)?interface\s+(\w+)")),
-            ("class", "class", re.compile(r"^\s*(?:public\s+|internal\s+|private\s+)?(?:abstract\s+)?class\s+(\w+)")),
-            ("struct", "struct", re.compile(r"^\s*(?:public\s+)?struct\s+(\w+)")),
-            ("function", "function", re.compile(r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+)?(?:static\s+)?[\w<>?\[\]]+\s+(\w+)\s*\([^;]*\)")),
+            ("attribute", "attribute", re.compile(r"^\s*\[\s*([\w.]+)")),
+            (
+                "using",
+                "import",
+                re.compile(r"^\s*(?:global\s+)?using\s+(?:static\s+)?([^;=]+)"),
+            ),
+            (
+                "namespace",
+                "namespace",
+                re.compile(r"^\s*(?:file\s+)?namespace\s+([\w.]+)"),
+            ),
+            (
+                "delegate",
+                "delegate",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+)?delegate\s+[^\s]+\s+(\w+)"
+                ),
+            ),
+            (
+                "interface",
+                "interface",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*interface\s+(\w+)"
+                ),
+            ),
+            (
+                "record",
+                "record",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*(?:record\s+(?:class\s+|struct\s+)?)(\w+)"
+                ),
+            ),
+            (
+                "class",
+                "class",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*(?:abstract\s+)?class\s+(\w+)"
+                ),
+            ),
+            (
+                "struct",
+                "struct",
+                re.compile(
+                    r"^\s*(?:public\s+|internal\s+|private\s+|partial\s+)*struct\s+(\w+)"
+                ),
+            ),
+            (
+                "enum",
+                "enum",
+                re.compile(r"^\s*(?:public\s+|internal\s+|private\s+)*enum\s+(\w+)"),
+            ),
+            (
+                "event",
+                "event",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+)*event\s+[^\s]+\s+(\w+)"
+                ),
+            ),
+            (
+                "property",
+                "property",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+|virtual\s+|override\s+|required\s+)*[\w<>?,.\[\]]+\s+(\w+)\s*\{\s*(?:get|set|init)"
+                ),
+            ),
+            (
+                "constructor",
+                "constructor",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+|static\s+|async\s+)*([A-Z]\w*)\s*\([^;]*\)"
+                ),
+            ),
+            (
+                "method",
+                "function",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|internal\s+|protected\s+|static\s+|async\s+|virtual\s+|override\s+|partial\s+)*[\w<>?,.\[\]]+\s+(\w+)\s*\([^;]*\)"
+                ),
+            ),
+            (
+                "field",
+                "field",
+                re.compile(
+                    r"^\s*(?:public\s+|private\s+|protected\s+|static\s+|readonly\s+|const\s+)+[\w<>?,.\[\]]+\s+(\w+)\s*(?:=|;)"
+                ),
+            ),
         ]
     result: list[Symbol] = []
     for index, line in enumerate(lines, 1):

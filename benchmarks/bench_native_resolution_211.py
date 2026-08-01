@@ -19,7 +19,9 @@ SCHEMA = "simplicio.fast-native-resolution-benchmark/v1"
 def run(repetitions: int = 10) -> dict[str, object]:
     if repetitions < 10:
         raise ValueError("at least ten repetitions are required")
-    with tempfile.TemporaryDirectory(prefix="simplicio-fast-native-bench-") as directory:
+    with tempfile.TemporaryDirectory(
+        prefix="simplicio-fast-native-bench-"
+    ) as directory:
         root = Path(directory)
         bundle = root / "artifacts/linux-x86_64" / ABI.replace("/", "_")
         bundle.mkdir(parents=True)

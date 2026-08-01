@@ -6,7 +6,6 @@ import argparse
 import ast
 import json
 from pathlib import Path
-import re
 import subprocess
 import tomllib
 from typing import Any
@@ -16,7 +15,9 @@ SCHEMA = "simplicio.fast.release-integrity/v1"
 POLICY_SCHEMA = "simplicio.fast.release-policy/v1"
 
 
-def _check(checks: list[dict[str, Any]], name: str, passed: bool, **detail: Any) -> None:
+def _check(
+    checks: list[dict[str, Any]], name: str, passed: bool, **detail: Any
+) -> None:
     checks.append({"name": name, "status": "pass" if passed else "fail", **detail})
 
 
@@ -28,7 +29,10 @@ def _package_version(init_path: Path) -> str | None:
     for node in tree.body:
         if (
             isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Name) and target.id == "__version__" for target in node.targets)
+            and any(
+                isinstance(target, ast.Name) and target.id == "__version__"
+                for target in node.targets
+            )
             and isinstance(node.value, ast.Constant)
             and isinstance(node.value.value, str)
         ):
@@ -59,13 +63,17 @@ def evaluate(root: Path) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     try:
         policy = json.loads(
-            (root / "src/simplicio_fast/release_policy.json").read_text(encoding="utf-8")
+            (root / "src/simplicio_fast/release_policy.json").read_text(
+                encoding="utf-8"
+            )
         )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         policy = {}
     _check(checks, "policy_schema", policy.get("schema") == POLICY_SCHEMA)
     try:
-        root_policy = json.loads((root / "release-policy.json").read_text(encoding="utf-8"))
+        root_policy = json.loads(
+            (root / "release-policy.json").read_text(encoding="utf-8")
+        )
     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
         root_policy = None
     _check(checks, "policy_mirror", root_policy == policy)
@@ -77,7 +85,9 @@ def evaluate(root: Path) -> dict[str, Any]:
     )
 
     try:
-        project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]
+        project = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))[
+            "project"
+        ]
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError, KeyError, TypeError):
         project = {}
     version = project.get("version")
@@ -86,7 +96,11 @@ def evaluate(root: Path) -> dict[str, Any]:
     optional = project.get("optional-dependencies")
     optional = optional if isinstance(optional, dict) else {}
     integration_extra = policy.get("integration_extra")
-    integrated_dependencies = optional.get(integration_extra, []) if isinstance(integration_extra, str) else []
+    integrated_dependencies = (
+        optional.get(integration_extra, [])
+        if isinstance(integration_extra, str)
+        else []
+    )
     integrated_dependencies = (
         integrated_dependencies if isinstance(integrated_dependencies, list) else []
     )
@@ -100,7 +114,9 @@ def evaluate(root: Path) -> dict[str, Any]:
     )
     try:
         rust_core = tomllib.loads(
-            (root / "rust" / "simplicio-fast-core" / "Cargo.toml").read_text(encoding="utf-8")
+            (root / "rust" / "simplicio-fast-core" / "Cargo.toml").read_text(
+                encoding="utf-8"
+            )
         )["package"]["version"]
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError, KeyError, TypeError):
         rust_core = None
@@ -157,7 +173,9 @@ def evaluate(root: Path) -> dict[str, Any]:
             pass
     support_doc = ""
     try:
-        support_doc = (root / "docs/native-backend-support.md").read_text(encoding="utf-8")
+        support_doc = (root / "docs/native-backend-support.md").read_text(
+            encoding="utf-8"
+        )
     except (OSError, UnicodeDecodeError):
         pass
     _check(
@@ -174,7 +192,9 @@ def evaluate(root: Path) -> dict[str, Any]:
     _check(
         checks,
         "native_platform_matrix",
-        bool(workflow) and bool(supported) and all(item in workflow for item in supported),
+        bool(workflow)
+        and bool(supported)
+        and all(item in workflow for item in supported),
         expected=supported,
     )
     _check(

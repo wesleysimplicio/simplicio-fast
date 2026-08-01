@@ -22,13 +22,23 @@ class DeliveryEngineTest(unittest.TestCase):
     def test_prepare_emits_receipt_and_second_attempt_hits_l0_cache(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "service.py").write_text("def create_user(name):\n    return name\n", encoding="utf-8")
+            (root / "service.py").write_text(
+                "def create_user(name):\n    return name\n", encoding="utf-8"
+            )
             snapshot = root / "project.sfast"
             build_snapshot(root, snapshot)
             engine = DeliveryEngine(root, snapshot)
             selection = select_engine("python").receipt()
-            first = engine.prepare("understand create_user and validate tests", profile="loop-standalone", engine_receipt=selection)
-            second = engine.prepare("understand create_user and validate tests", profile="loop-standalone", engine_receipt=selection)
+            first = engine.prepare(
+                "understand create_user and validate tests",
+                profile="loop-standalone",
+                engine_receipt=selection,
+            )
+            second = engine.prepare(
+                "understand create_user and validate tests",
+                profile="loop-standalone",
+                engine_receipt=selection,
+            )
             self.assertEqual("simplicio.fast.delivery-engine/v1", first["schema"])
             self.assertEqual("miss", first["cache"]["L0_attempt"])
             self.assertEqual("hit", second["cache"]["L0_attempt"])
@@ -37,15 +47,25 @@ class DeliveryEngineTest(unittest.TestCase):
     def test_cache_stats_reports_disposable_cache_size(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "service.py").write_text("def ping():\n    return True\n", encoding="utf-8")
+            (root / "service.py").write_text(
+                "def ping():\n    return True\n", encoding="utf-8"
+            )
             snapshot = root / "project.sfast"
             build_snapshot(root, snapshot)
             engine = DeliveryEngine(root, snapshot)
             self.assertEqual(
-                {"schema": "simplicio.fast.delivery-cache/v1", "entries": 0, "bytes": 0},
+                {
+                    "schema": "simplicio.fast.delivery-cache/v1",
+                    "entries": 0,
+                    "bytes": 0,
+                },
                 engine.cache_stats(),
             )
-            engine.prepare("validate ping", profile="loop-standalone", engine_receipt=select_engine("python").receipt())
+            engine.prepare(
+                "validate ping",
+                profile="loop-standalone",
+                engine_receipt=select_engine("python").receipt(),
+            )
             stats = engine.cache_stats()
             self.assertEqual("simplicio.fast.delivery-cache/v1", stats["schema"])
             self.assertEqual(1, stats["entries"])
@@ -54,7 +74,9 @@ class DeliveryEngineTest(unittest.TestCase):
     def test_full_profile_records_runtime_authority_without_mutating(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "service.py").write_text("def ping():\n    return True\n", encoding="utf-8")
+            (root / "service.py").write_text(
+                "def ping():\n    return True\n", encoding="utf-8"
+            )
             snapshot = root / "project.sfast"
             build_snapshot(root, snapshot)
             receipt = DeliveryEngine(root, snapshot).prepare(
@@ -62,20 +84,37 @@ class DeliveryEngineTest(unittest.TestCase):
                 profile="full",
                 engine_receipt=select_engine("python").receipt(),
             )
-            self.assertEqual("simplicio-runtime", receipt["ownership"]["full_effect_authority"])
+            self.assertEqual(
+                "simplicio-runtime", receipt["ownership"]["full_effect_authority"]
+            )
             self.assertFalse(receipt["ownership"]["mutation_applied"])
 
     def test_cli_delivery_is_a_system_receipt_surface(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "service.py").write_text("def ping():\n    return True\n", encoding="utf-8")
+            (root / "service.py").write_text(
+                "def ping():\n    return True\n", encoding="utf-8"
+            )
             snapshot = root / "project.sfast"
             build_snapshot(root, snapshot)
             output = io.StringIO()
-            argv = ["simplicio-fast", "delivery", "validate ping", "--root", str(root), "--snapshot", str(snapshot), "--fast-engine", "python"]
+            argv = [
+                "simplicio-fast",
+                "delivery",
+                "validate ping",
+                "--root",
+                str(root),
+                "--snapshot",
+                str(snapshot),
+                "--fast-engine",
+                "python",
+            ]
             with patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
                 main()
-            self.assertEqual("simplicio.fast.delivery-engine/v1", json.loads(output.getvalue())["schema"])
+            self.assertEqual(
+                "simplicio.fast.delivery-engine/v1",
+                json.loads(output.getvalue())["schema"],
+            )
 
     def test_loop_delivery_dry_run_write_and_idempotent_retry(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -91,22 +130,44 @@ class DeliveryEngineTest(unittest.TestCase):
                     {
                         "path": "service.py",
                         "expected_sha256": expected,
-                        "replacements": [{"start_line": 2, "end_line": 2, "content": "    return False"}],
+                        "replacements": [
+                            {
+                                "start_line": 2,
+                                "end_line": 2,
+                                "content": "    return False",
+                            }
+                        ],
                     }
                 ],
             }
             selection = select_engine("python").receipt()
             engine = DeliveryEngine(root, snapshot)
-            with patch("simplicio_fast.processor.run_dev_cli_changeset", return_value=None):
-                dry_run = engine.deliver(changeset, profile="loop-standalone", engine_receipt=selection)
+            with patch(
+                "simplicio_fast.processor.run_dev_cli_changeset", return_value=None
+            ):
+                dry_run = engine.deliver(
+                    changeset, profile="loop-standalone", engine_receipt=selection
+                )
                 self.assertEqual("dry_run", dry_run["status"])
                 self.assertTrue(dry_run["apply"]["no_write_proof"])
                 self.assertIn("return True", source.read_text(encoding="utf-8"))
-                applied = engine.deliver(changeset, profile="loop-standalone", engine_receipt=selection, write=True)
+                applied = engine.deliver(
+                    changeset,
+                    profile="loop-standalone",
+                    engine_receipt=selection,
+                    write=True,
+                )
             self.assertEqual("applied", applied["status"])
             self.assertTrue(applied["ownership"]["mutation_applied"])
-            self.assertEqual("    return False", source.read_text(encoding="utf-8").splitlines()[1])
-            retry = engine.deliver(changeset, profile="loop-standalone", engine_receipt=selection, write=True)
+            self.assertEqual(
+                "    return False", source.read_text(encoding="utf-8").splitlines()[1]
+            )
+            retry = engine.deliver(
+                changeset,
+                profile="loop-standalone",
+                engine_receipt=selection,
+                write=True,
+            )
             self.assertEqual("hit", retry["cache"]["L0_delivery"])
             self.assertTrue(retry["idempotency"]["replayed"])
 
@@ -127,7 +188,13 @@ class DeliveryEngineTest(unittest.TestCase):
                             {
                                 "path": "service.py",
                                 "expected_sha256": expected,
-                                "replacements": [{"start_line": 2, "end_line": 2, "content": "    return False"}],
+                                "replacements": [
+                                    {
+                                        "start_line": 2,
+                                        "end_line": 2,
+                                        "content": "    return False",
+                                    }
+                                ],
                             }
                         ],
                     }
@@ -149,8 +216,13 @@ class DeliveryEngineTest(unittest.TestCase):
                 "--fast-engine",
                 "python",
             ]
-            with patch("simplicio_fast.processor.run_dev_cli_changeset", return_value=None):
-                with patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
+            with patch(
+                "simplicio_fast.processor.run_dev_cli_changeset", return_value=None
+            ):
+                with (
+                    patch.object(sys, "argv", argv),
+                    contextlib.redirect_stdout(output),
+                ):
                     main()
             payload = json.loads(output.getvalue())
             self.assertEqual("applied", payload["status"])
@@ -166,20 +238,48 @@ class DeliveryEngineTest(unittest.TestCase):
             expected = hashlib.sha256(source.read_bytes()).hexdigest()
             changeset = {
                 "schema": "simplicio.fast.changeset/v2",
-                "changes": [{"path": "service.py", "expected_sha256": expected, "replacements": [{"start_line": 2, "end_line": 2, "content": "    return False"}]}],
+                "changes": [
+                    {
+                        "path": "service.py",
+                        "expected_sha256": expected,
+                        "replacements": [
+                            {
+                                "start_line": 2,
+                                "end_line": 2,
+                                "content": "    return False",
+                            }
+                        ],
+                    }
+                ],
             }
             receipt = DeliveryEngine(root, snapshot).deliver(
-                changeset, profile="full", engine_receipt=select_engine("python").receipt(), write=True
+                changeset,
+                profile="full",
+                engine_receipt=select_engine("python").receipt(),
+                write=True,
             )
             self.assertEqual("blocked", receipt["status"])
             self.assertIn("runtime_authorization_required", receipt["reason_codes"])
             self.assertIn("return True", source.read_text(encoding="utf-8"))
 
-    def test_full_write_delegates_to_coordinator_authorized_runtime_transaction(self) -> None:
-        from simplicio.plan_compiler.authority import EffectAuthorization, build_change_proposal
+    def test_full_write_delegates_to_coordinator_authorized_runtime_transaction(
+        self,
+    ) -> None:
+        from simplicio.plan_compiler.authority import (
+            EffectAuthorization,
+            build_change_proposal,
+        )
         from simplicio.plan_compiler.effect_sink import EffectDispatchContext
-        from simplicio.plan_compiler.models import EffectPlan, PlanDAG, PlanNode, VerificationPlan
-        from simplicio.plan_compiler.runtime_effect_sink import OfflineRuntimeTransport, RuntimeEffectSink
+        from simplicio.plan_compiler.models import (
+            EffectPlan,
+            PlanDAG,
+            PlanNode,
+            VerificationPlan,
+        )
+        from simplicio.plan_compiler.runtime_effect_sink import (
+            OfflineRuntimeTransport,
+            RuntimeEffectSink,
+        )
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -204,7 +304,9 @@ class DeliveryEngineTest(unittest.TestCase):
                         "end_line": 2,
                         "text": "    return False\n",
                         "file_sha256": normalized_source_hash,
-                        "range_sha256": hashlib.sha256(range_text.encode("utf-8")).hexdigest(),
+                        "range_sha256": hashlib.sha256(
+                            range_text.encode("utf-8")
+                        ).hexdigest(),
                     }
                 ],
             }
@@ -273,7 +375,9 @@ class DeliveryEngineTest(unittest.TestCase):
                 now=time.time(),
                 ttl_s=60.0,
             )
-            context = EffectDispatchContext(**{**context.__dict__, "authorization": authorization})
+            context = EffectDispatchContext(
+                **{**context.__dict__, "authorization": authorization}
+            )
             transaction = RuntimeEffectSink(
                 OfflineRuntimeTransport(root=root), root=root
             )._transaction(effect, context)
@@ -284,13 +388,19 @@ class DeliveryEngineTest(unittest.TestCase):
                         "path": "service.py",
                         "expected_sha256": expected,
                         "replacements": [
-                            {"start_line": 2, "end_line": 2, "content": "    return False"}
+                            {
+                                "start_line": 2,
+                                "end_line": 2,
+                                "content": "    return False",
+                            }
                         ],
                     }
                 ],
             }
             engine = DeliveryEngine(root, snapshot)
-            with patch.dict(os.environ, {"SIMPLICIO_RUNTIME_OFFLINE": "1"}, clear=False):
+            with patch.dict(
+                os.environ, {"SIMPLICIO_RUNTIME_OFFLINE": "1"}, clear=False
+            ):
                 receipt = engine.deliver(
                     changeset,
                     profile="full",
@@ -313,7 +423,13 @@ class DeliveryEngineTest(unittest.TestCase):
             expected = hashlib.sha256(source.read_bytes()).hexdigest()
             changeset = {
                 "schema": "simplicio.fast.changeset/v2",
-                "changes": [{"path": "service.py", "expected_sha256": expected, "replacements": []}],
+                "changes": [
+                    {
+                        "path": "service.py",
+                        "expected_sha256": expected,
+                        "replacements": [],
+                    }
+                ],
             }
             receipt = DeliveryEngine(root, snapshot).deliver(
                 changeset,

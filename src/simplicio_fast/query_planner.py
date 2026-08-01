@@ -107,7 +107,9 @@ def _request_digest(
         "max_bytes": max_bytes,
         "max_tokens": max_tokens,
     }
-    encoded = json.dumps(request, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        request, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -120,7 +122,9 @@ def _intersection(*values: list[int]) -> list[int]:
     return sorted(result)
 
 
-def _causal_prefetch(snapshot: Snapshot, indices: list[int], max_items: int) -> tuple[str, ...]:
+def _causal_prefetch(
+    snapshot: Snapshot, indices: list[int], max_items: int
+) -> tuple[str, ...]:
     if not indices or max_items < 1:
         return ()
     origins = {snapshot._symbol_at(index).qualified_name for index in indices}
@@ -179,7 +183,9 @@ def plan_query(
     candidate_indices: list[int] = []
     if snapshot.format_version == 1:
         selected = "legacy-linear-scan"
-        candidate_records = snapshot.symbol_count if operation != "impact" else snapshot.relation_count
+        candidate_records = (
+            snapshot.symbol_count if operation != "impact" else snapshot.relation_count
+        )
         reason = "legacy_snapshot_has_no_direct_indexes"
     elif operation == "impact":
         selected = "relation-scan"
@@ -196,16 +202,31 @@ def plan_query(
         elif prefix:
             selected = "name-prefix"
             filters.append(
-                [index for name, values in indexes["names"].items() if name.startswith(term.casefold()) for index in values]
+                [
+                    index
+                    for name, values in indexes["names"].items()
+                    if name.startswith(term.casefold())
+                    for index in values
+                ]
             )
             reason = "prefix_index_scan"
         else:
             selected = "name-substring"
             filters.append(
-                [index for name, values in indexes["names"].items() if term.casefold() in name for index in values]
+                [
+                    index
+                    for name, values in indexes["names"].items()
+                    if term.casefold() in name
+                    for index in values
+                ]
             )
             filters.append(
-                [index for name, values in indexes["exact"].items() if term.casefold() in name for index in values]
+                [
+                    index
+                    for name, values in indexes["exact"].items()
+                    if term.casefold() in name
+                    for index in values
+                ]
             )
             reason = "bounded_name_indexes"
         if path is not None:
@@ -227,7 +248,9 @@ def plan_query(
         max_results=max_results,
         max_bytes=max_bytes,
         max_tokens=max_tokens,
-        prefetch=_causal_prefetch(snapshot, candidate_indices, min(max_results, 8)) if operation in {"query", "search", "context"} else (),
+        prefetch=_causal_prefetch(snapshot, candidate_indices, min(max_results, 8))
+        if operation in {"query", "search", "context"}
+        else (),
         reason=reason,
         request_digest=request_digest,
     )

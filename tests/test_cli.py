@@ -9,7 +9,13 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from simplicio_fast.cli import DEFAULT_BUILD_TIMEOUT_SECONDS, DEFAULT_SNAPSHOT, build_parser, main, source_commit
+from simplicio_fast.cli import (
+    DEFAULT_BUILD_TIMEOUT_SECONDS,
+    DEFAULT_SNAPSHOT,
+    build_parser,
+    main,
+    source_commit,
+)
 from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
@@ -27,7 +33,10 @@ class ContextProvenanceTest(unittest.TestCase):
 
     def invoke(self, *args: str) -> tuple[int, dict[str, object]]:
         output = io.StringIO()
-        with patch.object(sys, "argv", ["simplicio-fast", *args]), contextlib.redirect_stdout(output):
+        with (
+            patch.object(sys, "argv", ["simplicio-fast", *args]),
+            contextlib.redirect_stdout(output),
+        ):
             try:
                 main()
             except SystemExit as error:
@@ -37,23 +46,59 @@ class ContextProvenanceTest(unittest.TestCase):
         return exit_code, json.loads(output.getvalue())
 
     def make_git_repo(self, root: Path) -> str:
-        subprocess.run(["git", "init", "-b", "main", str(root)], check=True, capture_output=True, close_fds=True)
-        subprocess.run(["git", "-C", str(root), "config", "user.email", "tests@example.invalid"], check=True, close_fds=True)
-        subprocess.run(["git", "-C", str(root), "config", "user.name", "Simplicio Tests"], check=True, close_fds=True)
-        subprocess.run(["git", "-C", str(root), "add", "sample.py"], check=True, close_fds=True)
-        subprocess.run(["git", "-C", str(root), "commit", "-m", "fixture"], check=True, capture_output=True, close_fds=True)
+        subprocess.run(
+            ["git", "init", "-b", "main", str(root)],
+            check=True,
+            capture_output=True,
+            close_fds=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(root), "config", "user.email", "tests@example.invalid"],
+            check=True,
+            close_fds=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(root), "config", "user.name", "Simplicio Tests"],
+            check=True,
+            close_fds=True,
+        )
+        subprocess.run(
+            ["git", "-C", str(root), "add", "sample.py"], check=True, close_fds=True
+        )
+        subprocess.run(
+            ["git", "-C", str(root), "commit", "-m", "fixture"],
+            check=True,
+            capture_output=True,
+            close_fds=True,
+        )
         return subprocess.run(
-            ["git", "-C", str(root), "rev-parse", "HEAD"], check=True, capture_output=True, text=True, close_fds=True
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            close_fds=True,
         ).stdout.strip()
 
     def test_git_receipt_is_deterministic_and_byte_exact(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / "sample.py").write_text("class User:\n    def save(self):\n        return True\n", encoding="utf-8")
+            (root / "sample.py").write_text(
+                "class User:\n    def save(self):\n        return True\n",
+                encoding="utf-8",
+            )
             commit = self.make_git_repo(root)
             snapshot = root / "snapshot.sfast"
             build_snapshot(root, snapshot)
-            command = ("context", "save", "--root", str(root), "--snapshot", str(snapshot), "--max-tokens", "80")
+            command = (
+                "context",
+                "save",
+                "--root",
+                str(root),
+                "--snapshot",
+                str(snapshot),
+                "--max-tokens",
+                "80",
+            )
 
             first_code, first = self.invoke(*command)
             second_code, second = self.invoke(*command)
@@ -72,12 +117,20 @@ class ContextProvenanceTest(unittest.TestCase):
             self.assertEqual(first["limits"], receipt["limits"])
             self.assertEqual(len(first["spans"]), receipt["span_count"])
 
-            (root / "sample.py").write_text("class User:\n    def save(self):\n        return False\n", encoding="utf-8")
+            (root / "sample.py").write_text(
+                "class User:\n    def save(self):\n        return False\n",
+                encoding="utf-8",
+            )
             build_snapshot(root, snapshot)
             changed_code, changed = self.invoke(*command)
             self.assertEqual(0, changed_code)
-            self.assertNotEqual(receipt["snapshot_sha256"], changed["provenance"]["snapshot_sha256"])
-            self.assertNotEqual(receipt["snapshot_generation"], changed["provenance"]["snapshot_generation"])
+            self.assertNotEqual(
+                receipt["snapshot_sha256"], changed["provenance"]["snapshot_sha256"]
+            )
+            self.assertNotEqual(
+                receipt["snapshot_generation"],
+                changed["provenance"]["snapshot_generation"],
+            )
 
     def test_emit_is_safe_for_legacy_windows_console_encoding(self) -> None:
         from simplicio_fast.cli import emit
@@ -99,13 +152,19 @@ class ContextProvenanceTest(unittest.TestCase):
             source.write_text("def save():\n    return True\n", encoding="utf-8")
             snapshot = root / "snapshot.sfast"
             build_snapshot(root, snapshot)
-            code, payload = self.invoke("context", "save", "--root", str(root), "--snapshot", str(snapshot))
+            code, payload = self.invoke(
+                "context", "save", "--root", str(root), "--snapshot", str(snapshot)
+            )
             self.assertEqual(0, code)
             self.assertIsNone(payload["provenance"]["source_commit"])
-            self.assertEqual("not_a_git_checkout", payload["provenance"]["source_commit_reason"])
+            self.assertEqual(
+                "not_a_git_checkout", payload["provenance"]["source_commit_reason"]
+            )
 
             source.write_text("def save():\n    return False\n", encoding="utf-8")
-            code, payload = self.invoke("context", "save", "--root", str(root), "--snapshot", str(snapshot))
+            code, payload = self.invoke(
+                "context", "save", "--root", str(root), "--snapshot", str(snapshot)
+            )
             self.assertEqual(2, code)
             self.assertEqual("simplicio.fast.error/v1", payload["schema"])
             self.assertEqual("StaleSnapshotError", payload["error"])
@@ -135,7 +194,9 @@ class ContextProvenanceTest(unittest.TestCase):
             )
             self.assertEqual(0, code)
             self.assertEqual("simplicio.fast-navigation/v1", payload["schema"])
-            self.assertEqual(["target"], [item["qualified_name"] for item in payload["items"]])
+            self.assertEqual(
+                ["target"], [item["qualified_name"] for item in payload["items"]]
+            )
             self.assertEqual(caller.symbol_id, payload["provenance"]["handle"])
 
     def test_corrupt_snapshot_fails_closed_without_receipt(self) -> None:
@@ -146,7 +207,9 @@ class ContextProvenanceTest(unittest.TestCase):
             snapshot = root / "snapshot.sfast"
             build_snapshot(root, snapshot)
             snapshot.write_bytes(snapshot.read_bytes()[:-1])
-            code, payload = self.invoke("context", "save", "--root", str(root), "--snapshot", str(snapshot))
+            code, payload = self.invoke(
+                "context", "save", "--root", str(root), "--snapshot", str(snapshot)
+            )
             self.assertEqual(2, code)
             self.assertEqual("simplicio.fast.error/v1", payload["schema"])
             self.assertNotIn("provenance", payload)
@@ -171,7 +234,9 @@ class ContextProvenanceTest(unittest.TestCase):
                 self.assertEqual(0, code)
                 self.assertTrue(payload["schema"].startswith("simplicio.fast."))
 
-        with patch("simplicio_fast.cli.subprocess.run", side_effect=OSError("git unavailable")):
+        with patch(
+            "simplicio_fast.cli.subprocess.run", side_effect=OSError("git unavailable")
+        ):
             self.assertEqual((None, "git_unavailable"), source_commit(Path(".")))
 
     def test_build_rejects_oversized_source_with_structured_error(self) -> None:
@@ -197,8 +262,14 @@ class ContextProvenanceTest(unittest.TestCase):
 
             code, doctor = self.invoke("doctor", "--snapshot", str(snapshot))
             self.assertEqual(1, code)
-            integrity = next(item for item in doctor["checks"] if item["name"] == "snapshot_integrity")
-            self.assertEqual("snapshot_corrupt_rebuild", integrity["detail"]["recovery_code"])
+            integrity = next(
+                item
+                for item in doctor["checks"]
+                if item["name"] == "snapshot_integrity"
+            )
+            self.assertEqual(
+                "snapshot_corrupt_rebuild", integrity["detail"]["recovery_code"]
+            )
 
             code, refreshed = self.invoke(
                 "refresh", str(root), "--output", str(snapshot), "--timeout", "30"
@@ -215,7 +286,9 @@ class ContextProvenanceTest(unittest.TestCase):
             (root / "one.py").write_text("def one():\n    return True\n")
             (root / "two.py").write_text("def two():\n    return True\n")
             snapshot = root / "project.sfast"
-            self.assertEqual(0, self.invoke("refresh", str(root), "-o", str(snapshot))[0])
+            self.assertEqual(
+                0, self.invoke("refresh", str(root), "-o", str(snapshot))[0]
+            )
             before = snapshot.read_bytes()
 
             code, payload = self.invoke(

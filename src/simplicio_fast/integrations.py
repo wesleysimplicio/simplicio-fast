@@ -206,7 +206,9 @@ def run_runtime_effect_transaction(
     if not isinstance(validation_payload, list) or not all(
         isinstance(item, dict) for item in validation_payload
     ):
-        raise ValueError("Runtime transaction validation_plan must be a list of objects")
+        raise ValueError(
+            "Runtime transaction validation_plan must be a list of objects"
+        )
 
     from simplicio.plan_compiler.authority import EffectAuthorization
     from simplicio.plan_compiler.effect_sink import EffectDispatchContext
@@ -215,7 +217,9 @@ def run_runtime_effect_transaction(
 
     effect = EffectPlan.from_dict(effect_payload)
     plan = PlanDAG.from_dict(plan_payload)
-    node = next((item for item in plan.nodes if item.node_id == effect.plan_node_id), None)
+    node = next(
+        (item for item in plan.nodes if item.node_id == effect.plan_node_id), None
+    )
     if node is None:
         raise ValueError("Runtime transaction effect references an unknown plan node")
     verifications = [VerificationPlan.from_dict(item) for item in validation_payload]
@@ -229,7 +233,9 @@ def run_runtime_effect_transaction(
     if transaction.get("write_set") != node.write_set:
         raise ValueError("Runtime transaction write_set does not match plan node")
     if transaction.get("acceptance_criteria_refs") != node.acceptance_criteria_refs:
-        raise ValueError("Runtime transaction acceptance criteria do not match plan node")
+        raise ValueError(
+            "Runtime transaction acceptance criteria do not match plan node"
+        )
     plan.validate(effects=[effect], verifications=verifications)
 
     context = EffectDispatchContext(

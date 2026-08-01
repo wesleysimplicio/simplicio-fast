@@ -65,13 +65,19 @@ def run(*, files: int = 2400, repetitions: int = 5) -> dict:
             fast_samples.append((time.perf_counter() - start) * 1000)
             phase_samples.append(candidate.phase_timings_ms)
             if candidate.parsed_files != 1 or candidate.reused_files != files - 1:
-                raise RuntimeError("incremental receipt did not preserve one-change semantics")
+                raise RuntimeError(
+                    "incremental receipt did not preserve one-change semantics"
+                )
         baseline_median = statistics.median(baseline_samples)
         fast_median = statistics.median(fast_samples)
         return {
             "schema": SCHEMA,
             "status": "pass",
-            "workload": {"files": files, "changed_files": 1, "repetitions": repetitions},
+            "workload": {
+                "files": files,
+                "changed_files": 1,
+                "repetitions": repetitions,
+            },
             "environment": {
                 "python": platform.python_version(),
                 "platform": platform.platform(),

@@ -25,14 +25,21 @@ class IpcFrameError(ValueError):
         self.reason_code = reason_code
 
 
-def _positive_limits(max_header_bytes: int, max_payload_bytes: int, max_frame_bytes: int) -> None:
-    if any(not isinstance(value, int) or value < 1 for value in (max_header_bytes, max_payload_bytes, max_frame_bytes)):
+def _positive_limits(
+    max_header_bytes: int, max_payload_bytes: int, max_frame_bytes: int
+) -> None:
+    if any(
+        not isinstance(value, int) or value < 1
+        for value in (max_header_bytes, max_payload_bytes, max_frame_bytes)
+    ):
         raise ValueError("frame limits must be positive integers")
 
 
 def _text(value: object, field: str, limit: int) -> str:
     if not isinstance(value, str) or not value or len(value.encode("utf-8")) > limit:
-        raise IpcFrameError("invalid_metadata", f"{field} must be non-empty and <= {limit} bytes")
+        raise IpcFrameError(
+            "invalid_metadata", f"{field} must be non-empty and <= {limit} bytes"
+        )
     return value
 
 
@@ -67,13 +74,17 @@ class IpcFrame:
             "request_id": self.request_id,
             "schema": SCHEMA,
         }
-        header = json.dumps(metadata, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+        header = json.dumps(
+            metadata, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
         if len(header) > max_header_bytes:
             raise IpcFrameError("header_too_large", "metadata exceeds configured bound")
         total = HEADER.size + len(header) + len(self.payload)
         if total > max_frame_bytes:
             raise IpcFrameError("frame_too_large", "frame exceeds configured bound")
-        return HEADER.pack(MAGIC, len(header), len(self.payload)) + header + self.payload
+        return (
+            HEADER.pack(MAGIC, len(header), len(self.payload)) + header + self.payload
+        )
 
 
 def decode_frame(
@@ -103,9 +114,13 @@ def decode_frame(
     if len(data) > expected:
         raise IpcFrameError("trailing_bytes", "frame contains trailing bytes")
     try:
-        metadata = json.loads(data[HEADER.size : HEADER.size + header_length].decode("utf-8"))
+        metadata = json.loads(
+            data[HEADER.size : HEADER.size + header_length].decode("utf-8")
+        )
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise IpcFrameError("invalid_header", "frame metadata is not valid UTF-8 JSON") from error
+        raise IpcFrameError(
+            "invalid_header", "frame metadata is not valid UTF-8 JSON"
+        ) from error
     if not isinstance(metadata, dict) or set(metadata) != _METADATA_KEYS:
         raise IpcFrameError("invalid_metadata", "frame metadata keys are invalid")
     if metadata.get("schema") != SCHEMA:
@@ -113,7 +128,9 @@ def decode_frame(
     payload_start = HEADER.size + header_length
     payload = data[payload_start:expected]
     digest = metadata.get("payload_sha256")
-    if not isinstance(digest, str) or not hmac.compare_digest(digest, hashlib.sha256(payload).hexdigest()):
+    if not isinstance(digest, str) or not hmac.compare_digest(
+        digest, hashlib.sha256(payload).hexdigest()
+    ):
         raise IpcFrameError("payload_digest_mismatch", "payload digest does not match")
     return IpcFrame(
         request_id=_text(metadata.get("request_id"), "request_id", 128),
@@ -153,9 +170,13 @@ class IpcFrameDecoder:
             if magic != MAGIC:
                 raise IpcFrameError("invalid_magic", "frame magic is not supported")
             if header_length > self.max_header_bytes:
-                raise IpcFrameError("header_too_large", "metadata exceeds configured bound")
+                raise IpcFrameError(
+                    "header_too_large", "metadata exceeds configured bound"
+                )
             if payload_length > self.max_payload_bytes:
-                raise IpcFrameError("payload_too_large", "payload exceeds configured bound")
+                raise IpcFrameError(
+                    "payload_too_large", "payload exceeds configured bound"
+                )
             expected = HEADER.size + header_length + payload_length
             if expected > self.max_frame_bytes:
                 raise IpcFrameError("frame_too_large", "frame exceeds configured bound")
@@ -175,7 +196,19 @@ class IpcFrameDecoder:
 
     def finish(self) -> None:
         if self._buffer:
-            raise IpcFrameError("truncated_frame", "stream ended with an incomplete frame")
+            raise IpcFrameError(
+                "truncated_frame", "stream ended with an incomplete frame"
+            )
 
 
-__all__ = ["IpcFrame", "IpcFrameDecoder", "IpcFrameError", "MAGIC", "MAX_FRAME_BYTES", "MAX_HEADER_BYTES", "MAX_PAYLOAD_BYTES", "SCHEMA", "decode_frame"]
+__all__ = [
+    "IpcFrame",
+    "IpcFrameDecoder",
+    "IpcFrameError",
+    "MAGIC",
+    "MAX_FRAME_BYTES",
+    "MAX_HEADER_BYTES",
+    "MAX_PAYLOAD_BYTES",
+    "SCHEMA",
+    "decode_frame",
+]

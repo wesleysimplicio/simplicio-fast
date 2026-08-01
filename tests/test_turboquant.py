@@ -41,14 +41,21 @@ class TurboQuantTest(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual("simplicio.fast.turboquant-4bit/v1", first.schema)
         reconstructed = dequantize(first)
-        self.assertTrue(all(abs(left - right) <= first.scale / 2 + 1e-12 for left, right in zip(values, reconstructed)))
+        self.assertTrue(
+            all(
+                abs(left - right) <= first.scale / 2 + 1e-12
+                for left, right in zip(values, reconstructed)
+            )
+        )
 
     def test_exact_rerank_is_deterministic_and_tie_breaks_by_id(self) -> None:
         query = (1.0, 0.0)
         candidates = (("b", (1.0, 0.0)), ("a", (1.0, 0.0)), ("c", (0.0, 1.0)))
         self.assertEqual(
             ("a", "b", "c"),
-            tuple(item.canonical_id for item in exact_rerank(query, candidates, top_k=3)),
+            tuple(
+                item.canonical_id for item in exact_rerank(query, candidates, top_k=3)
+            ),
         )
         self.assertEqual(
             exact_rerank(query, candidates, top_k=2),
@@ -57,8 +64,13 @@ class TurboQuantTest(unittest.TestCase):
 
     def test_exact_rerank_supports_l2_and_cosine_metrics(self) -> None:
         candidates = (("near", (2.0, 0.0)), ("far", (0.0, 3.0)))
-        self.assertEqual("near", exact_rerank((1.0, 0.0), candidates, metric="l2")[0].canonical_id)
-        self.assertEqual("near", exact_rerank((1.0, 0.0), candidates, metric="cosine")[0].canonical_id)
+        self.assertEqual(
+            "near", exact_rerank((1.0, 0.0), candidates, metric="l2")[0].canonical_id
+        )
+        self.assertEqual(
+            "near",
+            exact_rerank((1.0, 0.0), candidates, metric="cosine")[0].canonical_id,
+        )
 
     def test_exact_rerank_rejects_invalid_candidates(self) -> None:
         with self.assertRaises(QuantizationError):
@@ -76,17 +88,38 @@ class TurboQuantTest(unittest.TestCase):
             ("orthogonal", quantize((0.0, 1.0, 0.0, 0.0), seed=7)),
             ("near", quantize((1.0, 0.0, 0.0, 0.0), seed=7)),
         )
-        self.assertEqual("near", approximate_candidates(query, candidates, seed=7, candidate_k=1)[0].canonical_id)
-        self.assertEqual("near", approximate_candidates(query, candidates, seed=7, metric="cosine")[0].canonical_id)
-        self.assertEqual("near", approximate_candidates(query, candidates, seed=7, metric="l2")[0].canonical_id)
+        self.assertEqual(
+            "near",
+            approximate_candidates(query, candidates, seed=7, candidate_k=1)[
+                0
+            ].canonical_id,
+        )
+        self.assertEqual(
+            "near",
+            approximate_candidates(query, candidates, seed=7, metric="cosine")[
+                0
+            ].canonical_id,
+        )
+        self.assertEqual(
+            "near",
+            approximate_candidates(query, candidates, seed=7, metric="l2")[
+                0
+            ].canonical_id,
+        )
 
     def test_approximate_candidates_rejects_incompatible_packed_vectors(self) -> None:
         with self.assertRaises(QuantizationError):
-            approximate_candidates((1.0, 0.0), (("a", quantize((1.0, 0.0), seed=8)),), seed=7)
+            approximate_candidates(
+                (1.0, 0.0), (("a", quantize((1.0, 0.0), seed=8)),), seed=7
+            )
         with self.assertRaises(QuantizationError):
-            approximate_candidates((1.0, 0.0), (("a", quantize((1.0, 0.0, 0.0), seed=7)),), seed=7)
+            approximate_candidates(
+                (1.0, 0.0), (("a", quantize((1.0, 0.0, 0.0), seed=7)),), seed=7
+            )
         with self.assertRaises(QuantizationError):
-            approximate_candidates((1.0, 0.0), (("a", quantize((1.0, 0.0), seed=7)),), candidate_k=0)
+            approximate_candidates(
+                (1.0, 0.0), (("a", quantize((1.0, 0.0), seed=7)),), candidate_k=0
+            )
 
     def test_zero_vector_uses_stable_unit_scale(self) -> None:
         vector = quantize((0.0, 0.0), seed=1)
@@ -104,7 +137,7 @@ class TurboQuantTest(unittest.TestCase):
         with self.assertRaises(QuantizationError):
             unpack_nibbles(b"\x00", 3)
         with self.assertRaises(QuantizationError):
-            unpack_nibbles(b"\xF0", 1)
+            unpack_nibbles(b"\xf0", 1)
         with self.assertRaises(QuantizationError):
             dequantize(QuantizedVector(1, 0, 0.0, b"\x00"))
 

@@ -12,7 +12,7 @@ mod segment_writer;
 pub use segment_writer::{PublishReceipt, PublishedSegment, SegmentWriter};
 
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet, HashMap},
     fmt, fs,
     fs::File,
     path::{Path, PathBuf},
@@ -130,6 +130,16 @@ struct SegmentEntry {
     file: String,
     bytes: usize,
     sha256: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct PersistedIndexes {
+    exact: BTreeMap<String, Vec<usize>>,
+    names: BTreeMap<String, Vec<usize>>,
+    #[serde(rename = "paths")]
+    _paths: BTreeMap<String, Vec<usize>>,
+    #[serde(rename = "kinds")]
+    _kinds: BTreeMap<String, Vec<usize>>,
 }
 
 enum SegmentBytes {
@@ -398,46 +408,11 @@ impl SnapshotReader {
     }
 
     pub fn symbols(&self) -> Result<Vec<RustSymbol>, SnapshotError> {
-        let files = self.file_paths()?;
         let strings = &self.sections["strings"];
         let symbols = &self.sections["symbols"];
         let mut result = Vec::with_capacity(symbols.length / SYMBOL_RECORD_SIZE);
         for index in 0..symbols.length / SYMBOL_RECORD_SIZE {
-            let base = symbols.offset + index * SYMBOL_RECORD_SIZE;
-            let name = read_text(
-                self.bytes.as_slice(),
-                strings,
-                u32_at(self.bytes.as_slice(), base)? as usize,
-                u32_at(self.bytes.as_slice(), base + 4)? as usize,
-            )?;
-            let qualified_name = read_text(
-                self.bytes.as_slice(),
-                strings,
-                u32_at(self.bytes.as_slice(), base + 8)? as usize,
-                u32_at(self.bytes.as_slice(), base + 12)? as usize,
-            )?;
-            let signature = read_text(
-                self.bytes.as_slice(),
-                strings,
-                u32_at(self.bytes.as_slice(), base + 16)? as usize,
-                u32_at(self.bytes.as_slice(), base + 20)? as usize,
-            )?;
-            let file_index = u32_at(self.bytes.as_slice(), base + 24)? as usize;
-            let file = files
-                .get(file_index)
-                .ok_or_else(|| SnapshotError::Invalid("symbol file index out of bounds".into()))?;
-            let kind = kind_name(u32_at(self.bytes.as_slice(), base + 36)?)?;
-            let symbol_id = hex_bytes(&self.bytes.as_slice()[base + 40..base + 72]);
-            result.push(RustSymbol {
-                name,
-                qualified_name,
-                kind,
-                file: file.clone(),
-                line: u32_at(self.bytes.as_slice(), base + 28)?,
-                end_line: u32_at(self.bytes.as_slice(), base + 32)?,
-                symbol_id,
-                signature,
-            });
+            result.push(self.symbol_at(index, strings)?);
         }
         Ok(result)
     }
@@ -449,14 +424,40 @@ impl SnapshotReader {
             ));
         }
         let needle = term.to_lowercase();
-        let mut matches: Vec<RustSymbol> = self
-            .symbols()?
+        let indexes: PersistedIndexes = serde_json::from_slice(section_bytes(
+            self.bytes.as_slice(),
+            &self.sections["indexes"],
+        ))
+        .map_err(|_| SnapshotError::Invalid("invalid persisted indexes".into()))?;
+        let symbol_count = self.sections["symbols"].length / SYMBOL_RECORD_SIZE;
+        let mut candidate_ids = BTreeSet::new();
+        for values in indexes
+            .names
+            .iter()
+            .filter(|(key, _)| key.contains(&needle))
+            .map(|(_, values)| values)
+            .chain(
+                indexes
+                    .exact
+                    .iter()
+                    .filter(|(key, _)| key.contains(&needle))
+                    .map(|(_, values)| values),
+            )
+        {
+            for index in values {
+                if *index >= symbol_count {
+                    return Err(SnapshotError::Invalid(
+                        "persisted index record out of bounds".into(),
+                    ));
+                }
+                candidate_ids.insert(*index);
+            }
+        }
+        let strings = &self.sections["strings"];
+        let mut matches: Vec<RustSymbol> = candidate_ids
             .into_iter()
-            .filter(|symbol| {
-                symbol.name.to_lowercase().contains(&needle)
-                    || symbol.qualified_name.to_lowercase().contains(&needle)
-            })
-            .collect();
+            .map(|index| self.symbol_at(index, strings))
+            .collect::<Result<_, _>>()?;
         matches.sort_by(|left, right| {
             left.name
                 .to_lowercase()
@@ -486,34 +487,39 @@ impl SnapshotReader {
         let root = root
             .canonicalize()
             .map_err(|_| SnapshotError::Invalid("repository root is unavailable".into()))?;
-        let files = self.file_info()?;
+        let files: HashMap<String, [u8; 32]> = self.file_info()?.into_iter().collect();
+        let mut source_cache: HashMap<String, ([u8; 32], String)> = HashMap::new();
         let mut result = Vec::new();
         let mut consumed_bytes = 0;
         let mut consumed_tokens = 0;
         for symbol in self.query(term, max_results)? {
-            let Some((_, expected_digest)) = files.iter().find(|(path, _)| path == &symbol.file)
-            else {
+            let Some(expected_digest) = files.get(&symbol.file) else {
                 return Err(SnapshotError::Invalid(
                     "symbol references unknown file".into(),
                 ));
             };
-            let path = root
-                .join(&symbol.file)
-                .canonicalize()
-                .map_err(|_| SnapshotError::Invalid(format!("source missing: {}", symbol.file)))?;
-            if path.strip_prefix(&root).is_err() {
-                return Err(SnapshotError::Invalid("snapshot path escapes root".into()));
+            if !source_cache.contains_key(&symbol.file) {
+                let path = root.join(&symbol.file).canonicalize().map_err(|_| {
+                    SnapshotError::Invalid(format!("source missing: {}", symbol.file))
+                })?;
+                if path.strip_prefix(&root).is_err() {
+                    return Err(SnapshotError::Invalid("snapshot path escapes root".into()));
+                }
+                let bytes = fs::read(&path)?;
+                let actual_digest: [u8; 32] = Sha256::digest(&bytes).into();
+                if &actual_digest != expected_digest {
+                    return Err(SnapshotError::Invalid(format!(
+                        "stale source: {}",
+                        symbol.file
+                    )));
+                }
+                let text = String::from_utf8(bytes)
+                    .map_err(|_| SnapshotError::Invalid("source is not UTF-8".into()))?;
+                source_cache.insert(symbol.file.clone(), (actual_digest, text));
             }
-            let bytes = fs::read(&path)?;
-            let actual_digest = Sha256::digest(&bytes);
-            if actual_digest.as_slice() != expected_digest {
-                return Err(SnapshotError::Invalid(format!(
-                    "stale source: {}",
-                    symbol.file
-                )));
-            }
-            let text = String::from_utf8(bytes)
-                .map_err(|_| SnapshotError::Invalid("source is not UTF-8".into()))?;
+            let (actual_digest, text) = source_cache
+                .get(&symbol.file)
+                .ok_or_else(|| SnapshotError::Invalid("source cache insertion failed".into()))?;
             let lines: Vec<&str> = text.lines().collect();
             let start = symbol.line.max(1) as usize;
             let end = std::cmp::min(
@@ -550,7 +556,7 @@ impl SnapshotReader {
                 file: symbol.file,
                 start_line: symbol.line,
                 end_line: end as u32,
-                source_sha256: hex_bytes(&actual_digest),
+                source_sha256: hex_bytes(actual_digest),
                 content,
                 symbol_id: symbol.symbol_id,
                 tokens,
@@ -559,12 +565,66 @@ impl SnapshotReader {
         Ok(result)
     }
 
-    fn file_paths(&self) -> Result<Vec<String>, SnapshotError> {
-        Ok(self
-            .file_info()?
-            .into_iter()
-            .map(|(path, _)| path)
-            .collect())
+    fn symbol_at(&self, index: usize, strings: &Section) -> Result<RustSymbol, SnapshotError> {
+        let symbols = &self.sections["symbols"];
+        let base =
+            symbols
+                .offset
+                .checked_add(index.checked_mul(SYMBOL_RECORD_SIZE).ok_or_else(|| {
+                    SnapshotError::Invalid("symbol record offset overflow".into())
+                })?)
+                .ok_or_else(|| SnapshotError::Invalid("symbol record offset overflow".into()))?;
+        let file_index = u32_at(self.bytes.as_slice(), base + 24)? as usize;
+        let file = self.file_at(file_index)?;
+        Ok(RustSymbol {
+            name: read_text(
+                self.bytes.as_slice(),
+                strings,
+                u32_at(self.bytes.as_slice(), base)? as usize,
+                u32_at(self.bytes.as_slice(), base + 4)? as usize,
+            )?,
+            qualified_name: read_text(
+                self.bytes.as_slice(),
+                strings,
+                u32_at(self.bytes.as_slice(), base + 8)? as usize,
+                u32_at(self.bytes.as_slice(), base + 12)? as usize,
+            )?,
+            signature: read_text(
+                self.bytes.as_slice(),
+                strings,
+                u32_at(self.bytes.as_slice(), base + 16)? as usize,
+                u32_at(self.bytes.as_slice(), base + 20)? as usize,
+            )?,
+            kind: kind_name(u32_at(self.bytes.as_slice(), base + 36)?)?,
+            file,
+            line: u32_at(self.bytes.as_slice(), base + 28)?,
+            end_line: u32_at(self.bytes.as_slice(), base + 32)?,
+            symbol_id: hex_bytes(&self.bytes.as_slice()[base + 40..base + 72]),
+        })
+    }
+
+    fn file_at(&self, index: usize) -> Result<String, SnapshotError> {
+        let files = &self.sections["files"];
+        let strings = &self.sections["strings"];
+        let base = files
+            .offset
+            .checked_add(
+                index
+                    .checked_mul(FILE_RECORD_SIZE)
+                    .ok_or_else(|| SnapshotError::Invalid("file record offset overflow".into()))?,
+            )
+            .ok_or_else(|| SnapshotError::Invalid("file record offset overflow".into()))?;
+        if index >= files.length / FILE_RECORD_SIZE {
+            return Err(SnapshotError::Invalid(
+                "symbol file index out of bounds".into(),
+            ));
+        }
+        read_text(
+            self.bytes.as_slice(),
+            strings,
+            u32_at(self.bytes.as_slice(), base)? as usize,
+            u32_at(self.bytes.as_slice(), base + 4)? as usize,
+        )
     }
 
     fn file_info(&self) -> Result<Vec<(String, [u8; 32])>, SnapshotError> {
@@ -573,15 +633,11 @@ impl SnapshotReader {
         let mut paths = Vec::with_capacity(files.length / FILE_RECORD_SIZE);
         for index in 0..files.length / FILE_RECORD_SIZE {
             let base = files.offset + index * FILE_RECORD_SIZE;
-            let path = read_text(
-                self.bytes.as_slice(),
-                strings,
-                u32_at(self.bytes.as_slice(), base)? as usize,
-                u32_at(self.bytes.as_slice(), base + 4)? as usize,
-            )?;
+            let path = self.file_at(index)?;
             let digest: [u8; 32] = self.bytes.as_slice()[base + 16..base + 48]
                 .try_into()
                 .map_err(|_| SnapshotError::Invalid("file digest bounds".into()))?;
+            let _ = strings;
             paths.push((path, digest));
         }
         Ok(paths)

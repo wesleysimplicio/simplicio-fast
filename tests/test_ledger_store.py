@@ -67,7 +67,9 @@ class LedgerStoreTest(unittest.TestCase):
             store.append(self.event(ledger))
             body_before = Path(root, "delivery.hbp").read_bytes()
             Path(root, "delivery.hbp").write_bytes(body_before + b"orphan")
-            Path(root, "delivery.hbi").write_bytes(Path(root, "delivery.hbi").read_bytes() + b"partial")
+            Path(root, "delivery.hbi").write_bytes(
+                Path(root, "delivery.hbi").read_bytes() + b"partial"
+            )
             receipt = store.recover_tail()
             self.assertEqual("recovered", receipt["status"])
             self.assertEqual("partial_index", receipt["reason_code"])

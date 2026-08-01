@@ -83,7 +83,13 @@ class BitemporalFact:
 class BitemporalOverlay:
     """Append-only world/system-time facts with deterministic as-of queries."""
 
-    def __init__(self, repository: str, *, base_generation: str, overlay_generation: str | None = None) -> None:
+    def __init__(
+        self,
+        repository: str,
+        *,
+        base_generation: str,
+        overlay_generation: str | None = None,
+    ) -> None:
         if not repository or not base_generation:
             raise ValueError("repository and base_generation are required")
         self.repository = repository
@@ -129,7 +135,9 @@ class BitemporalOverlay:
         if world < self._world_sequence or (
             world == self._world_sequence and not _allow_same_world
         ):
-            raise TemporalInvariantError("world_time_out_of_order", "valid_from must advance monotonically")
+            raise TemporalInvariantError(
+                "world_time_out_of_order", "valid_from must advance monotonically"
+            )
         self._world_sequence = world
         self._observed_sequence += 1
         if previous is not None:
@@ -162,7 +170,9 @@ class BitemporalOverlay:
             provenance=dict(provenance or {}),
         )
         if previous is not None:
-            self._facts[canonical_id][-1] = replace(self._facts[canonical_id][-1], successor=fact.digest)
+            self._facts[canonical_id][-1] = replace(
+                self._facts[canonical_id][-1], successor=fact.digest
+            )
         self._facts.setdefault(canonical_id, []).append(fact)
         return fact
 
@@ -179,7 +189,9 @@ class BitemporalOverlay:
     ) -> BitemporalFact:
         current = self._current(canonical_id)
         if current is None or current.state != "active":
-            raise TemporalInvariantError("fact_not_active", "only an active fact can be tombstoned")
+            raise TemporalInvariantError(
+                "fact_not_active", "only an active fact can be tombstoned"
+            )
         result = self.append(
             canonical_id,
             source_commit=source_commit,
@@ -203,7 +215,9 @@ class BitemporalOverlay:
         valid_from: int | None = None,
     ) -> dict[str, Any]:
         """Hold active facts whose dependency set intersects changed IDs."""
-        changed = tuple(sorted({item for item in changed_ids if isinstance(item, str) and item}))
+        changed = tuple(
+            sorted({item for item in changed_ids if isinstance(item, str) and item})
+        )
         affected = [
             fact
             for versions in self._facts.values()
@@ -244,7 +258,9 @@ class BitemporalOverlay:
     ) -> BitemporalFact:
         current = self._current(old_id)
         if current is None or current.state != "active":
-            raise TemporalInvariantError("fact_not_active", "only an active fact can be renamed")
+            raise TemporalInvariantError(
+                "fact_not_active", "only an active fact can be renamed"
+            )
         replacement = self.append(
             new_id,
             source_commit=source_commit,
@@ -272,9 +288,16 @@ class BitemporalOverlay:
         include_tombstones: bool = False,
     ) -> list[BitemporalFact]:
         if world_sequence < 1:
-            raise TemporalInvariantError("invalid_as_of", "as_of sequence must be positive")
-        if generation is not None and generation not in {self.base_generation, self.overlay_generation}:
-            raise TemporalInvariantError("stale_generation", "as_of generation is outside this overlay")
+            raise TemporalInvariantError(
+                "invalid_as_of", "as_of sequence must be positive"
+            )
+        if generation is not None and generation not in {
+            self.base_generation,
+            self.overlay_generation,
+        }:
+            raise TemporalInvariantError(
+                "stale_generation", "as_of generation is outside this overlay"
+            )
         result: list[BitemporalFact] = []
         for versions in self._facts.values():
             candidates = [
@@ -293,7 +316,10 @@ class BitemporalOverlay:
         for canonical_id, versions in self._facts.items():
             previous_to = None
             for index, fact in enumerate(versions):
-                if fact.canonical_id != canonical_id or fact.repository != self.repository:
+                if (
+                    fact.canonical_id != canonical_id
+                    or fact.repository != self.repository
+                ):
                     invalid.append(fact.digest)
                 if fact.valid_to is not None and fact.valid_to <= fact.valid_from:
                     invalid.append(fact.digest)
@@ -301,9 +327,16 @@ class BitemporalOverlay:
                     invalid.append(fact.digest)
                 if index and fact.predecessor != versions[index - 1].digest:
                     invalid.append(fact.digest)
-                if fact.digest != hashlib.sha256(
-                    json.dumps(fact._unsigned_record(), sort_keys=True, separators=(",", ":")).encode("utf-8")
-                ).hexdigest():
+                if (
+                    fact.digest
+                    != hashlib.sha256(
+                        json.dumps(
+                            fact._unsigned_record(),
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ).encode("utf-8")
+                    ).hexdigest()
+                ):
                     invalid.append(fact.digest)
                 previous_to = fact.valid_to
         return {
@@ -330,7 +363,10 @@ class BitemporalOverlay:
             "base_generation": self.base_generation,
             "overlay_generation": self.overlay_generation,
             "as_of": sequence,
-            "facts": [fact.as_record() for fact in self.as_of(sequence, include_tombstones=True)],
+            "facts": [
+                fact.as_record()
+                for fact in self.as_of(sequence, include_tombstones=True)
+            ],
             "verification": self.verify(),
         }
 
@@ -354,7 +390,9 @@ class BitemporalOverlay:
             separators=(",", ":"),
         ).encode("utf-8")
         if len(payload) > MAX_PERSISTENCE_BYTES:
-            raise TemporalInvariantError("persistence_too_large", "overlay persistence exceeds the bounded limit")
+            raise TemporalInvariantError(
+                "persistence_too_large", "overlay persistence exceeds the bounded limit"
+            )
         digest = hashlib.sha256(payload).digest()
         return PERSISTENCE_MAGIC + struct.pack(">I", len(payload)) + digest + payload
 
@@ -368,41 +406,78 @@ class BitemporalOverlay:
         overlay_generation: str | None | object = None,
     ) -> "BitemporalOverlay":
         header_size = len(PERSISTENCE_MAGIC) + 4 + hashlib.sha256().digest_size
-        if not isinstance(data, bytes) or len(data) > MAX_PERSISTENCE_BYTES + header_size:
-            raise TemporalInvariantError("persistence_too_large", "overlay persistence exceeds the bounded limit")
-        if len(data) < header_size or data[: len(PERSISTENCE_MAGIC)] != PERSISTENCE_MAGIC:
-            raise TemporalInvariantError("persistence_format", "overlay persistence header is invalid")
-        payload_size = struct.unpack(">I", data[len(PERSISTENCE_MAGIC) : len(PERSISTENCE_MAGIC) + 4])[0]
+        if (
+            not isinstance(data, bytes)
+            or len(data) > MAX_PERSISTENCE_BYTES + header_size
+        ):
+            raise TemporalInvariantError(
+                "persistence_too_large", "overlay persistence exceeds the bounded limit"
+            )
+        if (
+            len(data) < header_size
+            or data[: len(PERSISTENCE_MAGIC)] != PERSISTENCE_MAGIC
+        ):
+            raise TemporalInvariantError(
+                "persistence_format", "overlay persistence header is invalid"
+            )
+        payload_size = struct.unpack(
+            ">I", data[len(PERSISTENCE_MAGIC) : len(PERSISTENCE_MAGIC) + 4]
+        )[0]
         stored_digest = data[len(PERSISTENCE_MAGIC) + 4 : header_size]
         payload = data[header_size:]
         if payload_size != len(payload):
-            raise TemporalInvariantError("persistence_truncated", "overlay persistence length is invalid")
+            raise TemporalInvariantError(
+                "persistence_truncated", "overlay persistence length is invalid"
+            )
         if hashlib.sha256(payload).digest() != stored_digest:
-            raise TemporalInvariantError("persistence_checksum", "overlay persistence checksum is invalid")
+            raise TemporalInvariantError(
+                "persistence_checksum", "overlay persistence checksum is invalid"
+            )
         try:
             value = json.loads(payload.decode("utf-8"))
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise TemporalInvariantError("persistence_json", "overlay persistence payload is invalid") from error
+            raise TemporalInvariantError(
+                "persistence_json", "overlay persistence payload is invalid"
+            ) from error
         if not isinstance(value, dict) or value.get("schema") != PERSISTENCE_SCHEMA:
-            raise TemporalInvariantError("persistence_schema", "overlay persistence schema is invalid")
+            raise TemporalInvariantError(
+                "persistence_schema", "overlay persistence schema is invalid"
+            )
         stored_repository = value.get("repository")
         stored_base = value.get("base_generation")
         stored_overlay = value.get("overlay_generation")
         if repository is not None and repository != stored_repository:
-            raise TemporalInvariantError("persistence_scope", "repository scope does not match persisted overlay")
+            raise TemporalInvariantError(
+                "persistence_scope", "repository scope does not match persisted overlay"
+            )
         if base_generation is not None and base_generation != stored_base:
-            raise TemporalInvariantError("persistence_scope", "base generation does not match persisted overlay")
+            raise TemporalInvariantError(
+                "persistence_scope", "base generation does not match persisted overlay"
+            )
         if overlay_generation is not None and overlay_generation != stored_overlay:
-            raise TemporalInvariantError("persistence_scope", "overlay generation does not match persisted overlay")
+            raise TemporalInvariantError(
+                "persistence_scope",
+                "overlay generation does not match persisted overlay",
+            )
         if not isinstance(stored_repository, str) or not isinstance(stored_base, str):
-            raise TemporalInvariantError("persistence_scope", "persisted overlay scope is invalid")
-        overlay = cls(stored_repository, base_generation=stored_base, overlay_generation=stored_overlay)
+            raise TemporalInvariantError(
+                "persistence_scope", "persisted overlay scope is invalid"
+            )
+        overlay = cls(
+            stored_repository,
+            base_generation=stored_base,
+            overlay_generation=stored_overlay,
+        )
         facts = value.get("facts")
         if not isinstance(facts, list):
-            raise TemporalInvariantError("persistence_facts", "persisted overlay facts are invalid")
+            raise TemporalInvariantError(
+                "persistence_facts", "persisted overlay facts are invalid"
+            )
         for raw in facts:
             if not isinstance(raw, dict) or raw.get("schema") != SCHEMA:
-                raise TemporalInvariantError("persistence_fact", "persisted fact schema is invalid")
+                raise TemporalInvariantError(
+                    "persistence_fact", "persisted fact schema is invalid"
+                )
             try:
                 fact = BitemporalFact(
                     canonical_id=str(raw["canonical_id"]),
@@ -413,35 +488,79 @@ class BitemporalOverlay:
                     source_sha256=str(raw["source_sha256"]),
                     artifact_digest=str(raw["artifact_digest"]),
                     valid_from=int(raw["valid_from"]),
-                    valid_to=None if raw.get("valid_to") is None else int(raw["valid_to"]),
+                    valid_to=None
+                    if raw.get("valid_to") is None
+                    else int(raw["valid_to"]),
                     observed_at=int(raw["observed_at"]),
-                    invalidated_at=None if raw.get("invalidated_at") is None else int(raw["invalidated_at"]),
+                    invalidated_at=None
+                    if raw.get("invalidated_at") is None
+                    else int(raw["invalidated_at"]),
                     state=str(raw["state"]),
                     reason_code=raw.get("reason_code"),
                     predecessor=raw.get("predecessor"),
                     successor=raw.get("successor"),
-                    dependencies=tuple(str(item) for item in raw.get("dependencies", [])),
+                    dependencies=tuple(
+                        str(item) for item in raw.get("dependencies", [])
+                    ),
                     provenance=dict(raw.get("provenance", {})),
                 )
             except (KeyError, TypeError, ValueError) as error:
-                raise TemporalInvariantError("persistence_fact", "persisted fact fields are invalid") from error
+                raise TemporalInvariantError(
+                    "persistence_fact", "persisted fact fields are invalid"
+                ) from error
             if fact.digest != raw.get("digest"):
-                raise TemporalInvariantError("persistence_digest", "persisted fact digest is invalid")
-            if fact.repository != overlay.repository or fact.base_generation != overlay.base_generation or fact.overlay_generation != overlay.overlay_generation:
-                raise TemporalInvariantError("persistence_scope", "persisted fact scope differs from overlay")
+                raise TemporalInvariantError(
+                    "persistence_digest", "persisted fact digest is invalid"
+                )
+            if (
+                fact.repository != overlay.repository
+                or fact.base_generation != overlay.base_generation
+                or fact.overlay_generation != overlay.overlay_generation
+            ):
+                raise TemporalInvariantError(
+                    "persistence_scope", "persisted fact scope differs from overlay"
+                )
             overlay._facts.setdefault(fact.canonical_id, []).append(fact)
         world_sequence = value.get("world_sequence")
         observed_sequence = value.get("observed_sequence")
-        if not isinstance(world_sequence, int) or not isinstance(observed_sequence, int) or world_sequence < 0 or observed_sequence < 0:
-            raise TemporalInvariantError("persistence_sequence", "persisted sequences are invalid")
-        expected_world_sequence = max((fact.valid_from for versions in overlay._facts.values() for fact in versions), default=0)
-        expected_observed_sequence = max((fact.observed_at for versions in overlay._facts.values() for fact in versions), default=0)
-        if world_sequence != expected_world_sequence or observed_sequence != expected_observed_sequence:
-            raise TemporalInvariantError("persistence_sequence", "persisted sequences do not match facts")
+        if (
+            not isinstance(world_sequence, int)
+            or not isinstance(observed_sequence, int)
+            or world_sequence < 0
+            or observed_sequence < 0
+        ):
+            raise TemporalInvariantError(
+                "persistence_sequence", "persisted sequences are invalid"
+            )
+        expected_world_sequence = max(
+            (
+                fact.valid_from
+                for versions in overlay._facts.values()
+                for fact in versions
+            ),
+            default=0,
+        )
+        expected_observed_sequence = max(
+            (
+                fact.observed_at
+                for versions in overlay._facts.values()
+                for fact in versions
+            ),
+            default=0,
+        )
+        if (
+            world_sequence != expected_world_sequence
+            or observed_sequence != expected_observed_sequence
+        ):
+            raise TemporalInvariantError(
+                "persistence_sequence", "persisted sequences do not match facts"
+            )
         overlay._world_sequence = world_sequence
         overlay._observed_sequence = observed_sequence
         if overlay.verify()["status"] != "valid":
-            raise TemporalInvariantError("persistence_invariant", "persisted overlay invariants are invalid")
+            raise TemporalInvariantError(
+                "persistence_invariant", "persisted overlay invariants are invalid"
+            )
         return overlay
 
     def save(self, path: str | Path) -> dict[str, Any]:

@@ -11,7 +11,7 @@ from typing import Any
 ROOT = Path(__file__).parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from simplicio_fast.quant_benchmark import run_benchmark
+from simplicio_fast.quant_benchmark import run_benchmark  # noqa: E402
 
 
 def _number(value: float | None, digits: int = 3) -> str:
@@ -94,9 +94,7 @@ def render_report(receipt: dict[str, Any]) -> str:
             ]
         )
         for item in receipt["unavailable_sizes"]:
-            lines.append(
-                f"| {item['vectors']:,} | null | `{item['reason']}` |"
-            )
+            lines.append(f"| {item['vectors']:,} | null | `{item['reason']}` |")
         lines.append("")
     lines.extend(
         [
@@ -150,8 +148,8 @@ def render_svg(receipt: dict[str, Any]) -> str:
         '<text x="40" y="36" class="title">Simplicio Fast #198 — MEASURED trade-off</text>',
         (
             f'<text x="40" y="59" class="label">10,000 vectors · '
-            f'{receipt["configuration"]["repetitions"]} repetitions · '
-            f'gate {case["promotion_gate"]["decision"]}</text>'
+            f"{receipt['configuration']['repetitions']} repetitions · "
+            f"gate {case['promotion_gate']['decision']}</text>"
         ),
     ]
     for panel_index, (title, values) in enumerate(panels):
@@ -183,9 +181,10 @@ def render_svg(receipt: dict[str, Any]) -> str:
                 ]
             )
     gate = case["promotion_gate"]
-    failed = ", ".join(
-        name for name, passed in gate["checks"].items() if not passed
-    ) or "none"
+    failed = (
+        ", ".join(name for name, passed in gate["checks"].items() if not passed)
+        or "none"
+    )
     parts.extend(
         [
             f'<text x="40" y="405" class="label">Fail-closed gate failures: {failed}</text>',

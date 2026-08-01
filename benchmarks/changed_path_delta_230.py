@@ -24,6 +24,7 @@ MIN_REPETITIONS = 10
 def _process_metrics() -> tuple[int | None, int | None, str | None]:
     if os.name == "nt":
         try:
+
             class _Counters(ctypes.Structure):
                 _fields_ = [
                     ("cb", ctypes.c_ulong),
@@ -113,7 +114,9 @@ def _summary(rows: list[dict[str, object]]) -> dict[str, object]:
     }
 
 
-def _make_root(parent: Path, files: int, label: str) -> tuple[Path, WorkspaceStore, object, dict[str, int]]:
+def _make_root(
+    parent: Path, files: int, label: str
+) -> tuple[Path, WorkspaceStore, object, dict[str, int]]:
     root = parent / label
     root.mkdir()
     for index in range(files):
@@ -134,7 +137,9 @@ def _mapped_bytes(store: WorkspaceStore, base: object) -> int:
     return (store.base_dir / base.generation_id / manifest.snapshot).stat().st_size
 
 
-def _run_category(parent: Path, files: int, repetitions: int, category: str) -> list[dict[str, object]]:
+def _run_category(
+    parent: Path, files: int, repetitions: int, category: str
+) -> list[dict[str, object]]:
     root, store, base, sizes = _make_root(parent, files, category)
     rows: list[dict[str, object]] = []
     if category == "cold":
@@ -145,14 +150,16 @@ def _run_category(parent: Path, files: int, repetitions: int, category: str) -> 
                 build_snapshot(root, target)
 
             sample, _ = _measure(build)
-            sample.update({
-                "parsed_files": files,
-                "reused_files": 0,
-                "parsed_bytes": sum(sizes.values()),
-                "reused_bytes": 0,
-                "mapped_bytes": target.stat().st_size,
-                "parity": True,
-            })
+            sample.update(
+                {
+                    "parsed_files": files,
+                    "reused_files": 0,
+                    "parsed_bytes": sum(sizes.values()),
+                    "reused_bytes": 0,
+                    "mapped_bytes": target.stat().st_size,
+                    "parity": True,
+                }
+            )
             rows.append(sample)
         return rows
 
@@ -161,21 +168,26 @@ def _run_category(parent: Path, files: int, repetitions: int, category: str) -> 
     build_snapshot(root, parity_snapshot)
     if category == "warm":
         for revision in range(repetitions):
+
             def read_snapshot() -> int:
-                with Snapshot(store.base_dir / base.generation_id / base.snapshot) as snapshot:
+                with Snapshot(
+                    store.base_dir / base.generation_id / base.snapshot
+                ) as snapshot:
                     return len(snapshot.files())
 
             sample, count = _measure(read_snapshot)
             if isinstance(count, tuple):
                 count = count[0]
-            sample.update({
-                "parsed_files": 0,
-                "reused_files": files,
-                "parsed_bytes": 0,
-                "reused_bytes": sum(sizes.values()),
-                "mapped_bytes": base_mapped_bytes,
-                "parity": count == files,
-            })
+            sample.update(
+                {
+                    "parsed_files": 0,
+                    "reused_files": files,
+                    "parsed_bytes": 0,
+                    "reused_bytes": sum(sizes.values()),
+                    "mapped_bytes": base_mapped_bytes,
+                    "parity": count == files,
+                }
+            )
             rows.append(sample)
         return rows
 
@@ -214,15 +226,20 @@ def _run_category(parent: Path, files: int, repetitions: int, category: str) -> 
         sample, report = _measure(handoff)
         if isinstance(report, tuple):
             report = report[0]
-        sample.update({
-            "parsed_files": int(report["files_parsed"]),
-            "reused_files": int(report["cache_reuse"]),
-            "parsed_bytes": expected_parsed_bytes,
-            "reused_bytes": expected_reused_bytes,
-            "mapped_bytes": base_mapped_bytes,
-            "parity": bool(report["parity"]),
-        })
-        if sample["parsed_files"] != expected_parsed or sample["reused_files"] != expected_reused:
+        sample.update(
+            {
+                "parsed_files": int(report["files_parsed"]),
+                "reused_files": int(report["cache_reuse"]),
+                "parsed_bytes": expected_parsed_bytes,
+                "reused_bytes": expected_reused_bytes,
+                "mapped_bytes": base_mapped_bytes,
+                "parity": bool(report["parity"]),
+            }
+        )
+        if (
+            sample["parsed_files"] != expected_parsed
+            or sample["reused_files"] != expected_reused
+        ):
             raise AssertionError(f"{category} reuse accounting drifted: {sample}")
         rows.append(sample)
     return rows
@@ -240,24 +257,26 @@ def run(*, files: int = 24, repetitions: int = MIN_REPETITIONS) -> dict[str, obj
             for category in ("cold", "warm", "unchanged", "one_file")
         }
         metric_reasons = {
-            "rss_kib": "available" if all(
+            "rss_kib": "available"
+            if all(
                 row["rss_kib"] is not None
                 for rows in categories.values()
                 for row in rows
-            ) else "host_metric_unavailable",
-            "page_faults": "available" if all(
+            )
+            else "host_metric_unavailable",
+            "page_faults": "available"
+            if all(
                 row["page_faults"] is not None
                 for rows in categories.values()
                 for row in rows
-            ) else "host_metric_unavailable",
+            )
+            else "host_metric_unavailable",
         }
         return {
             "schema": SCHEMA,
-            "status": "pass" if all(
-                bool(row["parity"])
-                for rows in categories.values()
-                for row in rows
-            ) else "parity_mismatch",
+            "status": "pass"
+            if all(bool(row["parity"]) for rows in categories.values() for row in rows)
+            else "parity_mismatch",
             "workload": {
                 "files": files,
                 "changed_files": 1,

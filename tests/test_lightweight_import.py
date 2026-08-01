@@ -8,9 +8,9 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_VERSION = tomllib.loads(
-    (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-)["project"]["version"]
+PROJECT_VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+    "project"
+]["version"]
 
 
 def _probe(expression: str) -> dict[str, object]:

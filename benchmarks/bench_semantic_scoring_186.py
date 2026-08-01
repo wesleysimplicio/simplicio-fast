@@ -31,11 +31,21 @@ from simplicio_fast.semantic_scoring import (
 REPETITIONS = 10
 MODEL_SHA = "186" * 21 + "1"
 CORPUS = (
-    SourceDocument.create("a_cache", "MemoStore reuses computed values in a bounded cache."),
-    SourceDocument.create("b_database", "Repository persists records with transactions."),
-    SourceDocument.create("c_logging", "AuditSink writes structured diagnostic events."),
-    SourceDocument.create("x_parser", "AstReader parses syntax trees and source tokens."),
-    SourceDocument.create("y_retry", "DeadlineController retries transient failures safely."),
+    SourceDocument.create(
+        "a_cache", "MemoStore reuses computed values in a bounded cache."
+    ),
+    SourceDocument.create(
+        "b_database", "Repository persists records with transactions."
+    ),
+    SourceDocument.create(
+        "c_logging", "AuditSink writes structured diagnostic events."
+    ),
+    SourceDocument.create(
+        "x_parser", "AstReader parses syntax trees and source tokens."
+    ),
+    SourceDocument.create(
+        "y_retry", "DeadlineController retries transient failures safely."
+    ),
     SourceDocument.create("z_auth", "LoginManager validates identity and credentials."),
 )
 QUERIES = (
@@ -47,7 +57,16 @@ QUERIES = (
     ("reuse calculation", "a_cache"),
 )
 GROUPS = (
-    ("auth", "authenticate", "login", "identity", "credential", "sign", "account", "user"),
+    (
+        "auth",
+        "authenticate",
+        "login",
+        "identity",
+        "credential",
+        "sign",
+        "account",
+        "user",
+    ),
     ("cache", "memo", "memoization", "reuse", "calculation", "computed"),
     ("retry", "retries", "failure", "transient", "deadline"),
     ("parser", "parse", "parses", "syntax", "grammar", "ast", "source"),
@@ -117,7 +136,10 @@ def run(output: Path, repetitions: int = REPETITIONS) -> dict[str, object]:
             budgets=SemanticBudgets(max_selected=3, max_selected_tokens=32),
             minimum_confidence=0,
         )
-        for mode, scorer in (("baseline", baseline), ("runtime-contract-fixture", semantic)):
+        for mode, scorer in (
+            ("baseline", baseline),
+            ("runtime-contract-fixture", semantic),
+        ):
             for repetition in range(repetitions):
                 for query, relevant in QUERIES:
                     wall_start = time.perf_counter_ns()
@@ -147,7 +169,9 @@ def run(output: Path, repetitions: int = REPETITIONS) -> dict[str, object]:
                             ),
                             "wall_ms": wall_ms,
                             "cpu_ms": cpu_ms,
-                            "rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+                            "rss_kib": resource.getrusage(
+                                resource.RUSAGE_SELF
+                            ).ru_maxrss,
                             "fallback_reason": receipt["fallback"]["reason_code"],
                             "cache_hit": receipt["cache"]["hit"],
                         }
@@ -183,12 +207,14 @@ def run(output: Path, repetitions: int = REPETITIONS) -> dict[str, object]:
         "issue": 186,
         "repetitions": repetitions,
         "queries_per_repetition": len(QUERIES),
-        "corpus_sha256": __import__("hashlib").sha256(
+        "corpus_sha256": __import__("hashlib")
+        .sha256(
             json.dumps(
                 [(item.canonical_id, item.source_sha256) for item in CORPUS],
                 separators=(",", ":"),
             ).encode()
-        ).hexdigest(),
+        )
+        .hexdigest(),
         "model": identity.record(),
         "environment": {
             "python": platform.python_version(),

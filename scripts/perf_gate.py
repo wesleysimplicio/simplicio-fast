@@ -26,13 +26,17 @@ def _valid_environment(value: Any) -> bool:
         return False
     if any(field not in value for field in ENVIRONMENT_FIELDS):
         return False
-    if any(not isinstance(value[field], (str, type(None))) for field in ENVIRONMENT_FIELDS[:-1]):
+    if any(
+        not isinstance(value[field], (str, type(None)))
+        for field in ENVIRONMENT_FIELDS[:-1]
+    ):
         return False
     return value["cpu_count"] is None or (
         isinstance(value["cpu_count"], int)
         and not isinstance(value["cpu_count"], bool)
         and value["cpu_count"] > 0
     )
+
 
 GATE_SCHEMA = "simplicio.fast.perf-gate/v1"
 
@@ -102,7 +106,9 @@ def _check_percentiles(receipt: dict[str, Any], minimum: int) -> dict[str, Any]:
         p50 = _number(wall.get("median"), "median") if isinstance(wall, dict) else None
         p95 = _number(wall.get("p95"), "p95") if isinstance(wall, dict) else None
         p99 = _number(wall.get("p99"), "p99") if isinstance(wall, dict) else None
-        repetitions = scenario.get("repetitions") if isinstance(scenario, dict) else None
+        repetitions = (
+            scenario.get("repetitions") if isinstance(scenario, dict) else None
+        )
         valid = (
             isinstance(samples, list)
             and isinstance(repetitions, int)
@@ -135,7 +141,11 @@ def _metric_check(
     max_regression_ratio: float,
     higher_is_better: bool,
 ) -> dict[str, Any]:
-    result: dict[str, Any] = {"metric": name, "baseline": baseline, "candidate": candidate}
+    result: dict[str, Any] = {
+        "metric": name,
+        "baseline": baseline,
+        "candidate": candidate,
+    }
     if baseline is None or candidate is None:
         result.update({"status": "inconclusive", "reason": "metric_unavailable"})
         return result
@@ -168,7 +178,9 @@ def evaluate(
 ) -> dict[str, Any]:
     baseline_environment = baseline.get("environment")
     candidate_environment = candidate.get("environment")
-    if not _valid_environment(baseline_environment) or not _valid_environment(candidate_environment):
+    if not _valid_environment(baseline_environment) or not _valid_environment(
+        candidate_environment
+    ):
         return {
             "schema": GATE_SCHEMA,
             "status": "inconclusive",
@@ -201,36 +213,62 @@ def evaluate(
         }
     baseline_percentiles = _check_percentiles(baseline, minimum_repetitions)
     candidate_percentiles = _check_percentiles(candidate, minimum_repetitions)
-    if baseline_percentiles["status"] == "fail" or candidate_percentiles["status"] == "fail":
+    if (
+        baseline_percentiles["status"] == "fail"
+        or candidate_percentiles["status"] == "fail"
+    ):
         return {
             "schema": GATE_SCHEMA,
             "status": "inconclusive",
             "reason": "percentile_metrics_invalid",
-            "percentiles": {"baseline": baseline_percentiles, "candidate": candidate_percentiles},
+            "percentiles": {
+                "baseline": baseline_percentiles,
+                "candidate": candidate_percentiles,
+            },
         }
     base_totals = baseline.get("totals", {})
     cand_totals = candidate.get("totals", {})
     if not isinstance(base_totals, dict) or not isinstance(cand_totals, dict):
-        return {"schema": GATE_SCHEMA, "status": "inconclusive", "reason": "totals_missing"}
+        return {
+            "schema": GATE_SCHEMA,
+            "status": "inconclusive",
+            "reason": "totals_missing",
+        }
     checks = [
         _metric_check(
             "fast_python_alteration_wall_ms",
-            _number(base_totals.get("fast_python_alteration_wall_ms"), "fast_python_alteration_wall_ms"),
-            _number(cand_totals.get("fast_python_alteration_wall_ms"), "fast_python_alteration_wall_ms"),
+            _number(
+                base_totals.get("fast_python_alteration_wall_ms"),
+                "fast_python_alteration_wall_ms",
+            ),
+            _number(
+                cand_totals.get("fast_python_alteration_wall_ms"),
+                "fast_python_alteration_wall_ms",
+            ),
             max_regression_ratio=max_regression_ratio,
             higher_is_better=False,
         ),
         _metric_check(
             "alteration_speedup_hot",
-            _number(base_totals.get("alteration_speedup_hot"), "alteration_speedup_hot"),
-            _number(cand_totals.get("alteration_speedup_hot"), "alteration_speedup_hot"),
+            _number(
+                base_totals.get("alteration_speedup_hot"), "alteration_speedup_hot"
+            ),
+            _number(
+                cand_totals.get("alteration_speedup_hot"), "alteration_speedup_hot"
+            ),
             max_regression_ratio=max_regression_ratio,
             higher_is_better=True,
         ),
         _metric_check(
             "estimated_token_savings_percent",
-            _number(base_totals.get("estimated_token_savings_percent"), "estimated_token_savings_percent"),
-            _number(cand_totals.get("estimated_token_savings_percent"), "estimated_token_savings_percent"),
+            _number(
+                base_totals.get("estimated_token_savings_percent"),
+                "estimated_token_savings_percent",
+            ),
+            _number(
+                cand_totals.get("estimated_token_savings_percent"),
+                "estimated_token_savings_percent",
+            ),
             max_regression_ratio=max_regression_ratio,
             higher_is_better=True,
         ),
@@ -283,7 +321,9 @@ def main() -> int:
     if args.json_out:
         args.json_out.write_text(encoded, encoding="utf-8")
     print(encoded, end="")
-    return {"improved": 0, "neutral": 0, "regressed": 1, "inconclusive": 2}[result["status"]]
+    return {"improved": 0, "neutral": 0, "regressed": 1, "inconclusive": 2}[
+        result["status"]
+    ]
 
 
 if __name__ == "__main__":

@@ -39,4 +39,6 @@ def test_core_bundle_rejects_missing_contract_fields(tmp_path):
     receipt = verify(binary, manifest, expected_version="2.0.20")
 
     assert receipt["status"] == "fail"
-    assert {"VERSION_MISMATCH", "CAPABILITIES_MISSING", "CONFORMANCE_MISSING"} <= set(receipt["failures"])
+    assert {"VERSION_MISMATCH", "CAPABILITIES_MISSING", "CONFORMANCE_MISSING"} <= set(
+        receipt["failures"]
+    )

@@ -109,7 +109,10 @@ class FakeSession:
 
 class BoostReranker:
     def rerank(self, query, candidates, *, deadline, cancel_event):
-        return {item.canonical_id: (1.0 if item.canonical_id == "b" else 0.0) for item in candidates}
+        return {
+            item.canonical_id: (1.0 if item.canonical_id == "b" else 0.0)
+            for item in candidates
+        }
 
 
 class BadReranker:
@@ -188,7 +191,9 @@ class RuntimeProviderTests(unittest.TestCase):
         self.assertEqual("INFERENCE_BACKEND_ABI_MISMATCH", caught.exception.reason_code)
         with self.assertRaises(SemanticScoringError) as caught:
             RuntimeEmbeddingProvider(FakeBackend(operations=("rerank",)), model())
-        self.assertEqual("INFERENCE_BACKEND_CAPABILITY_MISSING", caught.exception.reason_code)
+        self.assertEqual(
+            "INFERENCE_BACKEND_CAPABILITY_MISSING", caught.exception.reason_code
+        )
 
     def test_runtime_provider_rejects_response_drift(self):
         cases = (
@@ -222,9 +227,7 @@ class RuntimeProviderTests(unittest.TestCase):
         cancelled = threading.Event()
         cancelled.set()
         with self.assertRaises(SemanticScoringError) as caught:
-            provider.embed(
-                ["x"], deadline=time.monotonic() + 1, cancel_event=cancelled
-            )
+            provider.embed(["x"], deadline=time.monotonic() + 1, cancel_event=cancelled)
         self.assertEqual("INFERENCE_CANCELLED", caught.exception.reason_code)
 
     def test_litert_adapter_is_explicitly_test_only(self):
@@ -237,17 +240,13 @@ class RuntimeProviderTests(unittest.TestCase):
         adapter = LocalLiteRTAdapter(FakeSession(), model(), isolated_test=True)
         self.assertEqual(
             ((1.0, 0.0, 0.0, 0.0),),
-            adapter.embed(
-                ["login"], deadline=time.monotonic() + 1, cancel_event=None
-            ),
+            adapter.embed(["login"], deadline=time.monotonic() + 1, cancel_event=None),
         )
         adapter = LocalLiteRTAdapter(
             FakeSession(failure=True), model(), isolated_test=True
         )
         with self.assertRaises(SemanticScoringError) as caught:
-            adapter.embed(
-                ["login"], deadline=time.monotonic() + 1, cancel_event=None
-            )
+            adapter.embed(["login"], deadline=time.monotonic() + 1, cancel_event=None)
         self.assertEqual("LITERT_INFERENCE_FAILURE", caught.exception.reason_code)
 
 
@@ -316,7 +315,7 @@ class DerivedStoreTests(unittest.TestCase):
         self.assertEqual(3, len(keys))
 
     def test_corrupt_artifact_is_discarded_and_rebuilt(self):
-        receipt = self.refresh()
+        self.refresh()
         manifest, _ = self.store.load("g1", model())
         path = Path(self.temporary.name) / "objects" / manifest["vectors_file"]
         path.write_bytes(b"truncated")
@@ -381,9 +380,7 @@ class ScorerTests(unittest.TestCase):
         scorer = SemanticScorer(
             budgets=SemanticBudgets(max_selected=2), minimum_confidence=0
         )
-        first = scorer.score(
-            generation="g1", query="cache", candidates=self.candidates
-        )
+        first = scorer.score(generation="g1", query="cache", candidates=self.candidates)
         second = scorer.score(
             generation="g1", query="cache", candidates=tuple(reversed(self.candidates))
         )
@@ -396,9 +393,7 @@ class ScorerTests(unittest.TestCase):
         self.assertEqual(
             "INFERENCE_BACKEND_UNAVAILABLE", first["fallback"]["reason_code"]
         )
-        self.assertEqual(
-            "snapshot_and_source_sha256", first["authority"]["source"]
-        )
+        self.assertEqual("snapshot_and_source_sha256", first["authority"]["source"])
         self.assertIsNone(first["selected"][0]["provenance"]["model_sha256"])
 
     def test_runtime_semantic_recovers_synonym_and_scopes_cache(self):
@@ -459,7 +454,9 @@ class ScorerTests(unittest.TestCase):
             generation="g1", query="login", candidates=self.candidates
         )
         self.assertEqual("RERANK_ID_UNKNOWN", receipt["fallback"]["reason_code"])
-        self.assertTrue(all(item["components"]["reranker"] is None for item in receipt["results"]))
+        self.assertTrue(
+            all(item["components"]["reranker"] is None for item in receipt["results"])
+        )
 
     def test_abstention_never_forces_uncovered_results(self):
         receipt = SemanticScorer().score(
@@ -467,9 +464,7 @@ class ScorerTests(unittest.TestCase):
         )
         self.assertEqual([], receipt["selected"])
         self.assertEqual("NO_QUERY_COVERAGE", receipt["abstention"]["reason"])
-        empty = SemanticScorer().score(
-            generation="g1", query="anything", candidates=()
-        )
+        empty = SemanticScorer().score(generation="g1", query="anything", candidates=())
         self.assertEqual("NO_CANDIDATES", empty["abstention"]["reason"])
 
     def test_candidate_request_token_and_backpressure_budgets(self):
@@ -491,9 +486,7 @@ class ScorerTests(unittest.TestCase):
         with self.assertRaises(SemanticScoringError) as caught:
             scorer.score(generation="g", query="x", candidates=self.candidates)
         self.assertEqual("REQUEST_BYTES_BUDGET_EXCEEDED", caught.exception.reason_code)
-        scorer = SemanticScorer(
-            budgets=SemanticBudgets(max_queue_depth=1)
-        )
+        scorer = SemanticScorer(budgets=SemanticBudgets(max_queue_depth=1))
         scorer._pending = 1
         with self.assertRaises(SemanticScoringError) as caught:
             scorer.score(generation="g", query="x", candidates=())

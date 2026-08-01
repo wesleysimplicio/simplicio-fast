@@ -3,13 +3,19 @@ import unittest
 from pathlib import Path
 
 from simplicio_fast.users.repository import JsonUserRepository
-from simplicio_fast.users.service import EmailConflictError, UserNotFoundError, UserService
+from simplicio_fast.users.service import (
+    EmailConflictError,
+    UserNotFoundError,
+    UserService,
+)
 
 
 class UserServiceTest(unittest.TestCase):
     def setUp(self) -> None:
         self.temporary = tempfile.TemporaryDirectory()
-        self.service = UserService(JsonUserRepository(Path(self.temporary.name) / "users.json"))
+        self.service = UserService(
+            JsonUserRepository(Path(self.temporary.name) / "users.json")
+        )
 
     def tearDown(self) -> None:
         self.temporary.cleanup()

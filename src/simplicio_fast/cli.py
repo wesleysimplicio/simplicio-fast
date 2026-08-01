@@ -371,6 +371,17 @@ def build_parser() -> argparse.ArgumentParser:
     delivery.add_argument(
         "--profile", choices=("full", "loop-standalone"), default="loop-standalone"
     )
+    delivery.add_argument(
+        "--mapper-mode",
+        choices=("bootstrap", "integrated"),
+        default="bootstrap",
+        help="context producer mode; integrated requires a validated Mapper handoff",
+    )
+    delivery.add_argument(
+        "--mapper-handoff",
+        default=None,
+        help="JSON file emitted by `simplicio-mapper fast-handoff`",
+    )
     delivery.add_argument("--max-bytes", type=int, default=32_000)
     delivery.add_argument(
         "--changeset", default=None, help="optional simplicio.fast.changeset/v2 JSON"
@@ -405,6 +416,76 @@ def build_parser() -> argparse.ArgumentParser:
     apply_command.add_argument(
         "--write", action="store_true", help="atomically replace validated source files"
     )
+
+    changeset = commands.add_parser(
+        "changeset",
+        help="prepare, validate, inspect and materialize a binary changeset",
+        description="Public binary changeset lifecycle; all output is versioned JSON.",
+    )
+    changeset_commands = changeset.add_subparsers(
+        dest="changeset_action", required=True
+    )
+
+    prepare = changeset_commands.add_parser(
+        "prepare", help="compile JSON intent into a sealed binary changeset"
+    )
+    prepare.add_argument("input_json", help="JSON file containing operations")
+    prepare.add_argument("--root", default=".")
+    prepare.add_argument("--output", required=True, help="output binary changeset path")
+    for option in (
+        "base-generation",
+        "overlay-generation",
+        "attempt",
+        "worktree-id",
+        "lease-id",
+        "fencing-token",
+    ):
+        prepare.add_argument(f"--{option}", required=True)
+    prepare.add_argument("--allowed-path", action="append", default=None)
+    prepare.add_argument("--verification-command", action="append", default=[])
+
+    validate_changeset = changeset_commands.add_parser(
+        "validate", help="validate a binary changeset against source hashes"
+    )
+    validate_changeset.add_argument("binary")
+    validate_changeset.add_argument("--root", default=".")
+    validate_changeset.add_argument("--lease-id")
+    validate_changeset.add_argument("--fencing-token")
+
+    seal = changeset_commands.add_parser(
+        "seal", help="copy and verify a binary changeset into a sealed output"
+    )
+    seal.add_argument("binary")
+    seal.add_argument("--output", required=True)
+
+    inspect_changeset = changeset_commands.add_parser(
+        "inspect", help="inspect binary metadata without exposing offsets"
+    )
+    inspect_changeset.add_argument("binary")
+
+    export_json = changeset_commands.add_parser(
+        "export-json", help="export a binary changeset as versioned JSON"
+    )
+    export_json.add_argument("binary")
+
+    materialize_changeset = changeset_commands.add_parser(
+        "materialize",
+        help="materialize through the installed Dev CLI adapter and refresh changed inputs",
+    )
+    materialize_changeset.add_argument("binary")
+    materialize_changeset.add_argument("--root", default=".")
+    materialize_changeset.add_argument("--journal", required=True)
+    materialize_changeset.add_argument(
+        "--write", action="store_true", help="authorize the source mutation"
+    )
+
+    recover = changeset_commands.add_parser(
+        "recover", help="recover an incomplete binary journal tail"
+    )
+    recover.add_argument("journal")
+    recover.add_argument("--worktree-id", required=True)
+    recover.add_argument("--lease-id", required=True)
+    recover.add_argument("--fencing-token", required=True)
 
     doctor = commands.add_parser(
         "doctor",
@@ -648,8 +729,91 @@ def main() -> None:
                         args.task,
                         profile=args.profile,
                         engine_receipt=selection.receipt(),
+                        mode=args.mapper_mode,
+                        mapper_handoff=(
+                            json.loads(
+                                Path(args.mapper_handoff).read_text(encoding="utf-8")
+                            )
+                            if args.mapper_handoff
+                            else None
+                        ),
                     )
                 )
+        elif args.command == "changeset":
+            from .binary_changeset import (
+                BinaryChangeJournal,
+                inspect_binary,
+                materialize,
+                prepare_from_json,
+                read_binary,
+            )
+
+            action = args.changeset_action
+            if action == "prepare":
+                value = json.loads(Path(args.input_json).read_text(encoding="utf-8"))
+                if not isinstance(value, dict):
+                    raise ValueError("input_json must contain an object")
+                changeset = prepare_from_json(
+                    value,
+                    root=Path(args.root),
+                    base_generation=args.base_generation,
+                    overlay_generation=args.overlay_generation,
+                    attempt=args.attempt,
+                    worktree_id=args.worktree_id,
+                    lease_id=args.lease_id,
+                    fencing_token=args.fencing_token,
+                    allowed_paths=args.allowed_path,
+                    verification_commands=args.verification_command,
+                )
+                emit(changeset.seal_to(Path(args.output)))
+            elif action == "validate":
+                changeset = read_binary(Path(args.binary))
+                emit(
+                    {
+                        "schema": "simplicio.fast.binary-changeset-cli-validation/v1",
+                        "status": "valid",
+                        "changeset_id": changeset.changeset_id,
+                        "validation": changeset.validate(
+                            Path(args.root),
+                            lease_id=args.lease_id,
+                            fencing_token=args.fencing_token,
+                        ),
+                    }
+                )
+            elif action == "seal":
+                emit(read_binary(Path(args.binary)).seal_to(Path(args.output)))
+            elif action == "inspect":
+                emit(inspect_binary(Path(args.binary)))
+            elif action == "export-json":
+                emit(read_binary(Path(args.binary)).to_dict())
+            elif action == "materialize":
+                changeset = read_binary(Path(args.binary))
+                if not args.write:
+                    emit(
+                        {
+                            "schema": "simplicio.fast.binary-changeset-cli-materialize/v1",
+                            "status": "dry_run",
+                            "changeset_id": changeset.changeset_id,
+                            "validation": changeset.validate(Path(args.root)),
+                            "write_required": True,
+                        }
+                    )
+                else:
+                    journal = BinaryChangeJournal(
+                        Path(args.journal),
+                        worktree_id=changeset.worktree_id,
+                        lease_id=changeset.lease_id,
+                        fencing_token=changeset.fencing_token,
+                    )
+                    emit(materialize(changeset, Path(args.root), journal))
+            else:
+                journal = BinaryChangeJournal(
+                    Path(args.journal),
+                    worktree_id=args.worktree_id,
+                    lease_id=args.lease_id,
+                    fencing_token=args.fencing_token,
+                )
+                emit(journal.recover())
         elif args.command == "apply":
             processor = ProjectProcessor(Path(args.root), Path(DEFAULT_SNAPSHOT))
             emit(
