@@ -115,6 +115,7 @@ pub struct SnapshotReader {
     pub(crate) bytes: SnapshotBytes,
     pub(crate) sections: BTreeMap<String, Section>,
     digest: [u8; 32],
+    indexes: PersistedIndexes,
 }
 
 pub(crate) enum SnapshotBytes {
@@ -395,10 +396,16 @@ impl SnapshotReader {
                 "relation section is not an array".into(),
             ));
         }
+        let symbol_count = sections["symbols"].length / SYMBOL_RECORD_SIZE;
+        let indexes: PersistedIndexes =
+            serde_json::from_slice(section_bytes(raw, &sections["indexes"]))
+                .map_err(|_| SnapshotError::Invalid("invalid persisted indexes".into()))?;
+        validate_persisted_indexes(&indexes, symbol_count)?;
         Ok(Self {
             bytes,
             sections,
             digest: snapshot_digest.into(),
+            indexes,
         })
     }
 
@@ -468,17 +475,12 @@ impl SnapshotReader {
             ));
         }
         let needle = term.to_lowercase();
-        let indexes: PersistedIndexes = serde_json::from_slice(section_bytes(
-            self.bytes.as_slice(),
-            &self.sections["indexes"],
-        ))
-        .map_err(|_| SnapshotError::Invalid("invalid persisted indexes".into()))?;
         let symbol_count = self.sections["symbols"].length / SYMBOL_RECORD_SIZE;
         let mut candidate_ids = BTreeSet::new();
         let mut candidates_visited = 0;
         let mut selected_index = "legacy.names+exact-substring".to_owned();
         let mut exact_hit = false;
-        for index in [&indexes.names, &indexes.exact] {
+        for index in [&self.indexes.names, &self.indexes.exact] {
             if let Some(values) = index.get(&needle) {
                 exact_hit = true;
                 candidates_visited += values.len();
@@ -488,7 +490,7 @@ impl SnapshotReader {
         if exact_hit {
             selected_index = "persisted.exact".into();
         } else if !needle.is_empty() {
-            for index in [&indexes.names, &indexes.exact] {
+            for index in [&self.indexes.names, &self.indexes.exact] {
                 for (key, values) in index.range(needle.clone()..) {
                     if !key.starts_with(&needle) {
                         break;
@@ -502,13 +504,14 @@ impl SnapshotReader {
             }
         }
         if candidate_ids.is_empty() {
-            for values in indexes
+            for values in self
+                .indexes
                 .names
                 .iter()
                 .filter(|(key, _)| key.contains(&needle))
                 .map(|(_, values)| values)
                 .chain(
-                    indexes
+                    self.indexes
                         .exact
                         .iter()
                         .filter(|(key, _)| key.contains(&needle))
@@ -520,8 +523,8 @@ impl SnapshotReader {
             }
         }
         for (filter, index, label) in [
-            (path, &indexes.paths, "path"),
-            (kind, &indexes.kinds, "kind"),
+            (path, &self.indexes.paths, "path"),
+            (kind, &self.indexes.kinds, "kind"),
         ] {
             let Some(filter) = filter else {
                 continue;
@@ -811,6 +814,26 @@ fn add_index_values(
     Ok(())
 }
 
+fn validate_persisted_indexes(
+    indexes: &PersistedIndexes,
+    symbol_count: usize,
+) -> Result<(), SnapshotError> {
+    for values in indexes
+        .exact
+        .values()
+        .chain(indexes.names.values())
+        .chain(indexes.paths.values())
+        .chain(indexes.kinds.values())
+    {
+        if values.iter().any(|value| *value >= symbol_count) {
+            return Err(SnapshotError::Invalid(
+                "persisted index record out of bounds".into(),
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn read_text(
     bytes: &[u8],
     strings: &Section,
@@ -906,6 +929,12 @@ mod tests {
             bytes: SnapshotBytes::Owned(Vec::new()),
             sections: BTreeMap::new(),
             digest: [0; 32],
+            indexes: PersistedIndexes {
+                exact: BTreeMap::new(),
+                names: BTreeMap::new(),
+                paths: BTreeMap::new(),
+                kinds: BTreeMap::new(),
+            },
         }
     }
 
