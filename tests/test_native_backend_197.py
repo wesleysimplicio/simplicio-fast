@@ -7,6 +7,7 @@ import pytest
 from simplicio_fast import __version__
 from simplicio_fast.native_backend import (
     ABI,
+    NativeBackendError,
     PythonBackend,
     ResidentRustSession,
     RustBackend,
@@ -227,6 +228,7 @@ def test_resident_session_handshake_and_framed_call(monkeypatch):
     assert session.call("sha256", {"hex": "01"}) == "again"
     metrics = session.metrics()
     assert metrics["starts"] == 1
+    assert metrics["reconnects"] == 0
     assert metrics["requests"] == 2
     assert metrics["failures"] == 0
     assert metrics["bytes_in"] == 158
@@ -261,8 +263,20 @@ def test_resident_session_compiled_binary_lifecycle() -> None:
         assert session.call("page", {"hex": "616263", "offset": 1, "limit": 1}) == "62"
         metrics = session.metrics()
         assert metrics["starts"] == 1
+        assert metrics["reconnects"] == 0
         assert metrics["requests"] == 2
         assert metrics["failures"] == 0
     finally:
+        process = session._process
+        process.kill()
+        process.wait(timeout=2)
+        with pytest.raises(NativeBackendError, match="session_crashed"):
+            session.call("sha256", {"hex": "00"})
+        session.restart()
+        assert session.call("sha256", {"hex": "616263"}).startswith("ba7816")
+        restarted = session.metrics()
+        assert restarted["starts"] == 2
+        assert restarted["reconnects"] == 1
+        assert restarted["failures"] == 1
         session.close()
     assert session._process.poll() is not None
