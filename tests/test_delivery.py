@@ -69,6 +69,14 @@ class DeliveryEngineTest(unittest.TestCase):
                 tokenizer_id="test-exact-v2",
                 tokenizer=lambda text: len(text.encode("utf-8")),
             )
+            changed_scoring = engine.prepare(
+                "understand create_user",
+                profile="loop-standalone",
+                engine_receipt=selection,
+                tokenizer_id="test-exact-v1",
+                tokenizer=lambda text: len(text.encode("utf-8")),
+                scoring_config="semantic-ranking-v2",
+            )
             self.assertEqual("exact", exact["context"]["tokenizer"]["mode"])
             self.assertEqual("test-exact-v1", exact["context"]["tokenizer"]["id"])
             self.assertEqual(
@@ -84,6 +92,8 @@ class DeliveryEngineTest(unittest.TestCase):
                 exact["context_request"]["requested_relations"],
             )
             self.assertEqual("miss", changed_config["cache"]["L0_attempt"])
+            self.assertEqual("semantic-ranking-v2", changed_scoring["context"]["scoring_config"])
+            self.assertEqual("miss", changed_scoring["cache"]["L0_attempt"])
             self.assertGreater(exact["context"]["tokens"], 0)
 
     def test_prepare_requires_identity_for_exact_tokenizer(self) -> None:
