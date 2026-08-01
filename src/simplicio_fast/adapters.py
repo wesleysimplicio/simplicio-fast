@@ -8,6 +8,9 @@ handles while Fast owns extraction and persistence.
 from __future__ import annotations
 
 import ast
+import hashlib
+import json
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -67,6 +70,47 @@ def capability_report() -> list[AdapterCapability]:
 
 def language_for_path(path: Path) -> str | None:
     return SUPPORTED_EXTENSIONS.get(path.suffix.casefold())
+
+
+_RUST_IGNORED_DIRS = {".git", ".simplicio", ".simplicio-fast", "target", "vendor"}
+
+
+def discover_rust_projects(root: Path) -> list[Path]:
+    """Return Cargo manifests which belong to the source workspace.
+
+    Generated and vendored trees are deliberately excluded.  The result is
+    lexical and deterministic; Cargo remains authoritative for workspace
+    membership and feature resolution in the integrated path.
+    """
+
+    root = root.resolve()
+    manifests: list[Path] = []
+    for directory, child_dirs, files in os.walk(root):
+        child_dirs[:] = sorted(
+            name for name in child_dirs if name not in _RUST_IGNORED_DIRS
+        )
+        if "Cargo.toml" in files:
+            manifests.append(Path(directory) / "Cargo.toml")
+    return sorted(manifests, key=lambda path: path.relative_to(root).as_posix())
+
+
+def rust_workspace_fingerprint(root: Path) -> str:
+    """Hash Cargo inputs that affect the selected Rust source graph."""
+
+    root = root.resolve()
+    records: list[dict[str, str]] = []
+    for path in [*discover_rust_projects(root), root / "Cargo.lock"]:
+        if not path.is_file():
+            continue
+        relative = path.relative_to(root).as_posix()
+        records.append(
+            {
+                "path": relative,
+                "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        )
+    payload = json.dumps(records, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def parse_path(path: Path, relative_path: str | None = None) -> list[Symbol]:
@@ -158,14 +202,41 @@ def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
     elif language == "rust":
         patterns = [
             ("use", "import", re.compile(r"^\s*(?:pub\s+)?use\s+([^;]+)")),
-            ("mod", "namespace", re.compile(r"^\s*(?:pub\s+)?mod\s+(\w+)")),
-            ("struct", "struct", re.compile(r"^\s*(?:pub\s+)?struct\s+(\w+)")),
-            ("trait", "trait", re.compile(r"^\s*(?:pub\s+)?trait\s+(\w+)")),
+            (
+                "mod",
+                "namespace",
+                re.compile(r"^\s*(?:pub\s+)?(?:unsafe\s+)?mod\s+(\w+)"),
+            ),
+            (
+                "struct",
+                "struct",
+                re.compile(r"^\s*(?:pub\s+)?(?:packed\s+)?struct\s+(\w+)"),
+            ),
+            (
+                "trait",
+                "trait",
+                re.compile(r"^\s*(?:pub\s+)?(?:unsafe\s+)?trait\s+(\w+)"),
+            ),
             ("enum", "enum", re.compile(r"^\s*(?:pub\s+)?enum\s+(\w+)")),
+            ("type", "struct", re.compile(r"^\s*(?:pub\s+)?type\s+(\w+)")),
+            ("const", "struct", re.compile(r"^\s*(?:pub\s+)?const\s+(\w+)")),
+            (
+                "static",
+                "struct",
+                re.compile(r"^\s*(?:pub\s+)?static\s+(?:mut\s+)?(\w+)"),
+            ),
+            ("macro", "function", re.compile(r"^\s*(?:pub\s+)?macro_rules!\s+(\w+)")),
+            (
+                "impl",
+                "namespace",
+                re.compile(r"^\s*impl(?:<[^>{}]+>)?\s+(?:[^{}]+\s+for\s+)?([\w:]+)"),
+            ),
             (
                 "function",
                 "function",
-                re.compile(r"^\s*(?:pub\s+)?(?:async\s+)?fn\s+(\w+)"),
+                re.compile(
+                    r"^\s*(?:pub\s+)?(?:const\s+|async\s+|unsafe\s+)*fn\s+(\w+)"
+                ),
             ),
         ]
     else:
