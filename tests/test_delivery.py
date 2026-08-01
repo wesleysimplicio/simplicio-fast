@@ -44,6 +44,35 @@ class DeliveryEngineTest(unittest.TestCase):
             self.assertEqual("hit", second["cache"]["L0_attempt"])
             self.assertFalse(first["ownership"]["mutation_applied"])
 
+    def test_prepare_uses_exact_tokenizer_and_binds_tokenizer_to_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def create_user(name):\n    return name\n", encoding="utf-8"
+            )
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            engine = DeliveryEngine(root, snapshot)
+            selection = select_engine("python").receipt()
+            exact = engine.prepare(
+                "understand create_user",
+                profile="loop-standalone",
+                engine_receipt=selection,
+                tokenizer_id="test-exact-v1",
+                tokenizer=lambda text: len(text.encode("utf-8")),
+            )
+            changed_config = engine.prepare(
+                "understand create_user",
+                profile="loop-standalone",
+                engine_receipt=selection,
+                tokenizer_id="test-exact-v2",
+                tokenizer=lambda text: len(text.encode("utf-8")),
+            )
+            self.assertEqual("exact", exact["context"]["tokenizer"]["mode"])
+            self.assertEqual("test-exact-v1", exact["context"]["tokenizer"]["id"])
+            self.assertEqual("miss", changed_config["cache"]["L0_attempt"])
+            self.assertGreater(exact["context"]["tokens"], 0)
+
     def test_cache_stats_reports_disposable_cache_size(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
