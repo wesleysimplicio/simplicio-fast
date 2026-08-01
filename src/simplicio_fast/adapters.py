@@ -99,7 +99,13 @@ def rust_workspace_fingerprint(root: Path) -> str:
 
     root = root.resolve()
     records: list[dict[str, str]] = []
-    for path in [*discover_rust_projects(root), root / "Cargo.lock"]:
+    config_files = [
+        root / "rust-toolchain",
+        root / "rust-toolchain.toml",
+        root / ".cargo" / "config",
+        root / ".cargo" / "config.toml",
+    ]
+    for path in [*discover_rust_projects(root), root / "Cargo.lock", *config_files]:
         if not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()

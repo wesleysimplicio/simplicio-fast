@@ -73,3 +73,24 @@ def test_rust_workspace_fingerprint_changes_with_cargo_inputs(tmp_path: Path) ->
     manifest.write_text("[workspace]\nmembers=['crate']\n", encoding="utf-8")
     second = rust_workspace_fingerprint(tmp_path)
     assert first != second
+
+
+def test_rust_workspace_fingerprint_binds_toolchain_and_cargo_config(
+    tmp_path: Path,
+) -> None:
+    manifest = tmp_path / "Cargo.toml"
+    manifest.write_text("[package]\nname='app'\nversion='0.1.0'\n", encoding="utf-8")
+    toolchain = tmp_path / "rust-toolchain.toml"
+    toolchain.write_text('[toolchain]\nchannel="stable"\n', encoding="utf-8")
+    cargo_config = tmp_path / ".cargo" / "config.toml"
+    cargo_config.parent.mkdir()
+    cargo_config.write_text("[build]\nrustflags=[]\n", encoding="utf-8")
+
+    baseline = rust_workspace_fingerprint(tmp_path)
+    toolchain.write_text('[toolchain]\nchannel="1.85.0"\n', encoding="utf-8")
+    changed_toolchain = rust_workspace_fingerprint(tmp_path)
+    assert changed_toolchain != baseline
+
+    cargo_config.write_text("[build]\nrustflags=[\"-Ctarget-cpu=native\"]\n", encoding="utf-8")
+    changed_config = rust_workspace_fingerprint(tmp_path)
+    assert changed_config != changed_toolchain
