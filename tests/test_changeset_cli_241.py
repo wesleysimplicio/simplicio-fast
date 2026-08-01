@@ -319,3 +319,21 @@ class ChangesetCli241Test(unittest.TestCase):
                 "fence-1",
             )
             self.assertEqual("valid", recovered["status"])
+            journal = root / "changeset.journal"
+            complete = journal.read_bytes()
+            journal.write_bytes(complete + b"\x00incomplete-tail")
+            recovered_tail = self.run_cli(
+                root,
+                "changeset",
+                "recover",
+                str(journal),
+                "--worktree-id",
+                "worktree-1",
+                "--lease-id",
+                "lease-1",
+                "--fencing-token",
+                "fence-1",
+            )
+            self.assertEqual("recovered", recovered_tail["status"])
+            self.assertGreater(recovered_tail["truncated_bytes"], 0)
+            self.assertEqual(complete, journal.read_bytes())
