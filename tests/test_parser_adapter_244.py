@@ -1,0 +1,45 @@
+import copy
+from pathlib import Path
+import tempfile
+import unittest
+
+from simplicio_fast.parser_adapter import (
+    ParserAdapterError,
+    build_payload,
+    validate_payload,
+)
+
+
+class ParserAdapter244Test(unittest.TestCase):
+    def test_python_payload_is_deterministic_and_validated(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "class Service:\n    def run(self):\n        return True\n",
+                encoding="utf-8",
+            )
+            first = build_payload(root)
+            second = build_payload(root)
+            self.assertEqual(first, second)
+            receipt = validate_payload(first)
+            self.assertEqual("valid", receipt["status"])
+            self.assertEqual(2, receipt["symbols"])
+
+    def test_changed_paths_are_scoped_and_invalid_payloads_fail_closed(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one.py").write_text("def one():\n    return 1\n", encoding="utf-8")
+            (root / "two.py").write_text("def two():\n    return 2\n", encoding="utf-8")
+            payload = build_payload(root, changed_paths=["one.py"])
+            self.assertEqual(["one.py"], payload["changed_paths"])
+            self.assertEqual(["one.py"], [item["path"] for item in payload["files"]])
+            broken = copy.deepcopy(payload)
+            broken["payload_sha256"] = "0" * 64
+            with self.assertRaisesRegex(ParserAdapterError, "payload_digest_mismatch"):
+                validate_payload(broken)
+            with self.assertRaisesRegex(ParserAdapterError, "path_escape"):
+                build_payload(root, changed_paths=["../outside.py"])
+
+
+if __name__ == "__main__":
+    unittest.main()
