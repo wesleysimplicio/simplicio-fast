@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 from typing import Any, Iterable, Mapping
 
 from .adapters import SUPPORTED_EXTENSIONS, language_for_path, parse_path
@@ -91,6 +92,64 @@ def _source_files(root: Path, changed_paths: Iterable[str] | None) -> list[Path]
     return sorted(set(result))
 
 
+def _lexical_relations(
+    path: Path,
+    relative: str,
+    language: str,
+    symbols: list[Any],
+    symbol_ids: Mapping[str, str],
+) -> list[dict[str, Any]]:
+    """Emit bounded, deterministic relations for optional lexical adapters."""
+
+    text = path.read_text(encoding="utf-8")
+    relations: list[dict[str, Any]] = []
+    for symbol in symbols:
+        identifier = symbol_ids.get(symbol.qualified_name, "")
+        relations.append(
+            {
+                "origin": symbol.qualified_name,
+                "destination": symbol.qualified_name,
+                "kind": "definition",
+                "confidence": 0.75,
+                "origin_id": identifier,
+                "destination_id": identifier,
+                "file": relative,
+            }
+        )
+        if symbol.name.casefold().startswith(("test", "spec")):
+            relations.append(
+                {
+                    "origin": relative,
+                    "destination": symbol.qualified_name,
+                    "kind": "test",
+                    "confidence": 0.6,
+                    "origin_id": "",
+                    "destination_id": identifier,
+                    "file": relative,
+                }
+            )
+    import_pattern = {
+        "typescript": re.compile(r"^\s*import\b.*?[\"']([^\"']+)[\"']"),
+        "rust": re.compile(r"^\s*(?:pub\s+)?use\s+([^;]+)"),
+        "csharp": re.compile(r"^\s*(?:global\s+)?using\s+([^;=]+)"),
+    }[language]
+    for line in text.splitlines():
+        match = import_pattern.search(line)
+        if match:
+            relations.append(
+                {
+                    "origin": relative,
+                    "destination": match.group(1).strip(),
+                    "kind": "import",
+                    "confidence": 0.5,
+                    "origin_id": "",
+                    "destination_id": "",
+                    "file": relative,
+                }
+            )
+    return relations
+
+
 def build_payload(
     root: Path,
     *,
@@ -145,7 +204,16 @@ def build_payload(
                 parsed, parsed_relations = _parse_file(path, relative, str(root))
             else:
                 parsed = parse_path(path, relative)
-                parsed_relations = []
+                lexical_ids = {
+                    item.qualified_name: stable_id(
+                        str(root), relative, language, item.qualified_name,
+                        item.signature or item.kind,
+                    )
+                    for item in parsed
+                }
+                parsed_relations = _lexical_relations(
+                    path, relative, language, parsed, lexical_ids
+                )
         except (OSError, SyntaxError, UnicodeDecodeError) as error:
             diagnostics.append(
                 {
@@ -184,15 +252,28 @@ def build_payload(
         for relation in parsed_relations:
             if len(relations) >= selected_limits["max_relations"]:
                 raise ParserAdapterError("relation_limit_exceeded")
-            destination = relation.destination
-            destination_id = relation.destination_id or symbol_ids.get(destination, "")
+            if isinstance(relation, Mapping):
+                destination = relation["destination"]
+                origin = relation["origin"]
+                kind = relation["kind"]
+                confidence = relation["confidence"]
+                origin_id = relation.get("origin_id", "")
+                supplied_destination_id = relation.get("destination_id", "")
+            else:
+                destination = relation.destination
+                origin = relation.origin
+                kind = relation.kind
+                confidence = relation.confidence
+                origin_id = relation.origin_id
+                supplied_destination_id = relation.destination_id
+            destination_id = supplied_destination_id or symbol_ids.get(destination, "")
             relations.append(
                 {
-                    "origin": relation.origin,
+                    "origin": origin,
                     "destination": destination,
-                    "kind": relation.kind,
-                    "confidence": relation.confidence,
-                    "origin_id": relation.origin_id,
+                    "kind": kind,
+                    "confidence": confidence,
+                    "origin_id": origin_id,
                     "destination_id": destination_id,
                     "file": relative,
                 }
