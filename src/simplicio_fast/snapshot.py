@@ -1472,6 +1472,10 @@ class Snapshot:
         spans: list[ContextSpan] = []
         consumed = consumed_tokens = 0
         seen: set[tuple[str, int, int]] = set()
+        # A single context request may match many symbols in one file. Keep
+        # the verified source bytes local to this request so each file is
+        # read, decoded and hashed at most once.
+        source_cache: dict[str, tuple[bytes, str, list[str]]] = {}
         for symbol in self.find(query):
             if len(spans) >= max_results:
                 break
@@ -1484,13 +1488,22 @@ class Snapshot:
                 raise ValueError(
                     f"snapshot path escapes root: {symbol.file}"
                 ) from error
-            contents = path.read_bytes()
-            actual_hash = hashlib.sha256(contents).digest()
+            cached_source = source_cache.get(symbol.file)
+            if cached_source is None:
+                contents = path.read_bytes()
+                actual_hash = hashlib.sha256(contents).digest()
+                try:
+                    lines = contents.decode("utf-8").splitlines()
+                except UnicodeDecodeError as error:
+                    raise ValueError(f"source is not valid UTF-8: {symbol.file}") from error
+                source_cache[symbol.file] = (contents, actual_hash.hex(), lines)
+            else:
+                contents, actual_hash_hex, lines = cached_source
+                actual_hash = bytes.fromhex(actual_hash_hex)
             if actual_hash != expected_hashes[symbol.file]:
                 raise StaleSnapshotError(
                     f"source changed after snapshot: {symbol.file}; run simplicio-fast refresh"
                 )
-            lines = contents.decode("utf-8").splitlines()
             start = symbol.line
             end = min(symbol.end_line, start + max_lines - 1)
             key = (symbol.file, start, end)
