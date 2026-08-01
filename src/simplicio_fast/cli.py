@@ -374,8 +374,11 @@ def build_parser() -> argparse.ArgumentParser:
     delivery.add_argument(
         "--mapper-mode",
         choices=("bootstrap", "integrated"),
-        default="bootstrap",
-        help="context producer mode; integrated requires a validated Mapper handoff",
+        default="integrated",
+        help=(
+            "context producer mode (default: integrated); "
+            "bootstrap is an explicit development fallback"
+        ),
     )
     delivery.add_argument(
         "--mapper-handoff",
