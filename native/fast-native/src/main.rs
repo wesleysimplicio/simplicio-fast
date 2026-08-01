@@ -97,8 +97,8 @@ fn execute(operation: &str, payload: &Value, state: &mut SessionState) -> Result
             let max_bytes = payload["max_bytes"].as_u64().unwrap_or(32_000) as usize;
             let max_tokens = payload["max_tokens"].as_u64().unwrap_or(8_000) as usize;
             let reader = state.snapshot(snapshot)?;
-            let spans = reader
-                .context(
+            let receipt = reader
+                .context_with_receipt(
                     std::path::Path::new(root),
                     term,
                     limit,
@@ -107,7 +107,14 @@ fn execute(operation: &str, payload: &Value, state: &mut SessionState) -> Result
                     max_tokens,
                 )
                 .map_err(|error| error.to_string())?;
-            Ok(json!({ "spans": spans }))
+            Ok(json!({
+                "spans": receipt.spans,
+                "planner": {
+                    "source_files_read": receipt.source_files_read,
+                    "source_cache_hits": receipt.source_cache_hits,
+                    "source_bytes_read": receipt.source_bytes_read,
+                }
+            }))
         }
         "stats" => {
             let snapshot = payload["snapshot"].as_str().ok_or("snapshot")?;
