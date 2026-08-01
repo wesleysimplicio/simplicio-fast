@@ -13,7 +13,9 @@ from simplicio_fast.skills import (
 )
 
 
-def skill(name: str, *, content: str, triggers: tuple[str, ...], scope: str = "repo-a") -> AuthorizedSkill:
+def skill(
+    name: str, *, content: str, triggers: tuple[str, ...], scope: str = "repo-a"
+) -> AuthorizedSkill:
     return AuthorizedSkill(
         name=name,
         version="1.0.0",
@@ -29,14 +31,20 @@ def skill(name: str, *, content: str, triggers: tuple[str, ...], scope: str = "r
 class SkillCatalogTest(unittest.TestCase):
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
-        self.catalog = SkillCatalog(Path(self.directory.name), "SFAST001:generation", scope="repo-a")
+        self.catalog = SkillCatalog(
+            Path(self.directory.name), "SFAST001:generation", scope="repo-a"
+        )
 
     def tearDown(self) -> None:
         self.directory.cleanup()
 
     def test_resolve_returns_bounded_t0_handles_without_content(self) -> None:
-        handle = self.catalog.register(skill("python-tests", content="SECRET BODY", triggers=("pytest",)))
-        self.catalog.register(skill("deploy", content="deploy body", triggers=("release",)))
+        handle = self.catalog.register(
+            skill("python-tests", content="SECRET BODY", triggers=("pytest",))
+        )
+        self.catalog.register(
+            skill("deploy", content="deploy body", triggers=("release",))
+        )
 
         result = self.catalog.resolve("run pytest", max_results=1)
 
@@ -59,8 +67,12 @@ class SkillCatalogTest(unittest.TestCase):
         self.assertFalse(result["truncated"])
 
     def test_materialize_is_scoped_and_byte_bounded(self) -> None:
-        first = self.catalog.register(skill("first", content="12345", triggers=("one",)))
-        second = self.catalog.register(skill("second", content="67890", triggers=("two",)))
+        first = self.catalog.register(
+            skill("first", content="12345", triggers=("one",))
+        )
+        second = self.catalog.register(
+            skill("second", content="67890", triggers=("two",))
+        )
 
         result = self.catalog.materialize((first, second), max_entries=2, max_bytes=5)
 
@@ -69,27 +81,40 @@ class SkillCatalogTest(unittest.TestCase):
         self.assertEqual(5, result["bytes_materialized"])
         self.assertTrue(result["truncated"])
         self.assertEqual("12345", result["materialized"][0]["content"])
-        self.assertEqual(hashlib.sha256(b"12345").hexdigest(), result["materialized"][0]["content_sha256"])
+        self.assertEqual(
+            hashlib.sha256(b"12345").hexdigest(),
+            result["materialized"][0]["content_sha256"],
+        )
 
     def test_materialize_deduplicates_handles_and_preserves_provenance(self) -> None:
-        handle = self.catalog.register(skill("python-tests", content="pytest", triggers=("pytest",)))
+        handle = self.catalog.register(
+            skill("python-tests", content="pytest", triggers=("pytest",))
+        )
 
         result = self.catalog.materialize((handle, handle))
 
         self.assertEqual(1, result["entries_materialized"])
         self.assertEqual(handle, result["materialized"][0]["handle"])
-        self.assertEqual("host://skills/python-tests", result["materialized"][0]["origin"])
+        self.assertEqual(
+            "host://skills/python-tests", result["materialized"][0]["origin"]
+        )
         self.assertEqual("repo-a", result["materialized"][0]["scope"])
 
     def test_scope_is_required_and_cross_scope_registration_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "scope"):
-            self.catalog.register(skill("other", content="x", triggers=(), scope="repo-b"))
+            self.catalog.register(
+                skill("other", content="x", triggers=(), scope="repo-b")
+            )
         with self.assertRaises(ValueError):
             SkillCatalog(Path(self.directory.name), "SFAST001:generation", scope="")
 
     def test_handle_is_not_accepted_by_another_generation_catalog(self) -> None:
-        handle = self.catalog.register(skill("python-tests", content="pytest", triggers=("pytest",)))
-        other = SkillCatalog(Path(self.directory.name), "SFAST001:other", scope="repo-a")
+        handle = self.catalog.register(
+            skill("python-tests", content="pytest", triggers=("pytest",))
+        )
+        other = SkillCatalog(
+            Path(self.directory.name), "SFAST001:other", scope="repo-a"
+        )
 
         with self.assertRaisesRegex(ValueError, "unknown catalog handle"):
             other.materialize((handle,))

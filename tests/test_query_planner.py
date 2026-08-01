@@ -24,7 +24,13 @@ class QueryPlannerTest(unittest.TestCase):
     def test_exact_plan_uses_direct_index_and_budget(self) -> None:
         holder, snapshot = self.snapshot()
         try:
-            plan = plan_query(snapshot, "Service.run", operation="context", max_results=2, max_bytes=100)
+            plan = plan_query(
+                snapshot,
+                "Service.run",
+                operation="context",
+                max_results=2,
+                max_bytes=100,
+            )
             self.assertEqual("simplicio.fast.query-plan/v1", plan.schema)
             self.assertEqual("exact", plan.selected_index)
             self.assertEqual(1, plan.candidate_records)
@@ -39,8 +45,12 @@ class QueryPlannerTest(unittest.TestCase):
     def test_query_and_search_plans_expose_bounded_prefetch(self) -> None:
         holder, snapshot = self.snapshot()
         try:
-            query = plan_query(snapshot, "Service.run", operation="query", max_results=1)
-            search = plan_query(snapshot, "Service.run", operation="search", max_results=1)
+            query = plan_query(
+                snapshot, "Service.run", operation="query", max_results=1
+            )
+            search = plan_query(
+                snapshot, "Service.run", operation="search", max_results=1
+            )
             self.assertEqual(("helper",), query.prefetch)
             self.assertEqual(("helper",), search.prefetch)
         finally:

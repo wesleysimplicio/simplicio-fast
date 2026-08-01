@@ -19,6 +19,9 @@ simplicio-fast = "simplicio_fast.cli:main"
 pythonpath = ["src"]
 testpaths = ["tests"]
 
+[tool.ruff]
+exclude = ["fixtures/conformance/v1/python/service.py"]
+
 [tool.setuptools.package-data]
 simplicio_fast = ["release_policy.json"]
 

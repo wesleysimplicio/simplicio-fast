@@ -30,7 +30,10 @@ class FwhtTurboQuantTest(unittest.TestCase):
         vector = quantize_fwht(values, seed=19)
         restored = dequantize_fwht(vector)
         error_norm = math.sqrt(
-            sum((left - right) ** 2 for left, right in zip(values, restored, strict=True))
+            sum(
+                (left - right) ** 2
+                for left, right in zip(values, restored, strict=True)
+            )
         )
         self.assertLessEqual(
             error_norm,
@@ -56,7 +59,7 @@ class FwhtTurboQuantTest(unittest.TestCase):
             {"padded_dimension": 2},
             {"scale": 0.0},
             {"packed": b""},
-            {"packed": b"\xF0"},
+            {"packed": b"\xf0"},
         )
         for changes in invalid:
             fields = {

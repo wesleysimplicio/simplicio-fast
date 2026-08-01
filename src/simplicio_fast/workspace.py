@@ -25,7 +25,14 @@ if TYPE_CHECKING:
     from .delta import Delta
 
 from .adapters import capability_report, parse_path
-from .snapshot import ContextSpan, Snapshot, StaleSnapshotError, Symbol, build_snapshot, source_files
+from .snapshot import (
+    ContextSpan,
+    Snapshot,
+    StaleSnapshotError,
+    Symbol,
+    build_snapshot,
+    source_files,
+)
 
 MANIFEST_SCHEMA = "simplicio.fast.manifest/v1"
 OVERLAY_SCHEMA = "simplicio.fast.overlay/v1"
@@ -35,7 +42,9 @@ DELTA_STORAGE = "deltas"
 
 
 def _canonical_json(value: object) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode()
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +52,9 @@ class GenerationId:
     value: str
 
     def __post_init__(self) -> None:
-        if len(self.value) != 64 or any(char not in "0123456789abcdef" for char in self.value):
+        if len(self.value) != 64 or any(
+            char not in "0123456789abcdef" for char in self.value
+        ):
             raise ValueError("GenerationId must be a lowercase SHA-256 digest")
 
     def __str__(self) -> str:
@@ -76,12 +87,20 @@ class Manifest:
         if value.get("schema") != MANIFEST_SCHEMA:
             raise ValueError("unsupported manifest schema")
         return cls(
-            schema=str(value["schema"]), generation_id=str(value["generation_id"]),
-            kind=str(value["kind"]), commit=str(value["commit"]), root=str(value["root"]),
+            schema=str(value["schema"]),
+            generation_id=str(value["generation_id"]),
+            kind=str(value["kind"]),
+            commit=str(value["commit"]),
+            root=str(value["root"]),
             config_fingerprint=str(value["config_fingerprint"]),
-            parser_versions={str(k): str(v) for k, v in dict(value["parser_versions"]).items()},
-            source_hashes={str(k): str(v) for k, v in dict(value["source_hashes"]).items()},
-            snapshot=str(value["snapshot"]), created_at=str(value["created_at"]),
+            parser_versions={
+                str(k): str(v) for k, v in dict(value["parser_versions"]).items()
+            },
+            source_hashes={
+                str(k): str(v) for k, v in dict(value["source_hashes"]).items()
+            },
+            snapshot=str(value["snapshot"]),
+            created_at=str(value["created_at"]),
             snapshot_sha256=str(value.get("snapshot_sha256", "")),
             source_tree_sha256=str(value.get("source_tree_sha256", "")),
         )
@@ -143,7 +162,7 @@ def _atomic_json(path: Path, value: object) -> None:
             except PermissionError:
                 if attempt == 7:
                     raise
-                time.sleep(0.01 * (2 ** attempt))
+                time.sleep(0.01 * (2**attempt))
     finally:
         if temporary_name is not None:
             Path(temporary_name).unlink(missing_ok=True)
@@ -152,7 +171,9 @@ def _atomic_json(path: Path, value: object) -> None:
 def _commit(root: Path) -> str:
     try:
         return subprocess.check_output(
-            ["git", "-C", str(root), "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            stderr=subprocess.DEVNULL,
+            text=True,
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
@@ -162,7 +183,8 @@ def _git_status(root: Path) -> str | None:
     try:
         return subprocess.check_output(
             ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
-            stderr=subprocess.DEVNULL, text=True,
+            stderr=subprocess.DEVNULL,
+            text=True,
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return None
@@ -201,13 +223,20 @@ class WorkspaceStore:
         if commit != "unknown" and _git_status(self.root):
             raise ValueError("canonical_base_dirty")
         files = source_files(self.root)
-        source_hashes = {path.relative_to(self.root).as_posix(): _hash_source(path) for path in files}
+        source_hashes = {
+            path.relative_to(self.root).as_posix(): _hash_source(path) for path in files
+        }
         source_tree_sha256 = hashlib.sha256(_canonical_json(source_hashes)).hexdigest()
-        parser_versions = {item.language: f"{item.parser}:1" for item in capability_report()}
+        parser_versions = {
+            item.language: f"{item.parser}:1" for item in capability_report()
+        }
         config_fingerprint = hashlib.sha256(_canonical_json(config)).hexdigest()
         identity = {
-            "kind": "base", "commit": commit, "config_fingerprint": config_fingerprint,
-            "parser_versions": parser_versions, "source_hashes": source_hashes,
+            "kind": "base",
+            "commit": commit,
+            "config_fingerprint": config_fingerprint,
+            "parser_versions": parser_versions,
+            "source_hashes": source_hashes,
             "source_tree_sha256": source_tree_sha256,
         }
         generation = hashlib.sha256(_canonical_json(identity)).hexdigest()
@@ -222,9 +251,18 @@ class WorkspaceStore:
         build_snapshot(self.root, snapshot_path)
         snapshot_sha256 = _hash_source(snapshot_path)
         manifest = Manifest(
-            MANIFEST_SCHEMA, generation, "base", identity["commit"], str(self.root),
-            config_fingerprint, parser_versions, source_hashes, "project.sfast",
-            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), snapshot_sha256, source_tree_sha256,
+            MANIFEST_SCHEMA,
+            generation,
+            "base",
+            identity["commit"],
+            str(self.root),
+            config_fingerprint,
+            parser_versions,
+            source_hashes,
+            "project.sfast",
+            time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            snapshot_sha256,
+            source_tree_sha256,
         )
         _atomic_json(manifest_path, manifest.to_dict())
         _atomic_json(self.storage / "current.json", manifest.to_dict())
@@ -235,62 +273,165 @@ class WorkspaceStore:
         self._worktree_id(worktree_id)
         manifest = self.manifest(base_generation)
         changed: dict[str, dict[str, object]] = {}
-        current_paths = {path.relative_to(self.root).as_posix(): path for path in source_files(self.root)}
+        current_paths = {
+            path.relative_to(self.root).as_posix(): path
+            for path in source_files(self.root)
+        }
         for relative, path in current_paths.items():
             digest = _hash_source(path)
             if manifest.source_hashes.get(relative) == digest:
                 continue
             symbols = [asdict(symbol) for symbol in parse_path(path, relative)]
-            changed[relative] = {"sha256": digest, "tombstone": False, "symbols": symbols}
+            changed[relative] = {
+                "sha256": digest,
+                "tombstone": False,
+                "symbols": symbols,
+            }
         for relative in sorted(set(manifest.source_hashes) - set(current_paths)):
             changed[relative] = {"sha256": None, "tombstone": True, "symbols": []}
-        identity = {"base_generation": base_generation, "worktree_id": worktree_id, "changed": changed}
+        identity = {
+            "base_generation": base_generation,
+            "worktree_id": worktree_id,
+            "changed": changed,
+        }
         generation = hashlib.sha256(_canonical_json(identity)).hexdigest()
         overlay = Overlay(
-            OVERLAY_SCHEMA, generation, base_generation, worktree_id, changed,
+            OVERLAY_SCHEMA,
+            generation,
+            base_generation,
+            worktree_id,
+            changed,
             time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         )
-        _atomic_json(self.overlay_dir / worktree_id / f"{generation}.json", asdict(overlay))
-        self._receipt("overlay", {"base_generation": base_generation, "overlay_generation": generation,
-                                   "worktree_id": worktree_id, "changed_files": sorted(changed)})
+        _atomic_json(
+            self.overlay_dir / worktree_id / f"{generation}.json", asdict(overlay)
+        )
+        self._receipt(
+            "overlay",
+            {
+                "base_generation": base_generation,
+                "overlay_generation": generation,
+                "worktree_id": worktree_id,
+                "changed_files": sorted(changed),
+            },
+        )
         return overlay
 
-    def create_delta(self, base_generation: str, worktree_id: str, changed_paths: Iterable[str] | None = None, *, config_fingerprint: str | None = None) -> "Delta":
+    def create_delta(
+        self,
+        base_generation: str,
+        worktree_id: str,
+        changed_paths: Iterable[str] | None = None,
+        *,
+        config_fingerprint: str | None = None,
+    ) -> "Delta":
         from .delta import create_delta
-        return create_delta(self, base_generation, worktree_id, changed_paths, config_fingerprint=config_fingerprint)
+
+        return create_delta(
+            self,
+            base_generation,
+            worktree_id,
+            changed_paths,
+            config_fingerprint=config_fingerprint,
+        )
 
     def delta(self, worktree_id: str, generation: str) -> "Delta":
         from .delta import load_delta
+
         return load_delta(self, worktree_id, generation)
 
-    def compose_delta(self, base_generation: str, worktree_id: str, delta_generation: str, *, config_fingerprint: str | None = None) -> "EffectiveSnapshot":
+    def compose_delta(
+        self,
+        base_generation: str,
+        worktree_id: str,
+        delta_generation: str,
+        *,
+        config_fingerprint: str | None = None,
+    ) -> "EffectiveSnapshot":
         from .delta import compose_delta
-        return compose_delta(self, base_generation, worktree_id, delta_generation, config_fingerprint=config_fingerprint)
 
-    def handoff(self, base_generation: str, worktree_id: str, changed_paths: Iterable[str] | None = None, *, delta_generation: str | None = None, config_fingerprint: str | None = None, parity_snapshot: Path | None = None) -> dict[str, object]:
+        return compose_delta(
+            self,
+            base_generation,
+            worktree_id,
+            delta_generation,
+            config_fingerprint=config_fingerprint,
+        )
+
+    def handoff(
+        self,
+        base_generation: str,
+        worktree_id: str,
+        changed_paths: Iterable[str] | None = None,
+        *,
+        delta_generation: str | None = None,
+        config_fingerprint: str | None = None,
+        parity_snapshot: Path | None = None,
+    ) -> dict[str, object]:
         from .delta import handoff
-        return handoff(self, base_generation, worktree_id, changed_paths, delta_generation=delta_generation, config_fingerprint=config_fingerprint, parity_snapshot=parity_snapshot)
+
+        return handoff(
+            self,
+            base_generation,
+            worktree_id,
+            changed_paths,
+            delta_generation=delta_generation,
+            config_fingerprint=config_fingerprint,
+            parity_snapshot=parity_snapshot,
+        )
+
     def overlay(self, worktree_id: str, generation: str) -> Overlay:
         self._worktree_id(worktree_id)
         GenerationId(generation)
-        value = json.loads((self.overlay_dir / worktree_id / f"{generation}.json").read_text(encoding="utf-8"))
-        if value.get("schema") != OVERLAY_SCHEMA or value.get("overlay_generation") != generation:
+        value = json.loads(
+            (self.overlay_dir / worktree_id / f"{generation}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        if (
+            value.get("schema") != OVERLAY_SCHEMA
+            or value.get("overlay_generation") != generation
+        ):
             raise ValueError("invalid overlay manifest")
-        return Overlay(str(value["schema"]), generation, str(value["base_generation"]),
-                       str(value["worktree_id"]), dict(value["changed"]), str(value["created_at"]))
+        return Overlay(
+            str(value["schema"]),
+            generation,
+            str(value["base_generation"]),
+            str(value["worktree_id"]),
+            dict(value["changed"]),
+            str(value["created_at"]),
+        )
 
-    def open(self, base_generation: str, *, worktree_id: str | None = None,
-             overlay_generation: str | None = None) -> "EffectiveSnapshot":
+    def open(
+        self,
+        base_generation: str,
+        *,
+        worktree_id: str | None = None,
+        overlay_generation: str | None = None,
+    ) -> "EffectiveSnapshot":
         manifest = self.manifest(base_generation)
-        overlay = self.overlay(worktree_id, overlay_generation) if worktree_id and overlay_generation else None
+        overlay = (
+            self.overlay(worktree_id, overlay_generation)
+            if worktree_id and overlay_generation
+            else None
+        )
         if overlay and overlay.base_generation != base_generation:
             raise ValueError("overlay base generation does not match requested base")
-        return EffectiveSnapshot(self.root, self.base_dir / base_generation / manifest.snapshot, manifest, overlay)
+        return EffectiveSnapshot(
+            self.root,
+            self.base_dir / base_generation / manifest.snapshot,
+            manifest,
+            overlay,
+        )
 
-    def acquire_lease(self, generation: str, owner: str, ttl_seconds: float = 3600) -> Lease:
+    def acquire_lease(
+        self, generation: str, owner: str, ttl_seconds: float = 3600
+    ) -> Lease:
         self.manifest(generation)
         now = time.time()
-        lease = Lease(LEASE_SCHEMA, uuid.uuid4().hex, generation, owner, now + ttl_seconds, now)
+        lease = Lease(
+            LEASE_SCHEMA, uuid.uuid4().hex, generation, owner, now + ttl_seconds, now
+        )
         _atomic_json(self.lease_dir / f"{lease.lease_id}.json", asdict(lease))
         return lease
 
@@ -303,7 +444,9 @@ class WorkspaceStore:
         return self.acquire_lease(generation, owner, ttl_seconds)
 
     @contextmanager
-    def pinned(self, generation: str, owner: str, ttl_seconds: float = 3600) -> Iterator[Lease]:
+    def pinned(
+        self, generation: str, owner: str, ttl_seconds: float = 3600
+    ) -> Iterator[Lease]:
         lease = self.acquire_lease(generation, owner, ttl_seconds)
         try:
             yield lease
@@ -323,46 +466,88 @@ class WorkspaceStore:
             except (OSError, ValueError, KeyError, TypeError):
                 if apply:
                     path.unlink(missing_ok=True)
-        candidates = [path.name for path in self.base_dir.iterdir() if path.is_dir() and path.name not in protected]
+        candidates = [
+            path.name
+            for path in self.base_dir.iterdir()
+            if path.is_dir() and path.name not in protected
+        ]
         removed: list[str] = []
         if apply:
             for generation in candidates:
                 shutil.rmtree(self.base_dir / generation, ignore_errors=False)
                 removed.append(generation)
-        result = {"schema": RECEIPT_SCHEMA, "protected": sorted(protected), "candidates": candidates,
-                  "removed": removed, "applied": apply}
+        result = {
+            "schema": RECEIPT_SCHEMA,
+            "protected": sorted(protected),
+            "candidates": candidates,
+            "removed": removed,
+            "applied": apply,
+        }
         self._receipt("gc", result)
         return result
 
-    def refresh(self, worktree_id: str, base_generation: str, overlay_generation: str | None = None) -> Overlay:
+    def refresh(
+        self,
+        worktree_id: str,
+        base_generation: str,
+        overlay_generation: str | None = None,
+    ) -> Overlay:
         previous = None
         if overlay_generation is not None:
             previous = self.overlay(worktree_id, overlay_generation)
             if previous.base_generation != base_generation:
                 raise ValueError("overlay base generation does not match refresh base")
         refreshed = self.create_overlay(worktree_id, base_generation)
-        self._receipt("refresh", {
-            "base_generation": base_generation,
-            "overlay_generation": refreshed.overlay_generation,
-            "previous_overlay_generation": previous.overlay_generation if previous else None,
-            "worktree_id": worktree_id,
-            "changed_files": sorted(refreshed.changed),
-        })
+        self._receipt(
+            "refresh",
+            {
+                "base_generation": base_generation,
+                "overlay_generation": refreshed.overlay_generation,
+                "previous_overlay_generation": previous.overlay_generation
+                if previous
+                else None,
+                "worktree_id": worktree_id,
+                "changed_files": sorted(refreshed.changed),
+            },
+        )
         return refreshed
 
-    def watch_once(self, worktree_id: str, base_generation: str, previous: dict[str, str] | None = None) -> tuple[Overlay | None, dict[str, str]]:
-        hashes = {path.relative_to(self.root).as_posix(): _hash_source(path) for path in source_files(self.root)}
+    def watch_once(
+        self,
+        worktree_id: str,
+        base_generation: str,
+        previous: dict[str, str] | None = None,
+    ) -> tuple[Overlay | None, dict[str, str]]:
+        hashes = {
+            path.relative_to(self.root).as_posix(): _hash_source(path)
+            for path in source_files(self.root)
+        }
         if previous == hashes:
             return None, hashes
         return self.create_overlay(worktree_id, base_generation), hashes
 
     def _receipt(self, action: str, detail: dict[str, object]) -> None:
-        payload = {"schema": RECEIPT_SCHEMA, "action": action, "created_at": time.time(), **detail}
-        _atomic_json(self.receipt_dir / f"{int(time.time() * 1000)}-{secrets.token_hex(4)}-{action}.json", payload)
+        payload = {
+            "schema": RECEIPT_SCHEMA,
+            "action": action,
+            "created_at": time.time(),
+            **detail,
+        }
+        _atomic_json(
+            self.receipt_dir
+            / f"{int(time.time() * 1000)}-{secrets.token_hex(4)}-{action}.json",
+            payload,
+        )
 
 
 class EffectiveSnapshot:
-    def __init__(self, root: Path, snapshot_path: Path, manifest: Manifest, overlay: Overlay | None) -> None:
+    def __init__(
+        self,
+        root: Path,
+        snapshot_path: Path,
+        manifest: Manifest,
+        overlay: Overlay | None,
+    ) -> None:
         self.root = root.resolve()
         self.manifest = manifest
         self.overlay = overlay
@@ -382,21 +567,53 @@ class EffectiveSnapshot:
     def _overlay_symbols(self) -> list[Symbol]:
         if not self.overlay:
             return []
-        return [Symbol(**item) for record in self.overlay.changed.values() for item in record["symbols"]]
+        return [
+            Symbol(**item)
+            for record in self.overlay.changed.values()
+            for item in record["symbols"]
+        ]
 
     def symbols(self) -> list[Symbol]:
         replacements = set(self.overlay.changed) if self.overlay else set()
-        base = [replace(symbol, base_generation=self.base_generation, overlay_generation=self.overlay_generation)
-                for symbol in self._base.symbols() if symbol.file not in replacements]
-        overlay = [replace(symbol, base_generation=self.base_generation, overlay_generation=self.overlay_generation)
-                   for symbol in self._overlay_symbols()]
-        return sorted([*base, *overlay], key=lambda item: (item.name, item.qualified_name, item.file, item.line))
+        base = [
+            replace(
+                symbol,
+                base_generation=self.base_generation,
+                overlay_generation=self.overlay_generation,
+            )
+            for symbol in self._base.symbols()
+            if symbol.file not in replacements
+        ]
+        overlay = [
+            replace(
+                symbol,
+                base_generation=self.base_generation,
+                overlay_generation=self.overlay_generation,
+            )
+            for symbol in self._overlay_symbols()
+        ]
+        return sorted(
+            [*base, *overlay],
+            key=lambda item: (item.name, item.qualified_name, item.file, item.line),
+        )
 
     def find(self, query: str) -> list[Symbol]:
         needle = query.casefold()
-        return [item for item in self.symbols() if needle in item.name.casefold() or needle in item.qualified_name.casefold()]
+        return [
+            item
+            for item in self.symbols()
+            if needle in item.name.casefold()
+            or needle in item.qualified_name.casefold()
+        ]
 
-    def context(self, query: str, *, max_results: int = 10, max_lines: int = 120, max_bytes: int = 32_000) -> list[ContextSpan]:
+    def context(
+        self,
+        query: str,
+        *,
+        max_results: int = 10,
+        max_lines: int = 120,
+        max_bytes: int = 32_000,
+    ) -> list[ContextSpan]:
         if max_results < 1 or max_lines < 1 or max_bytes < 1:
             raise ValueError("context limits must be positive")
         spans: list[ContextSpan] = []
@@ -406,19 +623,38 @@ class EffectiveSnapshot:
             try:
                 path.relative_to(self.root)
             except ValueError as error:
-                raise ValueError(f"snapshot path escapes root: {symbol.file}") from error
+                raise ValueError(
+                    f"snapshot path escapes root: {symbol.file}"
+                ) from error
             actual = _hash_source(path)
-            expected = (self.overlay.changed.get(symbol.file, {}).get("sha256") if self.overlay else None) or self.manifest.source_hashes.get(symbol.file)
+            expected = (
+                self.overlay.changed.get(symbol.file, {}).get("sha256")
+                if self.overlay
+                else None
+            ) or self.manifest.source_hashes.get(symbol.file)
             if actual != expected:
-                raise StaleSnapshotError(f"source changed after generation: {symbol.file}; run refresh")
+                raise StaleSnapshotError(
+                    f"source changed after generation: {symbol.file}; run refresh"
+                )
             lines = path.read_text(encoding="utf-8").splitlines()
             end = min(symbol.end_line, symbol.line + max_lines - 1)
-            content = "\n".join(lines[symbol.line - 1:end])
+            content = "\n".join(lines[symbol.line - 1 : end])
             remaining = max_bytes - consumed
             if remaining <= 0:
                 break
             content = content.encode()[:remaining].decode("utf-8", errors="ignore")
             consumed += len(content.encode())
-            spans.append(ContextSpan(symbol.qualified_name, symbol.kind, symbol.file, symbol.line, end,
-                                     actual, content, self.base_generation, self.overlay_generation))
+            spans.append(
+                ContextSpan(
+                    symbol.qualified_name,
+                    symbol.kind,
+                    symbol.file,
+                    symbol.line,
+                    end,
+                    actual,
+                    content,
+                    self.base_generation,
+                    self.overlay_generation,
+                )
+            )
         return spans

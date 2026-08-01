@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import importlib.util
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,9 +33,7 @@ def test_legacy_script_delegates_to_canonical_gate(monkeypatch):
 
     monkeypatch.setattr(mod._CANONICAL, "main", canonical)
     assert mod.main(["--check", "--json"]) == 7
-    assert observed == [
-        ["--check", "--json", "--root", str(ROOT)]
-    ]
+    assert observed == [["--check", "--json", "--root", str(ROOT)]]
 
 
 def test_legacy_evaluate_is_the_canonical_receipt():

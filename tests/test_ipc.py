@@ -3,8 +3,16 @@ import struct
 import unittest
 
 from simplicio_fast.ipc import (
-    HEADER, IpcFrame, IpcFrameDecoder, IpcFrameError, MAGIC, MAX_FRAME_BYTES,
-    MAX_HEADER_BYTES, MAX_PAYLOAD_BYTES, SCHEMA, decode_frame,
+    HEADER,
+    IpcFrame,
+    IpcFrameDecoder,
+    IpcFrameError,
+    MAGIC,
+    MAX_FRAME_BYTES,
+    MAX_HEADER_BYTES,
+    MAX_PAYLOAD_BYTES,
+    SCHEMA,
+    decode_frame,
 )
 
 
@@ -45,7 +53,9 @@ class BoundedIpcFrameTest(unittest.TestCase):
         self.assertEqual("frame_too_large", error.exception.reason_code)
         with self.assertRaises(ValueError):
             self.frame.encode(max_header_bytes=0)
-        self.assertEqual(MAX_FRAME_BYTES, HEADER.size + MAX_HEADER_BYTES + MAX_PAYLOAD_BYTES)
+        self.assertEqual(
+            MAX_FRAME_BYTES, HEADER.size + MAX_HEADER_BYTES + MAX_PAYLOAD_BYTES
+        )
 
     def test_decode_rejects_bad_magic_truncation_and_trailing_bytes(self) -> None:
         encoded = self.frame.encode()
@@ -66,16 +76,28 @@ class BoundedIpcFrameTest(unittest.TestCase):
         header = json.loads(encoded[header_start : header_start + header_length])
         header["schema"] = "simplicio.fast.ipc/v2"
         changed = json.dumps(header, sort_keys=True, separators=(",", ":")).encode()
-        tampered_schema = struct.pack(">8sII", MAGIC, len(changed), payload_length) + changed + encoded[header_start + header_length :]
+        tampered_schema = (
+            struct.pack(">8sII", MAGIC, len(changed), payload_length)
+            + changed
+            + encoded[header_start + header_length :]
+        )
         with self.assertRaises(IpcFrameError) as error:
             decode_frame(tampered_schema)
         self.assertEqual("unsupported_schema", error.exception.reason_code)
         with self.assertRaises(IpcFrameError) as error:
             invalid_header = b"{" + b" " * (header_length - 1)
-            decode_frame(encoded[:header_start] + invalid_header + encoded[header_start + header_length :])
+            decode_frame(
+                encoded[:header_start]
+                + invalid_header
+                + encoded[header_start + header_length :]
+            )
         self.assertEqual("invalid_header", error.exception.reason_code)
         payload_start = header_start + header_length
-        tampered_payload = encoded[:payload_start] + bytes([encoded[payload_start] ^ 1]) + encoded[payload_start + 1 :]
+        tampered_payload = (
+            encoded[:payload_start]
+            + bytes([encoded[payload_start] ^ 1])
+            + encoded[payload_start + 1 :]
+        )
         with self.assertRaises(IpcFrameError) as error:
             decode_frame(tampered_payload)
         self.assertEqual("payload_digest_mismatch", error.exception.reason_code)
@@ -87,7 +109,15 @@ class BoundedIpcFrameTest(unittest.TestCase):
         with self.assertRaises(IpcFrameError) as error:
             decode_frame("not-bytes")
         self.assertEqual("invalid_frame", error.exception.reason_code)
-        self.assertEqual(SCHEMA, json.loads(self.frame.encode()[HEADER.size : HEADER.size + HEADER.unpack_from(self.frame.encode())[1]])["schema"])
+        self.assertEqual(
+            SCHEMA,
+            json.loads(
+                self.frame.encode()[
+                    HEADER.size : HEADER.size
+                    + HEADER.unpack_from(self.frame.encode())[1]
+                ]
+            )["schema"],
+        )
 
 
 if __name__ == "__main__":

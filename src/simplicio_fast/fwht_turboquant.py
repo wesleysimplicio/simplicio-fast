@@ -64,11 +64,19 @@ class FwhtQuantizedVector:
     normalization: Normalization = "orthonormal"
 
     def __post_init__(self) -> None:
-        if isinstance(self.dimension, bool) or not isinstance(self.dimension, int) or self.dimension < 1:
+        if (
+            isinstance(self.dimension, bool)
+            or not isinstance(self.dimension, int)
+            or self.dimension < 1
+        ):
             raise QuantizationError("dimension must be a positive integer")
         if self.padded_dimension != _next_power_of_two(self.dimension):
             raise QuantizationError("padded_dimension must be the next power of two")
-        if isinstance(self.seed, bool) or not isinstance(self.seed, int) or not 0 <= self.seed <= _MASK64:
+        if (
+            isinstance(self.seed, bool)
+            or not isinstance(self.seed, int)
+            or not 0 <= self.seed <= _MASK64
+        ):
             raise QuantizationError("seed must be a normalized unsigned 64-bit integer")
         if self.normalization != "orthonormal":
             raise QuantizationError("normalization must be orthonormal")

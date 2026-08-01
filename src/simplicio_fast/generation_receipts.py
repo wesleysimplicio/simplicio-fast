@@ -1,4 +1,5 @@
 """Portable provenance receipts for Fast generations (no .sfast access required)."""
+
 from __future__ import annotations
 
 import hashlib
@@ -17,21 +18,30 @@ class GenerationReceiptError(ValueError):
 
 
 def canonical(value: Any) -> bytes:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"),
-                      ensure_ascii=True).encode()
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    ).encode()
 
 
 def digest(value: Any) -> str:
     return hashlib.sha256(canonical(value)).hexdigest()
 
 
-def seal_receipt(*, kind: str, repo: str, commit: str, snapshot_digest: str,
-                 generation: str, source_hashes: Mapping[str, str],
-                 backend: str, backend_artifact_hash: str | None = None,
-                 fallback_reason: str | None = None,
-                 ancestor_receipt_hash: str | None = None,
-                 ancestor_context_packet_hash: str | None = None,
-                 downstream_changeset_hash: str | None = None) -> dict[str, Any]:
+def seal_receipt(
+    *,
+    kind: str,
+    repo: str,
+    commit: str,
+    snapshot_digest: str,
+    generation: str,
+    source_hashes: Mapping[str, str],
+    backend: str,
+    backend_artifact_hash: str | None = None,
+    fallback_reason: str | None = None,
+    ancestor_receipt_hash: str | None = None,
+    ancestor_context_packet_hash: str | None = None,
+    downstream_changeset_hash: str | None = None,
+) -> dict[str, Any]:
     if kind not in KINDS:
         raise GenerationReceiptError("receipt_kind_invalid", kind)
     if backend not in {"python", "rust"}:
@@ -44,10 +54,15 @@ def seal_receipt(*, kind: str, repo: str, commit: str, snapshot_digest: str,
     if any(not value for value in required) or not source_hashes:
         raise GenerationReceiptError("receipt_binding_missing")
     body = {
-        "schema": SCHEMA, "kind": kind, "repo": repo, "commit": commit,
-        "snapshot_digest": snapshot_digest, "generation": generation,
+        "schema": SCHEMA,
+        "kind": kind,
+        "repo": repo,
+        "commit": commit,
+        "snapshot_digest": snapshot_digest,
+        "generation": generation,
         "source_hashes": dict(sorted(source_hashes.items())),
-        "backend": backend, "backend_artifact_hash": backend_artifact_hash,
+        "backend": backend,
+        "backend_artifact_hash": backend_artifact_hash,
         "fallback_reason": fallback_reason,
         "ancestor_receipt_hash": ancestor_receipt_hash,
         "ancestor_context_packet_hash": ancestor_context_packet_hash,
@@ -55,24 +70,32 @@ def seal_receipt(*, kind: str, repo: str, commit: str, snapshot_digest: str,
         "public_offsets": None,
         "public_offsets_null_reason": "FAST_INTERNAL_OFFSETS_NOT_PUBLIC",
     }
-    body["idempotency_key"] = digest({
-        "kind": kind, "repo": repo, "commit": commit,
-        "snapshot_digest": snapshot_digest, "generation": generation,
-        "source_hashes": body["source_hashes"],
-        "ancestor_receipt_hash": ancestor_receipt_hash,
-        "ancestor_context_packet_hash": ancestor_context_packet_hash,
-        "downstream_changeset_hash": downstream_changeset_hash,
-    })
+    body["idempotency_key"] = digest(
+        {
+            "kind": kind,
+            "repo": repo,
+            "commit": commit,
+            "snapshot_digest": snapshot_digest,
+            "generation": generation,
+            "source_hashes": body["source_hashes"],
+            "ancestor_receipt_hash": ancestor_receipt_hash,
+            "ancestor_context_packet_hash": ancestor_context_packet_hash,
+            "downstream_changeset_hash": downstream_changeset_hash,
+        }
+    )
     body["receipt_hash"] = digest(body)
     return body
 
 
-def verify_receipt(receipt: Mapping[str, Any], *,
-                   expected_repo: str | None = None,
-                   expected_commit: str | None = None,
-                   expected_generation: str | None = None,
-                   expected_source_hashes: Mapping[str, str] | None = None,
-                   expected_ancestor_hash: str | None = None) -> dict[str, Any]:
+def verify_receipt(
+    receipt: Mapping[str, Any],
+    *,
+    expected_repo: str | None = None,
+    expected_commit: str | None = None,
+    expected_generation: str | None = None,
+    expected_source_hashes: Mapping[str, str] | None = None,
+    expected_ancestor_hash: str | None = None,
+) -> dict[str, Any]:
     if receipt.get("schema") != SCHEMA:
         raise GenerationReceiptError("receipt_schema_invalid")
     unsigned = dict(receipt)
@@ -83,8 +106,11 @@ def verify_receipt(receipt: Mapping[str, Any], *,
         ("receipt_repo_mismatch", expected_repo, receipt.get("repo")),
         ("receipt_commit_stale", expected_commit, receipt.get("commit")),
         ("receipt_generation_stale", expected_generation, receipt.get("generation")),
-        ("receipt_ancestor_mismatch", expected_ancestor_hash,
-         receipt.get("ancestor_receipt_hash")),
+        (
+            "receipt_ancestor_mismatch",
+            expected_ancestor_hash,
+            receipt.get("ancestor_receipt_hash"),
+        ),
     )
     for reason, expected, actual in checks:
         if expected is not None and expected != actual:
@@ -107,6 +133,7 @@ def verify_chain(receipts: list[Mapping[str, Any]]) -> list[dict[str, Any]]:
 
 class ReceiptJournal:
     """In-memory idempotent journal; retries return the original sealed receipt."""
+
     def __init__(self) -> None:
         self._receipts: dict[str, dict[str, Any]] = {}
         self._lock = threading.Lock()

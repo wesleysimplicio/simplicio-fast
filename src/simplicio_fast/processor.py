@@ -12,10 +12,42 @@ from typing import Any
 from .integrations import run_dev_cli_changeset, run_mapper
 from .snapshot import ContextSpan, Snapshot, build_snapshot
 from .snapshot import DEFAULT_MAX_SOURCE_FILE_BYTES
+
 STOP_WORDS = {
-    "a", "an", "and", "as", "at", "build", "change", "create", "do", "for", "from",
-    "implement", "in", "into", "of", "on", "or", "the", "to", "update", "with",
-    "criar", "de", "do", "da", "e", "em", "implementar", "o", "os", "para", "por", "um", "uma",
+    "a",
+    "an",
+    "and",
+    "as",
+    "at",
+    "build",
+    "change",
+    "create",
+    "do",
+    "for",
+    "from",
+    "implement",
+    "in",
+    "into",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "update",
+    "with",
+    "criar",
+    "de",
+    "do",
+    "da",
+    "e",
+    "em",
+    "implementar",
+    "o",
+    "os",
+    "para",
+    "por",
+    "um",
+    "uma",
 }
 
 
@@ -68,7 +100,8 @@ class ProjectProcessor:
         return {
             "schema": "simplicio.fast.ingest/v2",
             "snapshot": str(self.snapshot_path),
-            "mapper": mapper or {
+            "mapper": mapper
+            or {
                 "adapter": "internal-bootstrap",
                 "status": "fallback",
                 "reason": "simplicio-mapper is not installed",
@@ -174,7 +207,10 @@ class ProjectProcessor:
                     "required_hashes": source_hashes,
                     "format": "simplicio.fast.changeset/v2",
                 },
-                ["normal source files contain the requested behavior", "all hash guards pass"],
+                [
+                    "normal source files contain the requested behavior",
+                    "all hash guards pass",
+                ],
             ),
             PlanNode(
                 "validate",
@@ -213,7 +249,9 @@ class ProjectProcessor:
             commands.append(["python", "-m", "compileall", "-q", "."])
         return commands
 
-    def apply_changeset(self, changeset: dict[str, Any], *, write: bool) -> dict[str, Any]:
+    def apply_changeset(
+        self, changeset: dict[str, Any], *, write: bool
+    ) -> dict[str, Any]:
         if changeset.get("schema") != "simplicio.fast.changeset/v2":
             raise ValueError("unsupported changeset schema")
         changes = changeset.get("changes")
@@ -256,8 +294,12 @@ class ProjectProcessor:
                         files=after,
                         native={
                             "status": "ok",
-                            "before_sha256": {item["path"]: item["before_sha256"] for item in before},
-                            "after_sha256": {item["path"]: item["after_sha256"] for item in after},
+                            "before_sha256": {
+                                item["path"]: item["before_sha256"] for item in before
+                            },
+                            "after_sha256": {
+                                item["path"]: item["after_sha256"] for item in after
+                            },
                             "no_write_proof": not write,
                         },
                         no_write_proof=not write,
@@ -265,13 +307,19 @@ class ProjectProcessor:
                         applied=write,
                         write_attempted=write,
                         reason_code=None,
-                        rollback={"attempted": False, "status": "not-needed", "restored_paths": []},
+                        rollback={
+                            "attempted": False,
+                            "status": "not-needed",
+                            "restored_paths": [],
+                        },
                     )
 
             native_before = self._file_records(prepared)
             restored = self._restore_prepared(prepared)
             native_after = self._file_records(prepared)
-            if any(item["after_sha256"] != item["before_sha256"] for item in native_after):
+            if any(
+                item["after_sha256"] != item["before_sha256"] for item in native_after
+            ):
                 raise RuntimeError("native refusal could not be rolled back safely")
             return self._fallback_receipt(
                 prepared,
@@ -281,13 +329,21 @@ class ProjectProcessor:
                     "adapter": delegated.get("adapter", "simplicio-dev-cli"),
                     "status": result.get("status", "refused"),
                     "result": result,
-                    "before_sha256": {item["path"]: item["before_sha256"] for item in native_before},
-                    "after_sha256": {item["path"]: item["after_sha256"] for item in native_after},
+                    "before_sha256": {
+                        item["path"]: item["before_sha256"] for item in native_before
+                    },
+                    "after_sha256": {
+                        item["path"]: item["after_sha256"] for item in native_after
+                    },
                     "rollback": {"attempted": bool(restored), "restored": restored},
                     "no_write_proof": True,
                 },
                 reason_code=str(result.get("code") or "native_adapter_refused"),
-                rollback={"attempted": True, "status": "restored", "restored_paths": restored},
+                rollback={
+                    "attempted": True,
+                    "status": "restored",
+                    "restored_paths": restored,
+                },
             )
 
         return self._fallback_receipt(
@@ -297,8 +353,12 @@ class ProjectProcessor:
             native={
                 "adapter": "simplicio-dev-cli",
                 "status": "unavailable",
-                "before_sha256": {item["path"]: item["before_sha256"] for item in before},
-                "after_sha256": {item["path"]: item["before_sha256"] for item in before},
+                "before_sha256": {
+                    item["path"]: item["before_sha256"] for item in before
+                },
+                "after_sha256": {
+                    item["path"]: item["before_sha256"] for item in before
+                },
                 "no_write_proof": True,
             },
             reason_code="native_unavailable",
@@ -348,7 +408,11 @@ class ProjectProcessor:
                     raise ValueError(f"overlapping replacements for {relative}")
                 canonical_content = content.replace("\r\n", "\n").replace("\r", "\n")
                 canonical_content = canonical_content.replace("\n", newline)
-                suffix = newline if canonical_content and not canonical_content.endswith(newline) else ""
+                suffix = (
+                    newline
+                    if canonical_content and not canonical_content.endswith(newline)
+                    else ""
+                )
                 lines[start - 1 : end] = [canonical_content + suffix]
             updated = "".join(lines)
             prepared.append(
@@ -441,7 +505,9 @@ class ProjectProcessor:
             self._write_prepared(prepared)
         files = self._file_records(prepared)
         expected_after = {
-            item.relative: hashlib.sha256((item.updated if write else item.original)).hexdigest()
+            item.relative: hashlib.sha256(
+                (item.updated if write else item.original)
+            ).hexdigest()
             for item in prepared
         }
         if any(item["after_sha256"] != expected_after[item["path"]] for item in files):
@@ -471,7 +537,11 @@ class ProjectProcessor:
         temporary: str | None = None
         try:
             with tempfile.NamedTemporaryFile(
-                mode="wb", dir=path.parent, prefix=f".{path.name}.", suffix=".simplicio-fast", delete=False
+                mode="wb",
+                dir=path.parent,
+                prefix=f".{path.name}.",
+                suffix=".simplicio-fast",
+                delete=False,
             ) as handle:
                 temporary = handle.name
                 handle.write(data)

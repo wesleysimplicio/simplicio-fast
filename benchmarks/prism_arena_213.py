@@ -100,9 +100,7 @@ def _run_case(
         "base_handle_ids": sorted(
             {sample["base_handle_id"] for sample in metric_samples}
         ),
-        "active_overlays_raw": [
-            sample["active_overlays"] for sample in metric_samples
-        ],
+        "active_overlays_raw": [sample["active_overlays"] for sample in metric_samples],
     }
 
 

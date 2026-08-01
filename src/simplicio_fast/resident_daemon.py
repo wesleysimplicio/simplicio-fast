@@ -1,4 +1,5 @@
 """Async resident Fast daemon with bounded multiplexing and explicit lifecycle."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,7 +15,9 @@ RESPONSE_SCHEMA = "simplicio.fast-daemon-response/v1"
 
 
 def _digest(value: Any) -> str:
-    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    payload = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
@@ -75,7 +78,9 @@ class ResidentFastDaemon:
             raise ValueError("bounds must be positive")
         self._handler = handler
         self._max_inflight = max_inflight
-        self._queue: asyncio.Queue[tuple[DaemonRequest, asyncio.Future]] = asyncio.Queue(queue_capacity)
+        self._queue: asyncio.Queue[tuple[DaemonRequest, asyncio.Future]] = (
+            asyncio.Queue(queue_capacity)
+        )
         self._generation_opener = generation_opener
         self._generation_closer = generation_closer
         self._backend = backend
@@ -200,7 +205,9 @@ class ResidentFastDaemon:
             task.cancel()
             return True
         # A queued future is marked cancelled; workers skip it without invoking handler.
-        for request, future in tuple(self._queue._queue):  # bounded private queue, same loop
+        for request, future in tuple(
+            self._queue._queue
+        ):  # bounded private queue, same loop
             if request.request_id == request_id and not future.done():
                 future.set_exception(DaemonError("request_cancelled"))
                 return True
@@ -240,7 +247,12 @@ class ResidentFastDaemon:
             "epoch": self._epoch,
             "backend": self._backend,
             "rust_null_reason": self._rust_reason,
-            "capabilities": ["resident_snapshot", "bounded_multiplex", "cancel", "single_flight"],
+            "capabilities": [
+                "resident_snapshot",
+                "bounded_multiplex",
+                "cancel",
+                "single_flight",
+            ],
             "queue_depth": self._queue.qsize(),
             "queue_capacity": self._queue.maxsize,
             "inflight": len(self._active),

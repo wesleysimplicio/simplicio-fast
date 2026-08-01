@@ -11,9 +11,15 @@ class ChangeJournalTest(unittest.TestCase):
     def test_append_chain_is_deterministic_and_reconstructible(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             journal = ChangeJournal(Path(directory) / "changes.log")
-            first = journal.append("create", "service.py", generation="g1", after_sha256="a" * 64)
+            first = journal.append(
+                "create", "service.py", generation="g1", after_sha256="a" * 64
+            )
             second = journal.append(
-                "update", "service.py", generation="g2", before_sha256="a" * 64, after_sha256="b" * 64
+                "update",
+                "service.py",
+                generation="g2",
+                before_sha256="a" * 64,
+                after_sha256="b" * 64,
             )
             events = journal.read()
             self.assertEqual(ZERO_HASH, first.prev_hash)
@@ -52,11 +58,18 @@ class ChangeJournalTest(unittest.TestCase):
             journal.append("create", "b.py", generation="g2")
 
             self.assertEqual(("a.py", "b.py"), journal.changed_paths_since(sequence=1))
-            self.assertEqual(("a.py", "b.py"), journal.changed_paths_since(generation="g2"))
-            self.assertEqual(("b.py",), journal.changed_paths_since(sequence=2, max_events=1))
+            self.assertEqual(
+                ("a.py", "b.py"), journal.changed_paths_since(generation="g2")
+            )
+            self.assertEqual(
+                ("b.py",), journal.changed_paths_since(sequence=2, max_events=1)
+            )
             self.assertEqual(
                 ["b.py"],
-                [event.path for event in journal.events_since(sequence=2, max_events=1)],
+                [
+                    event.path
+                    for event in journal.events_since(sequence=2, max_events=1)
+                ],
             )
             with self.assertRaisesRegex(ChangeJournalError, "sequence_invalid"):
                 journal.events_since(sequence=-1)
@@ -66,7 +79,6 @@ class ChangeJournalTest(unittest.TestCase):
                 journal.events_since(max_events=2)
             with self.assertRaisesRegex(ChangeJournalError, "event_window_overflow"):
                 journal.changed_paths_since(generation="g2", max_events=1)
-
 
 
 if __name__ == "__main__":

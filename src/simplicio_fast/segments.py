@@ -23,6 +23,7 @@ MANIFEST_SCHEMA = "simplicio.fast.segments/v1"
 MANIFEST_NAME = "manifest.json"
 MANIFEST_BACKUP_NAME = "manifest.previous.json"
 
+
 class SemanticSegmentPagerError(ValueError):
     def __init__(self, reason_code: str, message: str) -> None:
         super().__init__(message)
@@ -50,7 +51,9 @@ class SemanticSegmentPager:
         self.generation = generation
         self.overlay = overlay
         self.page_bytes = page_bytes
-        self._pager = SemanticPager(repository, generation, max_bytes=max_bytes, max_pages=max_pages)
+        self._pager = SemanticPager(
+            repository, generation, max_bytes=max_bytes, max_pages=max_pages
+        )
         self._lock = threading.Lock()
         self._segment_reads = 0
 
@@ -63,25 +66,43 @@ class SemanticSegmentPager:
             or offset < 0
             or size < 1
         ):
-            raise SemanticSegmentPagerError("segment_range_invalid", "offset and size must be positive integers")
+            raise SemanticSegmentPagerError(
+                "segment_range_invalid", "offset and size must be positive integers"
+            )
         manifest = self.store.read_manifest()
         if manifest.get("generation") != self.generation:
-            raise SemanticSegmentPagerError("stale_generation", "pager generation differs from segment manifest")
-        entry = next((item for item in manifest["segments"] if item.get("name") == name), None)
+            raise SemanticSegmentPagerError(
+                "stale_generation", "pager generation differs from segment manifest"
+            )
+        entry = next(
+            (item for item in manifest["segments"] if item.get("name") == name), None
+        )
         if entry is None:
-            raise SemanticSegmentPagerError("segment_not_found", f"segment not found: {name}")
+            raise SemanticSegmentPagerError(
+                "segment_not_found", f"segment not found: {name}"
+            )
         segment_bytes = entry["bytes"]
         if offset + size > segment_bytes:
-            raise SemanticSegmentPagerError("segment_range_out_of_bounds", "requested range exceeds segment")
+            raise SemanticSegmentPagerError(
+                "segment_range_out_of_bounds", "requested range exceeds segment"
+            )
         first = (offset // self.page_bytes) * self.page_bytes
         last = ((offset + size - 1) // self.page_bytes) * self.page_bytes
         chunks: list[bytes] = []
         for page_start in range(first, last + 1, self.page_bytes):
             page_size = min(self.page_bytes, segment_bytes - page_start)
-            key = PageKey(self.repository, self.generation, self.overlay, name, f"{page_start}:{page_size}")
+            key = PageKey(
+                self.repository,
+                self.generation,
+                self.overlay,
+                name,
+                f"{page_start}:{page_size}",
+            )
             page = self._pager.get(
                 key,
-                lambda page_start=page_start, page_size=page_size: self.store.read_range(name, page_start, page_size),
+                lambda page_start=page_start, page_size=page_size: (
+                    self.store.read_range(name, page_start, page_size)
+                ),
             )
             begin = max(offset - page_start, 0)
             end = min(offset + size - page_start, page_size)
@@ -131,7 +152,14 @@ class SegmentStore:
             segments: list[Segment] = []
             written = 0
             reused = 0
-            staging = Path(tempfile.mkdtemp(prefix=".segments-", dir=self.directory.parent if self.directory.parent.exists() else None))
+            staging = Path(
+                tempfile.mkdtemp(
+                    prefix=".segments-",
+                    dir=self.directory.parent
+                    if self.directory.parent.exists()
+                    else None,
+                )
+            )
             try:
                 self.directory.mkdir(parents=True, exist_ok=True)
                 # Move staging under the destination parent only; files are
@@ -154,11 +182,17 @@ class SegmentStore:
                     if final.exists():
                         try:
                             existing_size = final.stat().st_size
-                            existing_digest = hashlib.sha256(final.read_bytes()).hexdigest()
+                            existing_digest = hashlib.sha256(
+                                final.read_bytes()
+                            ).hexdigest()
                         except OSError as error:
-                            raise SegmentStoreError(f"segment_existing_unreadable:{name}") from error
+                            raise SegmentStoreError(
+                                f"segment_existing_unreadable:{name}"
+                            ) from error
                         if existing_size != len(data) or existing_digest != digest:
-                            raise SegmentStoreError(f"segment_existing_checksum_mismatch:{name}")
+                            raise SegmentStoreError(
+                                f"segment_existing_checksum_mismatch:{name}"
+                            )
                         reused += 1
                     else:
                         os.replace(temporary, final)
@@ -168,23 +202,33 @@ class SegmentStore:
                     "schema": MANIFEST_SCHEMA,
                     "generation": snapshot.generation,
                     "source_snapshot_sha256": source_digest,
-                    "segments": [segment.__dict__ if hasattr(segment, "__dict__") else {
-                        "name": segment.name,
-                        "file": segment.file,
-                        "bytes": segment.bytes,
-                        "sha256": segment.sha256,
-                    } for segment in segments],
+                    "segments": [
+                        segment.__dict__
+                        if hasattr(segment, "__dict__")
+                        else {
+                            "name": segment.name,
+                            "file": segment.file,
+                            "bytes": segment.bytes,
+                            "sha256": segment.sha256,
+                        }
+                        for segment in segments
+                    ],
                     "segments_written": written,
                     "segments_reused": reused,
                 }
                 self.directory.mkdir(parents=True, exist_ok=True)
                 manifest_tmp = self.directory / f".{MANIFEST_NAME}.{os.getpid()}.tmp"
-                manifest_tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+                manifest_tmp.write_text(
+                    json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
                 with manifest_tmp.open("r+b") as handle:
                     handle.flush()
                     os.fsync(handle.fileno())
                 if self.manifest_path.exists():
-                    backup_tmp = self.directory / f".{MANIFEST_BACKUP_NAME}.{os.getpid()}.tmp"
+                    backup_tmp = (
+                        self.directory / f".{MANIFEST_BACKUP_NAME}.{os.getpid()}.tmp"
+                    )
                     shutil.copyfile(self.manifest_path, backup_tmp)
                     with backup_tmp.open("r+b") as handle:
                         handle.flush()
@@ -200,7 +244,11 @@ class SegmentStore:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError) as error:
             raise SegmentStoreError(f"manifest_unreadable:{error}") from error
-        if not isinstance(payload, dict) or payload.get("schema") != MANIFEST_SCHEMA or not isinstance(payload.get("segments"), list):
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema") != MANIFEST_SCHEMA
+            or not isinstance(payload.get("segments"), list)
+        ):
             raise SegmentStoreError("manifest_schema_mismatch")
         generation = payload.get("generation")
         source_digest = payload.get("source_snapshot_sha256")
@@ -215,8 +263,12 @@ class SegmentStore:
         segments = payload["segments"]
         if not segments:
             raise SegmentStoreError("manifest_segments_invalid")
-        names = [item.get("name") if isinstance(item, dict) else None for item in segments]
-        if any(not isinstance(name, str) or not name for name in names) or len(set(names)) != len(names):
+        names = [
+            item.get("name") if isinstance(item, dict) else None for item in segments
+        ]
+        if any(not isinstance(name, str) or not name for name in names) or len(
+            set(names)
+        ) != len(names):
             raise SegmentStoreError("manifest_segments_invalid")
         return payload
 
@@ -229,7 +281,9 @@ class SegmentStore:
         for item in payload["segments"]:
             self._validate_entry(item)
         manifest_tmp = self.directory / f".{MANIFEST_NAME}.{os.getpid()}.recovery.tmp"
-        manifest_tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        manifest_tmp.write_text(
+            json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         with manifest_tmp.open("r+b") as handle:
             handle.flush()
             os.fsync(handle.fileno())
@@ -242,7 +296,12 @@ class SegmentStore:
         for item in payload["segments"]:
             self._validate_entry(item)
             checked += 1
-        return {"schema": "simplicio.fast.segments-validation/v1", "status": "valid", "segments": checked, "generation": payload["generation"]}
+        return {
+            "schema": "simplicio.fast.segments-validation/v1",
+            "status": "valid",
+            "segments": checked,
+            "generation": payload["generation"],
+        }
 
     def read(self, name: str) -> bytes:
         with self.map(name) as mapped:
@@ -269,7 +328,9 @@ class SegmentStore:
         """Validate and map one segment, loading only its requested bytes."""
 
         payload = self.read_manifest()
-        item = next((entry for entry in payload["segments"] if entry.get("name") == name), None)
+        item = next(
+            (entry for entry in payload["segments"] if entry.get("name") == name), None
+        )
         if item is None:
             raise SegmentStoreError(f"segment_not_found:{name}")
         self._validate_entry(item)
@@ -285,7 +346,9 @@ class SegmentStore:
                 mapped.close()
 
     def _validate_entry(self, item: Any) -> None:
-        if not isinstance(item, dict) or not all(key in item for key in ("name", "file", "bytes", "sha256")):
+        if not isinstance(item, dict) or not all(
+            key in item for key in ("name", "file", "bytes", "sha256")
+        ):
             raise SegmentStoreError("segment_entry_invalid")
         if (
             isinstance(item["bytes"], bool)

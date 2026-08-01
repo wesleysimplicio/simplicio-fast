@@ -30,7 +30,9 @@ def _tokens(value: str) -> int:
 
 
 def _digest(value: dict[str, Any]) -> str:
-    encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -80,7 +82,11 @@ class KnowledgeFacade:
         _positive(max_results, "max_results")
         _scope(self.scope, scope)
         selected = self._sources(sources)
-        skill_result = self.catalog.resolve(task, max_results=max_results) if "skills" in selected else None
+        skill_result = (
+            self.catalog.resolve(task, max_results=max_results)
+            if "skills" in selected
+            else None
+        )
         source_status: dict[str, dict[str, Any]] = {}
         for source in selected:
             if source == "skills":
@@ -106,7 +112,16 @@ class KnowledgeFacade:
             "handles": skill_result["handles"] if skill_result else [],
             "truncated": skill_result["truncated"] if skill_result else False,
         }
-        return {**body, "provenance": {"repository": self.repository, "generation": self.generation, "scope": self.scope, "sources": list(selected)}, "receipt_digest": _digest(body)}
+        return {
+            **body,
+            "provenance": {
+                "repository": self.repository,
+                "generation": self.generation,
+                "scope": self.scope,
+                "sources": list(selected),
+            },
+            "receipt_digest": _digest(body),
+        }
 
     def expand_handles(
         self,
@@ -122,7 +137,9 @@ class KnowledgeFacade:
         _positive(max_bytes, "max_bytes")
         _positive(max_tokens, "max_tokens")
         _scope(self.scope, scope)
-        resolved = self.catalog.materialize(handles, max_entries=max_entries, max_bytes=max_bytes)
+        resolved = self.catalog.materialize(
+            handles, max_entries=max_entries, max_bytes=max_bytes
+        )
         materialized: list[dict[str, Any]] = []
         token_total = 0
         token_limited = False
@@ -136,14 +153,24 @@ class KnowledgeFacade:
             materialized.append(enriched)
             token_total += estimated_tokens
         bytes_total = sum(len(item["content"].encode("utf-8")) for item in materialized)
-        truncated = bool(resolved["truncated"] or token_limited or len(materialized) < len(resolved["materialized"]))
-        reason_code = "token_budget_exceeded" if token_limited else resolved["reason_code"]
+        truncated = bool(
+            resolved["truncated"]
+            or token_limited
+            or len(materialized) < len(resolved["materialized"])
+        )
+        reason_code = (
+            "token_budget_exceeded" if token_limited else resolved["reason_code"]
+        )
         body: dict[str, Any] = {
             "schema": KNOWLEDGE_MATERIALIZATION_SCHEMA,
             "repository": self.repository,
             "generation": self.generation,
             "scope": self.scope,
-            "source": {"kind": "skills", "status": "available", "runtime_required": False},
+            "source": {
+                "kind": "skills",
+                "status": "available",
+                "runtime_required": False,
+            },
             "references": [item["handle"] for item in materialized],
             "materialized": materialized,
             "entries_materialized": len(materialized),
@@ -153,7 +180,16 @@ class KnowledgeFacade:
             "truncated": truncated,
             "reason_code": reason_code,
         }
-        return {**body, "provenance": {"repository": self.repository, "generation": self.generation, "scope": self.scope, "source": "skills"}, "receipt_digest": _digest(body)}
+        return {
+            **body,
+            "provenance": {
+                "repository": self.repository,
+                "generation": self.generation,
+                "scope": self.scope,
+                "source": "skills",
+            },
+            "receipt_digest": _digest(body),
+        }
 
     def materialize(self, handles: Iterable[str], **kwargs: Any) -> dict[str, Any]:
         """Compatibility alias for callers that use the catalog vocabulary."""

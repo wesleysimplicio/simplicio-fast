@@ -35,7 +35,9 @@ MAX_BYTES = 1024 * 1024
 class NavigationError(RuntimeError):
     """Stable, machine-readable failure from the navigation contract."""
 
-    def __init__(self, reason_code: str, message: str, *, generation: str | None = None) -> None:
+    def __init__(
+        self, reason_code: str, message: str, *, generation: str | None = None
+    ) -> None:
         super().__init__(message)
         self.reason_code = reason_code
         self.generation = generation
@@ -48,7 +50,9 @@ class NavigationBudget:
     max_depth: int = 1
 
     @classmethod
-    def coerce(cls, value: "NavigationBudget | Mapping[str, Any] | int | None") -> "NavigationBudget":
+    def coerce(
+        cls, value: "NavigationBudget | Mapping[str, Any] | int | None"
+    ) -> "NavigationBudget":
         if value is None:
             return cls()
         if isinstance(value, cls):
@@ -58,16 +62,32 @@ class NavigationBudget:
         elif isinstance(value, Mapping):
             defaults = cls()
             candidate = cls(
-                max_nodes=value.get("max_nodes", value.get("nodes", defaults.max_nodes)),
-                max_bytes=value.get("max_bytes", value.get("bytes", defaults.max_bytes)),
-                max_depth=value.get("max_depth", value.get("depth", defaults.max_depth)),
+                max_nodes=value.get(
+                    "max_nodes", value.get("nodes", defaults.max_nodes)
+                ),
+                max_bytes=value.get(
+                    "max_bytes", value.get("bytes", defaults.max_bytes)
+                ),
+                max_depth=value.get(
+                    "max_depth", value.get("depth", defaults.max_depth)
+                ),
             )
         else:
-            raise NavigationError("invalid_budget", "budget must be an integer, mapping, or NavigationBudget")
+            raise NavigationError(
+                "invalid_budget",
+                "budget must be an integer, mapping, or NavigationBudget",
+            )
 
-        if any(isinstance(item, bool) or not isinstance(item, int) for item in asdict(candidate).values()):
+        if any(
+            isinstance(item, bool) or not isinstance(item, int)
+            for item in asdict(candidate).values()
+        ):
             raise NavigationError("invalid_budget", "budget values must be integers")
-        if candidate.max_nodes < 1 or candidate.max_bytes < 1 or candidate.max_depth < 1:
+        if (
+            candidate.max_nodes < 1
+            or candidate.max_bytes < 1
+            or candidate.max_depth < 1
+        ):
             raise NavigationError("invalid_budget", "budget values must be positive")
         return cls(
             min(candidate.max_nodes, MAX_NODES),
@@ -120,7 +140,9 @@ class NavigationIndex:
         self.snapshot = snapshot
         self._generation = snapshot.generation
         self._symbols = tuple(snapshot.symbols())
-        self._by_id = {symbol.symbol_id: symbol for symbol in self._symbols if symbol.symbol_id}
+        self._by_id = {
+            symbol.symbol_id: symbol for symbol in self._symbols if symbol.symbol_id
+        }
         self._relations = tuple(snapshot.relations())
 
     @property
@@ -138,13 +160,25 @@ class NavigationIndex:
     ) -> NavigationPage:
         self._check_generation(generation)
         if relation not in RELATIONS:
-            raise NavigationError("invalid_relation", f"unsupported relation: {relation}", generation=self._generation)
+            raise NavigationError(
+                "invalid_relation",
+                f"unsupported relation: {relation}",
+                generation=self._generation,
+            )
         if direction not in DIRECTIONS:
-            raise NavigationError("invalid_direction", f"unsupported direction: {direction}", generation=self._generation)
+            raise NavigationError(
+                "invalid_direction",
+                f"unsupported direction: {direction}",
+                generation=self._generation,
+            )
         limits = NavigationBudget.coerce(budget)
         symbol = self._by_id.get(handle)
         if symbol is None:
-            raise NavigationError("unknown_handle", "handle is not a canonical snapshot symbol ID", generation=self._generation)
+            raise NavigationError(
+                "unknown_handle",
+                "handle is not a canonical snapshot symbol ID",
+                generation=self._generation,
+            )
 
         start = self._cursor_offset(cursor, handle, relation, direction)
         candidates, residual = self._candidates(symbol, relation, direction)
@@ -153,9 +187,24 @@ class NavigationIndex:
             for target, confidence, raw_kind in candidates
         ]
         if relation == "next_executable_hop":
-            items.sort(key=lambda item: (-item.confidence, item.qualified_name.casefold(), item.file, item.line, item.id))
+            items.sort(
+                key=lambda item: (
+                    -item.confidence,
+                    item.qualified_name.casefold(),
+                    item.file,
+                    item.line,
+                    item.id,
+                )
+            )
         else:
-            items.sort(key=lambda item: (item.qualified_name.casefold(), item.file, item.line, item.id))
+            items.sort(
+                key=lambda item: (
+                    item.qualified_name.casefold(),
+                    item.file,
+                    item.line,
+                    item.id,
+                )
+            )
         items = self._deduplicate(items)
 
         selected: list[NavigationItem] = []
@@ -163,7 +212,11 @@ class NavigationIndex:
         next_offset = start
         for index in range(start, len(items)):
             item = items[index]
-            item_bytes = len(json.dumps(item.to_dict(), sort_keys=True, separators=(",", ":")).encode("utf-8"))
+            item_bytes = len(
+                json.dumps(
+                    item.to_dict(), sort_keys=True, separators=(",", ":")
+                ).encode("utf-8")
+            )
             if selected and consumed + item_bytes > limits.max_bytes:
                 break
             if not selected and item_bytes > limits.max_bytes:
@@ -217,26 +270,54 @@ class NavigationIndex:
                 generation=self._generation,
             )
 
-    def _cursor_offset(self, cursor: str | None, handle: str, relation: str, direction: str) -> int:
+    def _cursor_offset(
+        self, cursor: str | None, handle: str, relation: str, direction: str
+    ) -> int:
         if cursor is None:
             return 0
         try:
             padded = cursor + "=" * (-len(cursor) % 4)
             payload = json.loads(base64.urlsafe_b64decode(padded.encode("ascii")))
         except (ValueError, TypeError, UnicodeError, json.JSONDecodeError) as error:
-            raise NavigationError("invalid_cursor", "cursor is not a valid navigation cursor", generation=self._generation) from error
+            raise NavigationError(
+                "invalid_cursor",
+                "cursor is not a valid navigation cursor",
+                generation=self._generation,
+            ) from error
         if not isinstance(payload, dict) or payload.get("schema") != CONTRACT:
-            raise NavigationError("invalid_cursor", "cursor schema is invalid", generation=self._generation)
+            raise NavigationError(
+                "invalid_cursor",
+                "cursor schema is invalid",
+                generation=self._generation,
+            )
         if payload.get("generation") != self._generation:
-            raise NavigationError("stale_generation", "cursor belongs to a different snapshot generation", generation=self._generation)
-        if payload.get("handle") != handle or payload.get("relation") != relation or payload.get("direction") != direction:
-            raise NavigationError("invalid_cursor", "cursor does not match the navigation request", generation=self._generation)
+            raise NavigationError(
+                "stale_generation",
+                "cursor belongs to a different snapshot generation",
+                generation=self._generation,
+            )
+        if (
+            payload.get("handle") != handle
+            or payload.get("relation") != relation
+            or payload.get("direction") != direction
+        ):
+            raise NavigationError(
+                "invalid_cursor",
+                "cursor does not match the navigation request",
+                generation=self._generation,
+            )
         offset = payload.get("offset")
         if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
-            raise NavigationError("invalid_cursor", "cursor offset is invalid", generation=self._generation)
+            raise NavigationError(
+                "invalid_cursor",
+                "cursor offset is invalid",
+                generation=self._generation,
+            )
         return offset
 
-    def _encode_cursor(self, handle: str, relation: str, direction: str, offset: int) -> str:
+    def _encode_cursor(
+        self, handle: str, relation: str, direction: str, offset: int
+    ) -> str:
         payload = {
             "schema": CONTRACT,
             "generation": self._generation,
@@ -254,24 +335,38 @@ class NavigationIndex:
         if relation == "definition":
             return [(symbol, 1.0, "definition")], None
         if relation in {"next_executable_hop", "previous_executable_hop"}:
-            required_direction = "outgoing" if relation == "next_executable_hop" else "incoming"
+            required_direction = (
+                "outgoing" if relation == "next_executable_hop" else "incoming"
+            )
             if direction != required_direction:
                 return [], f"{relation}_requires_{required_direction}"
             candidates: list[tuple[Symbol, float, str]] = []
             for edge in self._relations:
                 if edge.kind != "call":
                     continue
-                if relation == "next_executable_hop" and edge.origin_id == symbol.symbol_id:
+                if (
+                    relation == "next_executable_hop"
+                    and edge.origin_id == symbol.symbol_id
+                ):
                     target = self._resolve(edge.destination_id, edge.destination)
                 elif relation == "previous_executable_hop" and (
-                    edge.destination_id == symbol.symbol_id or self._name_matches(symbol, edge.destination)
+                    edge.destination_id == symbol.symbol_id
+                    or self._name_matches(symbol, edge.destination)
                 ):
                     target = self._by_id.get(edge.origin_id)
                 else:
                     continue
                 if target is not None and target.symbol_id != symbol.symbol_id:
                     candidates.append((target, edge.confidence, "call"))
-            candidates.sort(key=lambda row: (-row[1], row[0].qualified_name.casefold(), row[0].file, row[0].line, row[0].symbol_id))
+            candidates.sort(
+                key=lambda row: (
+                    -row[1],
+                    row[0].qualified_name.casefold(),
+                    row[0].file,
+                    row[0].line,
+                    row[0].symbol_id,
+                )
+            )
             return candidates[:1], None
         raw_kind = {
             "references": "reference",
@@ -290,7 +385,8 @@ class NavigationIndex:
             if direction == "outgoing" and edge.origin_id == symbol.symbol_id:
                 target = self._resolve(edge.destination_id, edge.destination)
             elif direction == "incoming" and (
-                edge.destination_id == symbol.symbol_id or self._name_matches(symbol, edge.destination)
+                edge.destination_id == symbol.symbol_id
+                or self._name_matches(symbol, edge.destination)
             ):
                 target = self._by_id.get(edge.origin_id)
             if target is not None and target.symbol_id != symbol.symbol_id:
@@ -302,9 +398,17 @@ class NavigationIndex:
             resolved = self._by_id.get(identifier)
             if resolved is not None:
                 return resolved
-        exact = [item for item in self._symbols if item.qualified_name.casefold() == name.casefold()]
+        exact = [
+            item
+            for item in self._symbols
+            if item.qualified_name.casefold() == name.casefold()
+        ]
         if not exact:
-            exact = [item for item in self._symbols if item.name.casefold() == name.casefold()]
+            exact = [
+                item
+                for item in self._symbols
+                if item.name.casefold() == name.casefold()
+            ]
         return exact[0] if len(exact) == 1 else None
 
     @staticmethod
@@ -369,7 +473,9 @@ def navigate(
 ) -> NavigationPage:
     """Navigate one bounded hop from a canonical ID in an open snapshot."""
 
-    return NavigationIndex(snapshot).navigate(handle, relation, direction, budget, cursor, generation)
+    return NavigationIndex(snapshot).navigate(
+        handle, relation, direction, budget, cursor, generation
+    )
 
 
 __all__ = [

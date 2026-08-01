@@ -121,13 +121,17 @@ class ContextAuthority:
         if (
             not isinstance(self.capabilities, tuple)
             or not self.capabilities
-            or any(not isinstance(value, str) or not value for value in self.capabilities)
+            or any(
+                not isinstance(value, str) or not value for value in self.capabilities
+            )
         ):
             raise ValueError("capabilities must be a non-empty tuple")
         if (
             not isinstance(self.allowed_roots, tuple)
             or not self.allowed_roots
-            or any(not isinstance(value, str) or not value for value in self.allowed_roots)
+            or any(
+                not isinstance(value, str) or not value for value in self.allowed_roots
+            )
         ):
             raise ValueError("allowed_roots must be a non-empty tuple")
         for root in self.allowed_roots:
@@ -344,7 +348,11 @@ class ContextView:
 def _validate_relative_path(value: str, *, allow_dot: bool = False) -> str:
     normalized = value.replace("\\", "/")
     path = PurePosixPath(normalized)
-    if path.is_absolute() or ".." in path.parts or (not allow_dot and normalized in {"", "."}):
+    if (
+        path.is_absolute()
+        or ".." in path.parts
+        or (not allow_dot and normalized in {"", "."})
+    ):
         raise ContextViewError("path_escape", value)
     if ":" in path.parts[0]:
         raise ContextViewError("path_escape", value)
@@ -406,7 +414,13 @@ class ContextViewCache:
         self._entries: dict[str, dict[str, Any]] = {}
         self._lock = threading.RLock()
         self._sequence = 0
-        self.metrics = {"lookups": 0, "hits": 0, "misses": 0, "expired": 0, "evicted": 0}
+        self.metrics = {
+            "lookups": 0,
+            "hits": 0,
+            "misses": 0,
+            "expired": 0,
+            "evicted": 0,
+        }
         if self.path is not None and self.path.exists():
             self._load()
 
@@ -429,7 +443,13 @@ class ContextViewCache:
                 (int(entry.get("access_order", 0)) for entry in entries.values()),
                 default=0,
             )
-        except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError) as error:
+        except (
+            OSError,
+            ValueError,
+            KeyError,
+            TypeError,
+            json.JSONDecodeError,
+        ) as error:
             raise ContextViewError("cache_tampered", str(error)) from error
 
     def _persist(self) -> None:
@@ -520,7 +540,10 @@ class ContextViewService:
             raise ContextViewError("item_tampered", item.handle)
         if item.base_generation != request.base_generation:
             raise ContextViewError("stale_generation", item.handle)
-        if item.overlay_digest is not None and item.overlay_digest != request.overlay_digest:
+        if (
+            item.overlay_digest is not None
+            and item.overlay_digest != request.overlay_digest
+        ):
             raise ContextViewError("overlay_scope_mismatch", item.handle)
         if request.overlay_digest is None and item.overlay_digest is not None:
             raise ContextViewError("overlay_scope_mismatch", item.handle)
@@ -531,7 +554,9 @@ class ContextViewService:
     def _visible(identity: ContextIdentity, item: ContextItem) -> bool:
         reviewer = identity.stage.casefold() == "reviewer"
         if reviewer:
-            return item.kind != "implementer_prompt" and item.visibility != "implementer"
+            return (
+                item.kind != "implementer_prompt" and item.visibility != "implementer"
+            )
         return item.visibility != "reviewer"
 
     @staticmethod
@@ -770,7 +795,9 @@ def verify_context_view(
     if value.get("schema") != VIEW_SCHEMA:
         raise ContextViewError("view_schema_invalid")
     supplied = value.pop("view_hash", None)
-    if not isinstance(supplied, str) or not hmac.compare_digest(supplied, _digest(value)):
+    if not isinstance(supplied, str) or not hmac.compare_digest(
+        supplied, _digest(value)
+    ):
         raise ContextViewError("view_tampered")
     expected = {
         "request_hash": _digest(request.record()),

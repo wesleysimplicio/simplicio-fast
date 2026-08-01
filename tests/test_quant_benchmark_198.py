@@ -99,16 +99,20 @@ def test_every_lane_has_content_addressed_manifest_and_real_file(tmp_path, lane)
     assert receipt["schema"] == MANIFEST_SCHEMA
     assert receipt["lane"] == lane
     assert receipt["index_bytes"] == path.stat().st_size
-    assert receipt["index_hash"] == __import__("hashlib").sha256(
-        path.read_bytes()
-    ).hexdigest()
-    assert index.verify_file(
-        path,
-        generation="generation-one",
-        corpus_hash=dataset.corpus_hash,
-        embedding_hash=dataset.embedding_hash,
-        config_hash=config_hash,
-    )["index_bytes"] > 0
+    assert (
+        receipt["index_hash"]
+        == __import__("hashlib").sha256(path.read_bytes()).hexdigest()
+    )
+    assert (
+        index.verify_file(
+            path,
+            generation="generation-one",
+            corpus_hash=dataset.corpus_hash,
+            embedding_hash=dataset.embedding_hash,
+            config_hash=config_hash,
+        )["index_bytes"]
+        > 0
+    )
 
 
 def test_q2_without_and_with_integral_rerank_are_distinct_and_attributed(tmp_path):
@@ -154,12 +158,8 @@ def test_q0_and_q2b_differential_match_existing_production_paths(tmp_path):
         )
         q0_ids, _ = q0.query(query.vector)
         q2b_ids, _ = q2b.query(query.vector)
-        receipt = production.query(
-            query.vector, requested_k=10, candidate_k=20
-        )
-        production_ids = tuple(
-            item["canonical_id"] for item in receipt["results"]
-        )
+        receipt = production.query(query.vector, requested_k=10, candidate_k=20)
+        production_ids = tuple(item["canonical_id"] for item in receipt["results"])
         assert q0_ids == expected
         assert q2b_ids == production_ids
 
@@ -334,9 +334,7 @@ def test_property_determinism_bounds_duplicates_nan_and_degenerate_vectors(
         assert first.serialized_payload() == second.serialized_payload()
         assert first.query(records[0][1])[0] == second.query(records[0][1])[0]
         assert all(
-            -8 <= code <= 7
-            for entry in first._entries
-            for code in entry.encoded.codes
+            -8 <= code <= 7 for entry in first._entries for code in entry.encoded.codes
         )
     common = {
         "lane": "Q0",
@@ -459,16 +457,14 @@ def test_small_real_benchmark_has_ten_raw_repetitions_and_separate_classes(
     assert receipt["parity"]["rust"] is None
     assert receipt["parity"]["rust_compilation_attempted"] is False
     assert len(receipt["unavailable_sizes"]) == 2
-    assert {
-        item["classification"] for item in receipt["unavailable_sizes"]
-    } == {"BLOCKED"}
-    assert {
-        item["status"] for item in receipt["unavailable_sizes"]
-    } == {"unavailable"}
+    assert {item["classification"] for item in receipt["unavailable_sizes"]} == {
+        "BLOCKED"
+    }
+    assert {item["status"] for item in receipt["unavailable_sizes"]} == {"unavailable"}
     assert all(item["value"] is None for item in receipt["unavailable_sizes"])
-    assert {
-        item["reason"] for item in receipt["unavailable_sizes"]
-    } == {"CAPACITY_LIMIT_CONFIGURED"}
+    assert {item["reason"] for item in receipt["unavailable_sizes"]} == {
+        "CAPACITY_LIMIT_CONFIGURED"
+    }
     case = receipt["measured"][0]
     assert set(case["lanes"]) == {"Q0", "Q1", "Q2a", "Q2b"}
     assert case["lanes"]["Q2a"]["rerank_ms"]["p50"] == 0

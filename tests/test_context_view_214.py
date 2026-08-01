@@ -151,9 +151,7 @@ class ContextViewTest(unittest.TestCase):
 
     def test_authority_capability_and_fence_fail_closed(self) -> None:
         request = self.request()
-        other = ContextAuthority(
-            "intruder", "fence-1", ("context:read",), ("src",)
-        )
+        other = ContextAuthority("intruder", "fence-1", ("context:read",), ("src",))
         self.assert_reason(
             "authority_mismatch",
             lambda: ContextViewService().materialize(
@@ -201,7 +199,9 @@ class ContextViewTest(unittest.TestCase):
             ),
         )
 
-    def test_base_selection_reuses_cache_between_tasks_but_views_stay_bound(self) -> None:
+    def test_base_selection_reuses_cache_between_tasks_but_views_stay_bound(
+        self,
+    ) -> None:
         cache = ContextViewCache()
         service = ContextViewService(cache)
         first = service.materialize(
@@ -417,13 +417,14 @@ class ContextViewTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "context-cache.json"
             now = [10.0]
-            clock = lambda: now[0]
+
+            def clock() -> float:
+                return now[0]
+
             cache = ContextViewCache(path, max_entries=1, clock=clock)
             service = ContextViewService(cache)
             request = self.request(ttl=2)
-            service.materialize(
-                request, self.authority, [self.item("first", "first")]
-            )
+            service.materialize(request, self.authority, [self.item("first", "first")])
             reopened = ContextViewService(
                 ContextViewCache(path, max_entries=1, clock=clock)
             )
@@ -475,15 +476,11 @@ class ContextViewTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             replace(self.request(), schema="unsupported")
         with self.assertRaises(TypeError):
-            ContextViewService().materialize(
-                "not-a-request", self.authority, []
-            )
+            ContextViewService().materialize("not-a-request", self.authority, [])
         with self.assertRaises(TypeError):
             ContextViewService().materialize(self.request(), "not-authority", [])
         with self.assertRaises(TypeError):
-            ContextViewService().materialize(
-                self.request(), self.authority, [object()]
-            )
+            ContextViewService().materialize(self.request(), self.authority, [object()])
 
 
 if __name__ == "__main__":

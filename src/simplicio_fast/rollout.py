@@ -40,7 +40,9 @@ class RolloutController:
             status="rolled-back" if mode == "rollback" else "accepted",
             generation=generation,
             reason=reason,
-            previous_mode=previous if previous in {"shadow", "canary", "integrated", "fallback", "rollback"} else None,
+            previous_mode=previous
+            if previous in {"shadow", "canary", "integrated", "fallback", "rollback"}
+            else None,
         )
         payload = asdict(receipt)
         self.state_path.parent.mkdir(parents=True, exist_ok=True)

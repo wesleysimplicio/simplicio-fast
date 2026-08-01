@@ -63,6 +63,7 @@ def _peak_rss_kib() -> int:
             return 0
     return 0
 
+
 ARENA_SCHEMA = "simplicio.fast.prism-arena/v1"
 SLOT_SCHEMA = "simplicio.fast.prism-slot/v1"
 OVERLAY_SCHEMA = "simplicio.fast.prism-overlay/v1"
@@ -162,7 +163,9 @@ def encode_base(files: Mapping[str, bytes]) -> bytes:
 class ArenaError(RuntimeError):
     """Fail-closed arena error with a machine-readable source-scan fallback."""
 
-    def __init__(self, reason_code: str, detail: str = "", *, fallback: str = "source_scan") -> None:
+    def __init__(
+        self, reason_code: str, detail: str = "", *, fallback: str = "source_scan"
+    ) -> None:
         self.reason_code = reason_code
         self.detail = detail
         self.fallback = fallback
@@ -293,7 +296,9 @@ def _decode_catalog(mapping: mmap.mmap) -> dict[str, tuple[int, int, str]]:
     for _ in range(count):
         if offset + RECORD.size > len(mapping):
             raise ArenaError("snapshot_truncated", "record header")
-        path_length, content_length = RECORD.unpack(mapping[offset : offset + RECORD.size])
+        path_length, content_length = RECORD.unpack(
+            mapping[offset : offset + RECORD.size]
+        )
         offset += RECORD.size
         end_path = offset + path_length
         end_hash = end_path + 32
@@ -354,7 +359,10 @@ class PrismArena:
         if fields.get("generation") != generation:
             raise ArenaError("snapshot_corrupt", "generation metadata mismatch")
         self.source_hash = fields.get("source_hash", "")
-        if expected_source_hash is not None and self.source_hash != expected_source_hash:
+        if (
+            expected_source_hash is not None
+            and self.source_hash != expected_source_hash
+        ):
             raise ArenaError("source_stale", "source hash differs")
         try:
             base_hash = _digest(self.base_path.read_bytes())
@@ -385,7 +393,9 @@ class PrismArena:
             "misses": 0,
         }
         self._receipt_path = (
-            self.storage / "receipts" / f"{self.arena_id}-{os.getpid()}-{uuid.uuid4().hex}.hbp"
+            self.storage
+            / "receipts"
+            / f"{self.arena_id}-{os.getpid()}-{uuid.uuid4().hex}.hbp"
         )
         self._record("open", detail={"source_hash": self.source_hash})
 
@@ -440,7 +450,11 @@ class PrismArena:
         cls, storage: str | Path, repo: str, *, expected_source_hash: str | None = None
     ) -> "PrismArena":
         try:
-            row = (Path(storage).resolve() / "current.hbp").read_text(encoding="utf-8").strip()
+            row = (
+                (Path(storage).resolve() / "current.hbp")
+                .read_text(encoding="utf-8")
+                .strip()
+            )
             fields = _metadata_fields(row)
             generation = fields["generation"]
         except (OSError, KeyError, ValueError) as error:
@@ -565,7 +579,12 @@ class PrismArena:
         self._ensure_open()
         _safe_component(slot_id, "slot_id")
         _safe_component(prism_id, "prism_id")
-        if not fence or ttl_seconds <= 0 or max_overlay_bytes <= 0 or max_overlay_files <= 0:
+        if (
+            not fence
+            or ttl_seconds <= 0
+            or max_overlay_bytes <= 0
+            or max_overlay_files <= 0
+        ):
             raise ArenaError("slot_limits_invalid", slot_id)
         if parent is not None:
             self._validate_slot(parent)
@@ -619,7 +638,8 @@ class PrismArena:
     def child_slots(self, view: SlotView) -> tuple[SlotView, ...]:
         self._validate_slot(view)
         return tuple(
-            self._slots[slot_id] for slot_id in sorted(self._children.get(view.slot_id, ()))
+            self._slots[slot_id]
+            for slot_id in sorted(self._children.get(view.slot_id, ()))
         )
 
     def _validate_slot(self, view: SlotView) -> GenerationLease:
@@ -653,7 +673,9 @@ class PrismArena:
             if overlay.slot_id == view.slot_id and overlay.active:
                 overlay.active = False
                 overlay.abandoned_at = time.time()
-        self._record("release", slot_id=view.slot_id, detail={"lease_id": lease.lease_id})
+        self._record(
+            "release", slot_id=view.slot_id, detail={"lease_id": lease.lease_id}
+        )
 
     def create_overlay(
         self,
@@ -878,7 +900,9 @@ class PrismArena:
             detail={"generation": overlay.overlay_generation},
         )
 
-    def cleanup_abandoned(self, *, older_than: float = 0, apply: bool = False) -> dict[str, Any]:
+    def cleanup_abandoned(
+        self, *, older_than: float = 0, apply: bool = False
+    ) -> dict[str, Any]:
         self._ensure_open()
         threshold = time.time() - max(0, older_than)
         candidates = sorted(
@@ -904,15 +928,16 @@ class PrismArena:
             "base_path": str(self.base_path),
         }
 
-    def refresh(
-        self, source_hash: str, files: Mapping[str, bytes]
-    ) -> "PrismArena":
+    def refresh(self, source_hash: str, files: Mapping[str, bytes]) -> "PrismArena":
         self._ensure_open()
         refreshed = type(self).publish(self.storage, self.repo, source_hash, files)
         self._draining = True
         self._record(
             "refresh",
-            detail={"new_generation": refreshed.generation, "old_readers": self.active_readers},
+            detail={
+                "new_generation": refreshed.generation,
+                "old_readers": self.active_readers,
+            },
         )
         return refreshed
 
@@ -927,7 +952,9 @@ class PrismArena:
     def metrics(self) -> dict[str, Any]:
         self._ensure_open()
         rss = _peak_rss_kib()
-        active_overlays = sum(1 for overlay in self._overlays.values() if overlay.active)
+        active_overlays = sum(
+            1 for overlay in self._overlays.values() if overlay.active
+        )
         return {
             "schema": METRICS_SCHEMA,
             "generation": self.generation,

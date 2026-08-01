@@ -19,7 +19,9 @@ GOLDEN_CORPUS_SCHEMA = "simplicio.fast.golden-corpus/v1"
 
 
 def _canonical_digest(value: Any) -> str:
-    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    encoded = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
@@ -37,7 +39,11 @@ def _corpus_digest(corpus: Path) -> str:
         raise RuntimeError("corpus_files_missing")
     digest = hashlib.sha256()
     digest.update(b"manifest\0")
-    digest.update(json.dumps(manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+    digest.update(
+        json.dumps(
+            manifest, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    )
     for entry in sorted(files, key=lambda item: str(item.get("path", ""))):
         relative = entry.get("path") if isinstance(entry, dict) else None
         expected = entry.get("sha256") if isinstance(entry, dict) else None
@@ -58,7 +64,9 @@ def _corpus_digest(corpus: Path) -> str:
 
 
 def _json_command(command: list[str]) -> dict[str, Any]:
-    completed = subprocess.run(command, capture_output=True, text=True, check=False, close_fds=False)
+    completed = subprocess.run(
+        command, capture_output=True, text=True, check=False, close_fds=False
+    )
     if completed.returncode != 0:
         raise RuntimeError(
             json.dumps(
@@ -357,10 +365,19 @@ def main() -> int:
     parser.add_argument("--json-out", type=Path)
     parser.add_argument("--term", help="also compare a public symbol query")
     parser.add_argument("--context-term", help="also compare bounded source context")
-    parser.add_argument("--root", type=Path, help="source repository root for context comparison")
+    parser.add_argument(
+        "--root", type=Path, help="source repository root for context comparison"
+    )
     args = parser.parse_args()
     try:
-        receipt = run(args.snapshot, args.rust, args.term, args.root, args.context_term, args.corpus)
+        receipt = run(
+            args.snapshot,
+            args.rust,
+            args.term,
+            args.root,
+            args.context_term,
+            args.corpus,
+        )
     except (OSError, RuntimeError) as error:
         receipt = {
             "schema": SCHEMA,

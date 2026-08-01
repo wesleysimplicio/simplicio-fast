@@ -11,29 +11,43 @@ from simplicio_fast.resident_daemon import ResidentFastDaemon, make_request
 async def measure(slots: int, repeats: int = 10):
     samples = []
     opened = 0
+
     async def opener(generation):
         nonlocal opened
         opened += 1
-        await asyncio.sleep(.001)
+        await asyncio.sleep(0.001)
         return generation
+
     async def handler(request):
         await asyncio.sleep(0)
         return {"slot": request.slot_id}
-    daemon = ResidentFastDaemon(handler, max_inflight=5, queue_capacity=max(20, slots), generation_opener=opener)
+
+    daemon = ResidentFastDaemon(
+        handler, max_inflight=5, queue_capacity=max(20, slots), generation_opener=opener
+    )
     before_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     for repeat in range(repeats):
         started = time.perf_counter_ns()
         await daemon.start()
-        await asyncio.gather(*(daemon.submit(make_request(f"{repeat}-{i}", f"s{i}")) for i in range(slots)))
+        await asyncio.gather(
+            *(
+                daemon.submit(make_request(f"{repeat}-{i}", f"s{i}"))
+                for i in range(slots)
+            )
+        )
         samples.append(time.perf_counter_ns() - started)
     await daemon.shutdown()
     ordered = sorted(samples)
     return {
-        "slots": slots, "repetitions": repeats, "raw_ns": samples,
+        "slots": slots,
+        "repetitions": repeats,
+        "raw_ns": samples,
         "p50_ns": statistics.median(samples),
-        "p95_ns": ordered[int(.95 * (len(ordered) - 1))],
+        "p95_ns": ordered[int(0.95 * (len(ordered) - 1))],
         "generation_opens": opened,
-        "rss_kib_delta": max(0, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before_rss),
+        "rss_kib_delta": max(
+            0, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before_rss
+        ),
     }
 
 

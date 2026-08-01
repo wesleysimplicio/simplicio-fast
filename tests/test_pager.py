@@ -45,7 +45,10 @@ class SemanticPagerTest(unittest.TestCase):
             return b"shared"
 
         results: list[bytes] = []
-        threads = [threading.Thread(target=lambda: results.append(pager.get(key, loader))) for _ in range(5)]
+        threads = [
+            threading.Thread(target=lambda: results.append(pager.get(key, loader)))
+            for _ in range(5)
+        ]
         for thread in threads:
             thread.start()
         for thread in threads:
@@ -58,13 +61,17 @@ class SemanticPagerTest(unittest.TestCase):
         data = b"payload"
         pager = SemanticPager("repo", "g", max_bytes=20, max_pages=2)
         key = self.key("held")
-        with pager.lease(key, lambda: data, expected_sha256=hashlib.sha256(data).hexdigest()) as leased:
+        with pager.lease(
+            key, lambda: data, expected_sha256=hashlib.sha256(data).hexdigest()
+        ) as leased:
             self.assertEqual(data, leased)
             self.assertEqual({"removed": 0, "held": 1}, pager.invalidate([key]))
             self.assertEqual(1, pager.stats()["held_pages"])
         self.assertEqual(0, pager.stats()["resident_pages"])
         with self.assertRaises(PagerError) as error:
-            pager.get(key, lambda: b"wrong", expected_sha256=hashlib.sha256(data).hexdigest())
+            pager.get(
+                key, lambda: b"wrong", expected_sha256=hashlib.sha256(data).hexdigest()
+            )
         self.assertEqual("page_digest_mismatch", error.exception.reason_code)
 
     def test_prefetch_does_not_evict_resident_pages_when_budget_is_full(self) -> None:
@@ -85,7 +92,6 @@ class SemanticPagerTest(unittest.TestCase):
         self.assertEqual(b"bbb", pager.get(second))
         self.assertEqual(1, pager.stats()["prefetch_wasted"])
 
-
     def test_stats_expose_bounded_working_set_receipt(self) -> None:
         pager = SemanticPager("repo", "g", max_bytes=6, max_pages=2)
         pager.get(self.key("a"), lambda: b"aaa")
@@ -95,6 +101,7 @@ class SemanticPagerTest(unittest.TestCase):
         self.assertEqual(6, working_set["max_bytes"])
         self.assertEqual(2, working_set["max_pages"])
         self.assertEqual(3, working_set["bytes_available"])
+
 
 class SingleFlightCoordinatorTest(unittest.TestCase):
     def key(self, request: object = None, *, generation: str = "g1"):
@@ -125,10 +132,17 @@ class SingleFlightCoordinatorTest(unittest.TestCase):
             release.wait(1)
             return "shared"
 
-        owner = threading.Thread(target=lambda: results.append(coordinator.run(key, operation)))
+        owner = threading.Thread(
+            target=lambda: results.append(coordinator.run(key, operation))
+        )
         owner.start()
         self.assertTrue(started.wait(1))
-        waiters = [threading.Thread(target=lambda: results.append(coordinator.run(key, operation))) for _ in range(4)]
+        waiters = [
+            threading.Thread(
+                target=lambda: results.append(coordinator.run(key, operation))
+            )
+            for _ in range(4)
+        ]
         for thread in waiters:
             thread.start()
         release.set()
@@ -157,7 +171,9 @@ class SingleFlightCoordinatorTest(unittest.TestCase):
         owner.start()
         self.assertTrue(started.wait(1))
         waiter = threading.Thread(
-            target=lambda: self._capture_error(coordinator, key, operation, cancel_event=cancelled, errors=errors)
+            target=lambda: self._capture_error(
+                coordinator, key, operation, cancel_event=cancelled, errors=errors
+            )
         )
         waiter.start()
         time.sleep(0.03)
@@ -182,10 +198,18 @@ class SingleFlightCoordinatorTest(unittest.TestCase):
             time.sleep(0.05)
             raise RuntimeError("boom")
 
-        owner = threading.Thread(target=lambda: self._capture_error(coordinator, key, operation, errors=errors))
+        owner = threading.Thread(
+            target=lambda: self._capture_error(
+                coordinator, key, operation, errors=errors
+            )
+        )
         owner.start()
         self.assertTrue(started.wait(1))
-        waiter = threading.Thread(target=lambda: self._capture_error(coordinator, key, operation, errors=errors))
+        waiter = threading.Thread(
+            target=lambda: self._capture_error(
+                coordinator, key, operation, errors=errors
+            )
+        )
         waiter.start()
         owner.join(1)
         waiter.join(1)
@@ -194,11 +218,17 @@ class SingleFlightCoordinatorTest(unittest.TestCase):
         self.assertEqual(0, coordinator.stats()["active_flights"])
 
     @staticmethod
-    def _capture_error(coordinator, key, operation, *, errors, cancel_event=None, timeout=None) -> None:
+    def _capture_error(
+        coordinator, key, operation, *, errors, cancel_event=None, timeout=None
+    ) -> None:
         try:
             coordinator.run(key, operation, cancel_event=cancel_event, timeout=timeout)
         except (RuntimeError, SingleFlightError) as error:
-            errors.append(type(error).__name__ if isinstance(error, RuntimeError) else error.reason_code)
+            errors.append(
+                type(error).__name__
+                if isinstance(error, RuntimeError)
+                else error.reason_code
+            )
 
     def test_validation_timeout_and_flight_limit(self) -> None:
         with self.assertRaises(ValueError):
@@ -248,7 +278,9 @@ class SingleFlightCoordinatorTest(unittest.TestCase):
             pager.get(PageKey("other", "g", "slot", "x", "0:1"), lambda: b"x")
         self.assertEqual("cross_repo_page", error.exception.reason_code)
         with self.assertRaises(PagerError) as error:
-            pager.get(PageKey("repo", "g", "slot", "x", "0:1", schema="wrong"), lambda: b"x")
+            pager.get(
+                PageKey("repo", "g", "slot", "x", "0:1", schema="wrong"), lambda: b"x"
+            )
         self.assertEqual("schema_mismatch", error.exception.reason_code)
         with self.assertRaises(PagerError) as error:
             pager.get(page_key)
@@ -266,13 +298,19 @@ class SingleFlightCoordinatorTest(unittest.TestCase):
         with self.assertRaises(PagerError) as error:
             pager.release(page_key)
         self.assertEqual("lease_mismatch", error.exception.reason_code)
-        self.assertEqual({"removed": 0, "held": 0}, pager.invalidate([PageKey("repo", "g", "slot", "missing", "0:1")]))
+        self.assertEqual(
+            {"removed": 0, "held": 0},
+            pager.invalidate([PageKey("repo", "g", "slot", "missing", "0:1")]),
+        )
 
     def test_prefetch_records_useful_and_wasted(self) -> None:
         pager = SemanticPager("repo", "g1", max_bytes=20, max_pages=4)
         first = PageKey("repo", "g1", "slot", "first", "0:1")
         second = PageKey("repo", "g1", "slot", "second", "0:1")
         pager.get(first, lambda: b"a")
-        self.assertEqual({"useful": 1, "wasted": 1}, pager.prefetch([first, second], lambda key: b"b"))
+        self.assertEqual(
+            {"useful": 1, "wasted": 1},
+            pager.prefetch([first, second], lambda key: b"b"),
+        )
         self.assertEqual(1, pager.stats()["prefetch_useful"])
         self.assertEqual(1, pager.stats()["prefetch_wasted"])

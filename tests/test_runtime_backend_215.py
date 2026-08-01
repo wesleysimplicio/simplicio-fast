@@ -181,15 +181,17 @@ assert "simplicio_fast.native_backend" not in sys.modules
 
 def test_python_mode_is_complete_for_golden_hbp_operations():
     selected = select_runtime_backend("python")
-    assert selected.execute("sha256", {"hex": b"abc".hex()}) == hashlib.sha256(
-        b"abc"
-    ).hexdigest()
-    assert selected.execute(
-        "catalog_lookup", {"catalog": {"a": "1"}, "key": "a"}
-    ) == "1"
-    assert selected.execute(
-        "page", {"hex": b"abcdef".hex(), "offset": 1, "limit": 3}
-    ) == b"bcd".hex()
+    assert (
+        selected.execute("sha256", {"hex": b"abc".hex()})
+        == hashlib.sha256(b"abc").hexdigest()
+    )
+    assert (
+        selected.execute("catalog_lookup", {"catalog": {"a": "1"}, "key": "a"}) == "1"
+    )
+    assert (
+        selected.execute("page", {"hex": b"abcdef".hex(), "offset": 1, "limit": 3})
+        == b"bcd".hex()
+    )
     assert selected.execute(
         "overlay_merge",
         {"base": {"a": "31"}, "overlay": {"a": "32", "b": "33"}},
@@ -234,7 +236,9 @@ def test_python_and_runtime_use_the_same_hbp_golden_fixtures(
         (lambda artifact: {"version": ""}, "VERSION_MISMATCH"),
     ],
 )
-def test_artifact_is_verified_before_process_spawn(tmp_path, monkeypatch, mutator, reason):
+def test_artifact_is_verified_before_process_spawn(
+    tmp_path, monkeypatch, mutator, reason
+):
     artifact = _fake_runtime(tmp_path)
     values = {
         "executable": artifact.executable,
@@ -260,7 +264,9 @@ def test_artifact_is_verified_before_process_spawn(tmp_path, monkeypatch, mutato
     assert spawned is False
 
 
-def test_runtime_artifact_hashing_streams_and_enforces_size_bound(tmp_path, monkeypatch):
+def test_runtime_artifact_hashing_streams_and_enforces_size_bound(
+    tmp_path, monkeypatch
+):
     artifact = _fake_runtime(tmp_path)
     # Ensure the fixture exceeds the 1 KiB enforcement bound on every platform
     # (Windows .cmd wrappers are otherwise only a few hundred bytes).
@@ -302,9 +308,10 @@ def test_signature_policy_fails_closed_and_accepts_verified_signature(tmp_path):
         RuntimeFastBackend(signed).verify_artifact()
     assert raised.value.reason_code == "SIGNATURE_MISMATCH"
     receipt = RuntimeFastBackend(
-        signed, signature_verifier=lambda path, digest, signature: (
+        signed,
+        signature_verifier=lambda path, digest, signature: (
             digest == signed.sha256 and signature == "release-signature"
-        )
+        ),
     ).verify_artifact()
     assert receipt["signature_verified"] is True
 
@@ -363,19 +370,25 @@ def test_manifest_and_environment_discovery(tmp_path):
     assert discovered is not None and discovered.sha256 == artifact.sha256
     assert runtime_artifact_from_environment({}) is None
     manifest_path.write_text("not-json", encoding="utf-8")
-    assert runtime_artifact_from_environment(
-        {
-            "SIMPLICIO_RUNTIME_BIN": str(artifact.executable),
-            "SIMPLICIO_RUNTIME_MANIFEST": str(manifest_path),
-        }
-    ) is None
+    assert (
+        runtime_artifact_from_environment(
+            {
+                "SIMPLICIO_RUNTIME_BIN": str(artifact.executable),
+                "SIMPLICIO_RUNTIME_MANIFEST": str(manifest_path),
+            }
+        )
+        is None
+    )
     manifest_path.write_text("[]", encoding="utf-8")
-    assert runtime_artifact_from_environment(
-        {
-            "SIMPLICIO_RUNTIME_BIN": str(artifact.executable),
-            "SIMPLICIO_RUNTIME_MANIFEST": str(manifest_path),
-        }
-    ) is None
+    assert (
+        runtime_artifact_from_environment(
+            {
+                "SIMPLICIO_RUNTIME_BIN": str(artifact.executable),
+                "SIMPLICIO_RUNTIME_MANIFEST": str(manifest_path),
+            }
+        )
+        is None
+    )
 
 
 def test_constructor_and_unknown_reason_validation(tmp_path):
@@ -533,9 +546,7 @@ def test_protocol_rejects_effectful_and_unknown_operations(tmp_path):
         ("large", "PROTOCOL_ERROR"),
     ],
 )
-def test_response_boundary_rejects_invalid_envelopes(
-    tmp_path, response_kind, reason
-):
+def test_response_boundary_rejects_invalid_envelopes(tmp_path, response_kind, reason):
     artifact = _fake_runtime(tmp_path, response_kind=response_kind)
     backend = RuntimeFastBackend(
         artifact,
@@ -559,9 +570,9 @@ def test_spawn_os_error_and_lazy_handshake(tmp_path, monkeypatch):
         return original(*args, **kwargs)
 
     monkeypatch.setattr(backend, "handshake", counted)
-    assert backend.call("sha256", {"hex": b"x".hex()}) == hashlib.sha256(
-        b"x"
-    ).hexdigest()
+    assert (
+        backend.call("sha256", {"hex": b"x".hex()}) == hashlib.sha256(b"x").hexdigest()
+    )
     assert calls == 1
 
     broken = RuntimeFastBackend(artifact, required_capabilities=("sha256",))
@@ -594,7 +605,7 @@ def test_reason_code_contract_and_platform_aliases_are_complete():
 
 def test_adapter_source_contains_no_local_rust_toolchain_spawn():
     source = Path("src/simplicio_fast/runtime_backend.py").read_text(encoding="utf-8")
-    forbidden = ("[\"car" + "go\"", "[\"rust" + "c\"")
+    forbidden = ('["car' + 'go"', '["rust' + 'c"')
     assert all(item not in source.lower() for item in forbidden)
 
 

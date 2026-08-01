@@ -8,7 +8,11 @@ import statistics
 import time
 
 from simplicio_fast.slot_executor import (
-    SlotExecutor, make_envelope, parity_receipt, quantize, ranking_metrics,
+    SlotExecutor,
+    make_envelope,
+    parity_receipt,
+    quantize,
+    ranking_metrics,
 )
 
 
@@ -16,28 +20,44 @@ def run(root: Path, slots: int, repetitions: int) -> dict:
     samples = []
     for repetition in range(repetitions):
         executor = SlotExecutor(root / f"{slots}-{repetition}")
-        snapshot = executor.open_snapshot("run", "source", {
-            f"file-{index}.py": b"value = 1\n" for index in range(100)
-        })
+        snapshot = executor.open_snapshot(
+            "run",
+            "source",
+            {f"file-{index}.py": b"value = 1\n" for index in range(100)},
+        )
         before_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
         cpu = time.process_time()
         started = time.perf_counter()
         receipts = [
-            executor.execute(make_envelope(index), snapshot, writes={"result": b"ok"},
-                             runtime_available=False, rust_available=False)
+            executor.execute(
+                make_envelope(index),
+                snapshot,
+                writes={"result": b"ok"},
+                runtime_available=False,
+                rust_available=False,
+            )
             for index in range(slots)
         ]
-        samples.append({
-            "wall_seconds": time.perf_counter() - started,
-            "cpu_seconds": time.process_time() - cpu,
-            "rss_kib_delta": max(0, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before_rss),
-            "io_bytes": sum(item["bytes_written"] for item in receipts),
-            "envelopes": slots, "workers_materialized": executor.workers_started,
-            "workers_avoided": 0, "cache_hits": 0,
-            "tokens": None, "tokens_null_reason": "NO_LLM_USED",
-        })
+        samples.append(
+            {
+                "wall_seconds": time.perf_counter() - started,
+                "cpu_seconds": time.process_time() - cpu,
+                "rss_kib_delta": max(
+                    0, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - before_rss
+                ),
+                "io_bytes": sum(item["bytes_written"] for item in receipts),
+                "envelopes": slots,
+                "workers_materialized": executor.workers_started,
+                "workers_avoided": 0,
+                "cache_hits": 0,
+                "tokens": None,
+                "tokens_null_reason": "NO_LLM_USED",
+            }
+        )
     return {
-        "slots": slots, "repetitions": repetitions, "samples": samples,
+        "slots": slots,
+        "repetitions": repetitions,
+        "samples": samples,
         "mean_wall_seconds": statistics.mean(item["wall_seconds"] for item in samples),
     }
 
@@ -53,9 +73,13 @@ def main() -> None:
     result = {
         "schema": "simplicio.fast-slot-benchmark/v1",
         "classification": "MEASURED_LOCAL",
-        "cases": [run(Path(args.root), slots, args.repetitions) for slots in (1, 20, 22)],
-        "runtime": "unavailable", "rust": "unavailable",
-        "fallback": "python", "local_llm": False,
+        "cases": [
+            run(Path(args.root), slots, args.repetitions) for slots in (1, 20, 22)
+        ],
+        "runtime": "unavailable",
+        "rust": "unavailable",
+        "fallback": "python",
+        "local_llm": False,
         "retrieval_lanes": {},
         "parity": parity_receipt({"canonical_fixture": [1, 2, 3]}),
     }

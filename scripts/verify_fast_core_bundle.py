@@ -14,7 +14,9 @@ MANIFEST_SCHEMA = "simplicio.fast.engine-manifest/v1"
 REQUIRED_CAPABILITIES = frozenset({"stats", "query", "context"})
 
 
-def verify(binary: Path, manifest_path: Path, *, expected_version: str) -> dict[str, Any]:
+def verify(
+    binary: Path, manifest_path: Path, *, expected_version: str
+) -> dict[str, Any]:
     """Validate a staged core binary and its build-time handshake receipt."""
     failures: list[str] = []
     if not binary.is_file():
@@ -42,11 +44,18 @@ def verify(binary: Path, manifest_path: Path, *, expected_version: str) -> dict[
     if manifest.get("version") != expected_version:
         failures.append("VERSION_MISMATCH")
     capabilities = manifest.get("capabilities")
-    if not isinstance(capabilities, list) or not REQUIRED_CAPABILITIES.issubset(capabilities):
+    if not isinstance(capabilities, list) or not REQUIRED_CAPABILITIES.issubset(
+        capabilities
+    ):
         failures.append("CAPABILITIES_MISSING")
     conformance = manifest.get("conformance")
     digest_value = conformance.get("digest") if isinstance(conformance, dict) else None
-    if not isinstance(conformance, dict) or conformance.get("passed") is not True or not isinstance(digest_value, str) or not digest_value.strip():
+    if (
+        not isinstance(conformance, dict)
+        or conformance.get("passed") is not True
+        or not isinstance(digest_value, str)
+        or not digest_value.strip()
+    ):
         failures.append("CONFORMANCE_MISSING")
     return {
         "schema": SCHEMA,
@@ -67,7 +76,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     receipt = verify(args.binary, args.manifest, expected_version=args.expected_version)
-    print(json.dumps(receipt, sort_keys=True, separators=(",", ":")) if args.json else receipt["status"])
+    print(
+        json.dumps(receipt, sort_keys=True, separators=(",", ":"))
+        if args.json
+        else receipt["status"]
+    )
     return int(receipt["status"] != "pass")
 
 

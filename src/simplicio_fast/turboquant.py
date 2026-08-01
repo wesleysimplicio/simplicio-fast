@@ -16,6 +16,7 @@ _MASK64 = (1 << 64) - 1
 class QuantizationError(ValueError):
     """Raised when a vector or packed nibble stream violates the contract."""
 
+
 @dataclass(frozen=True, slots=True)
 class RerankedCandidate:
     """A deterministic exact score for one integral candidate vector."""
@@ -42,7 +43,9 @@ def _splitmix64(value: int) -> int:
     return (value ^ (value >> 31)) & _MASK64
 
 
-def _rotation_plan(dimension: int, seed: int) -> tuple[tuple[int, ...], tuple[int, ...]]:
+def _rotation_plan(
+    dimension: int, seed: int
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
     _validate_dimension(dimension)
     state = _validate_seed(seed)
     permutation = list(range(dimension))
@@ -57,7 +60,9 @@ def _rotation_plan(dimension: int, seed: int) -> tuple[tuple[int, ...], tuple[in
     return tuple(permutation), tuple(signs)
 
 
-def rotate(values: Iterable[float], seed: int = 0, *, inverse: bool = False) -> tuple[float, ...]:
+def rotate(
+    values: Iterable[float], seed: int = 0, *, inverse: bool = False
+) -> tuple[float, ...]:
     """Apply a deterministic signed-permutation orthogonal rotation."""
     vector = _as_vector(values)
     permutation, signs = _rotation_plan(len(vector), seed)
@@ -66,7 +71,9 @@ def rotate(values: Iterable[float], seed: int = 0, *, inverse: bool = False) -> 
         for output_index, source_index in enumerate(permutation):
             result[source_index] = signs[output_index] * vector[output_index]
         return tuple(result)
-    return tuple(signs[index] * vector[source] for index, source in enumerate(permutation))
+    return tuple(
+        signs[index] * vector[source] for index, source in enumerate(permutation)
+    )
 
 
 def exact_rerank(
@@ -106,13 +113,18 @@ def exact_rerank(
         if metric == "dot":
             score = dot
         elif metric == "l2":
-            score = -sum((left - right) ** 2 for left, right in zip(query_vector, vector))
+            score = -sum(
+                (left - right) ** 2 for left, right in zip(query_vector, vector)
+            )
         else:
             vector_norm = math.sqrt(sum(value * value for value in vector))
-            score = dot / (query_norm * vector_norm) if query_norm and vector_norm else 0.0
+            score = (
+                dot / (query_norm * vector_norm) if query_norm and vector_norm else 0.0
+            )
         ranked.append(RerankedCandidate(raw_id, score))
     ranked.sort(key=lambda candidate: (-candidate.score, candidate.canonical_id))
     return tuple(ranked[:top_k])
+
 
 def approximate_candidates(
     query: Iterable[float],
@@ -129,7 +141,11 @@ def approximate_candidates(
     """
     if metric not in RERANK_METRICS:
         raise QuantizationError("metric must be cosine, dot, or l2")
-    if isinstance(candidate_k, bool) or not isinstance(candidate_k, int) or candidate_k < 1:
+    if (
+        isinstance(candidate_k, bool)
+        or not isinstance(candidate_k, int)
+        or candidate_k < 1
+    ):
         raise QuantizationError("candidate_k must be a positive integer")
     normalized_seed = _validate_seed(seed)
     query_vector = _as_vector(query)
@@ -155,7 +171,11 @@ def approximate_candidates(
         if vector.seed != normalized_seed:
             raise QuantizationError("candidate seed must match query seed")
         codes = vector.codes
-        dot = sum(left * right for left, right in zip(query_codes, codes)) * query_quantized.scale * vector.scale
+        dot = (
+            sum(left * right for left, right in zip(query_codes, codes))
+            * query_quantized.scale
+            * vector.scale
+        )
         if metric == "dot":
             score = dot
         elif metric == "l2":
@@ -165,16 +185,23 @@ def approximate_candidates(
             )
         else:
             vector_norm = math.sqrt(sum(code * code for code in codes))
-            score = dot / (query_norm * vector_norm * query_quantized.scale * vector.scale) if query_norm and vector_norm else 0.0
+            score = (
+                dot / (query_norm * vector_norm * query_quantized.scale * vector.scale)
+                if query_norm and vector_norm
+                else 0.0
+            )
         ranked.append(RerankedCandidate(raw_id, score))
     ranked.sort(key=lambda candidate: (-candidate.score, candidate.canonical_id))
     return tuple(ranked[:candidate_k])
+
 
 def _as_vector(values: Iterable[float]) -> tuple[float, ...]:
     try:
         vector = tuple(float(value) for value in values)
     except (TypeError, ValueError) as error:
-        raise QuantizationError("values must be a finite non-empty iterable of numbers") from error
+        raise QuantizationError(
+            "values must be a finite non-empty iterable of numbers"
+        ) from error
     if not vector or any(not math.isfinite(value) for value in vector):
         raise QuantizationError("values must be a finite non-empty iterable of numbers")
     return vector
@@ -191,7 +218,11 @@ def pack_nibbles(codes: Iterable[int]) -> bytes:
     except TypeError as error:
         raise QuantizationError("codes must be an iterable") from error
     for code in values:
-        if isinstance(code, bool) or not isinstance(code, int) or not _MIN_CODE <= code <= _MAX_CODE:
+        if (
+            isinstance(code, bool)
+            or not isinstance(code, int)
+            or not _MIN_CODE <= code <= _MAX_CODE
+        ):
             raise QuantizationError("codes must be signed 4-bit integers")
     packed = bytearray((len(values) + 1) // 2)
     for index, code in enumerate(values):

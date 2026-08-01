@@ -47,7 +47,9 @@ def run(*, dimension: int, repetitions: int, seed: int) -> dict[str, object]:
     if repetitions < 1:
         raise ValueError("repetitions must be positive")
 
-    values = tuple(((index * 17 + seed * 13) % 101 - 50) / 17.0 for index in range(dimension))
+    values = tuple(
+        ((index * 17 + seed * 13) % 101 - 50) / 17.0 for index in range(dimension)
+    )
     expected = _dense_hadamard(values)
     fast_result = fwht(values, normalization="none")
     if max(abs(left - right) for left, right in zip(fast_result, expected)) > 1e-9:
@@ -80,7 +82,12 @@ def main() -> int:
     parser.add_argument("--repetitions", type=int, default=20)
     parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()
-    print(json.dumps(run(dimension=args.dimension, repetitions=args.repetitions, seed=args.seed), sort_keys=True))
+    print(
+        json.dumps(
+            run(dimension=args.dimension, repetitions=args.repetitions, seed=args.seed),
+            sort_keys=True,
+        )
+    )
     return 0
 
 

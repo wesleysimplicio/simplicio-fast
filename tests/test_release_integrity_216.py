@@ -1,4 +1,3 @@
-import copy
 import json
 from pathlib import Path
 import shutil
@@ -8,9 +7,9 @@ from scripts.check_release_integrity import SCHEMA, evaluate, main
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PROJECT_VERSION = tomllib.loads(
-    (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-)["project"]["version"]
+PROJECT_VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+    "project"
+]["version"]
 DRIFT_VERSION = "999.0.0"
 
 
@@ -65,7 +64,9 @@ def test_version_drift_fails_closed(tmp_path):
 def test_rust_core_version_drift_fails_closed(tmp_path):
     root = _fixture(tmp_path)
     cargo = root / "rust/simplicio-fast-core/Cargo.toml"
-    _replace_once(cargo, f'version = "{PROJECT_VERSION}"', f'version = "{DRIFT_VERSION}"')
+    _replace_once(
+        cargo, f'version = "{PROJECT_VERSION}"', f'version = "{DRIFT_VERSION}"'
+    )
     receipt = evaluate(root)
     assert "rust_core_version" in receipt["failures"]
 

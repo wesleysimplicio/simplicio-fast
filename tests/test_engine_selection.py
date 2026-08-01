@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import unittest
 
-from simplicio_fast.engine_selection import EngineSelectionError, resolve_mode, select_engine
+from simplicio_fast.engine_selection import (
+    EngineSelectionError,
+    resolve_mode,
+    select_engine,
+)
 
 
 class EngineSelectionTest(unittest.TestCase):
@@ -23,8 +27,12 @@ class EngineSelectionTest(unittest.TestCase):
         self.assertEqual(selected.reason, "rust_conformance_missing")
 
     def test_mode_precedence_is_cli_workspace_user_default(self) -> None:
-        self.assertEqual(("python", "cli"), resolve_mode(cli="python", workspace="rust", user="off"))
-        self.assertEqual(("rust", "workspace"), resolve_mode(workspace="rust", user="off"))
+        self.assertEqual(
+            ("python", "cli"), resolve_mode(cli="python", workspace="rust", user="off")
+        )
+        self.assertEqual(
+            ("rust", "workspace"), resolve_mode(workspace="rust", user="off")
+        )
         self.assertEqual(("off", "user"), resolve_mode(user="off"))
         self.assertEqual(("auto", "default"), resolve_mode())
 
@@ -34,7 +42,9 @@ class EngineSelectionTest(unittest.TestCase):
 
     def test_explicit_rust_is_fail_closed(self) -> None:
         with self.assertRaises(EngineSelectionError):
-            select_engine("rust", rust_probe={"healthy": False}, conformance_passed=False)
+            select_engine(
+                "rust", rust_probe={"healthy": False}, conformance_passed=False
+            )
 
     def test_off_does_not_select_python(self) -> None:
         selected = select_engine("off", python_available=True)

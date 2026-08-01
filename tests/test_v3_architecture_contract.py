@@ -16,7 +16,10 @@ class FastV3ArchitectureContractTest(unittest.TestCase):
         cls.matrix = MATRIX.read_text(encoding="utf-8")
 
     def test_documents_exist_and_name_the_issue(self):
-        self.assertIn("issue: https://github.com/wesleysimplicio/simplicio-fast/issues/38", self.adr)
+        self.assertIn(
+            "issue: https://github.com/wesleysimplicio/simplicio-fast/issues/38",
+            self.adr,
+        )
         self.assertIn("issue #38", self.matrix)
 
     def test_single_owners_are_declared(self):
@@ -33,7 +36,13 @@ class FastV3ArchitectureContractTest(unittest.TestCase):
     def test_profiles_and_engine_selection_are_explicit(self):
         for value in ("Full", "Loop standalone", "auto|rust|python|off"):
             self.assertIn(value, self.adr)
-        for value in ("requested_engine", "selected_engine", "conformance_digest", "python_loaded", "rust_loaded"):
+        for value in (
+            "requested_engine",
+            "selected_engine",
+            "conformance_digest",
+            "python_loaded",
+            "rust_loaded",
+        ):
             self.assertIn(value, self.matrix)
 
     def test_forbidden_boundaries_are_explicit(self):

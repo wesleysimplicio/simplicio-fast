@@ -89,7 +89,9 @@ class CustodianAddressV1:
         return json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
 
 
-_ROLE_METADATA: tuple[tuple[CustodianRole, str, _Metadata, _Metadata, _Metadata, _Metadata], ...] = (
+_ROLE_METADATA: tuple[
+    tuple[CustodianRole, str, _Metadata, _Metadata, _Metadata, _Metadata], ...
+] = (
     (
         "IndexGenerationSteward",
         "simplicio-fast/index",

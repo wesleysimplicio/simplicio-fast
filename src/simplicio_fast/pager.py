@@ -13,6 +13,7 @@ from typing import Any, Callable, Iterable
 
 SCHEMA = "simplicio.fast.semantic-pager/v1"
 
+
 @dataclass(frozen=True, slots=True)
 class RequestKey:
     """Canonical identity for a shared Fast request."""
@@ -23,13 +24,27 @@ class RequestKey:
     request_digest: str
 
     def __post_init__(self) -> None:
-        if not all(isinstance(value, str) and value for value in (self.repository, self.commit, self.generation, self.request_digest)):
-            raise ValueError("repository, commit, generation and request_digest are required")
+        if not all(
+            isinstance(value, str) and value
+            for value in (
+                self.repository,
+                self.commit,
+                self.generation,
+                self.request_digest,
+            )
+        ):
+            raise ValueError(
+                "repository, commit, generation and request_digest are required"
+            )
 
 
-def make_request_key(repository: str, commit: str, generation: str, request: Any) -> RequestKey:
+def make_request_key(
+    repository: str, commit: str, generation: str, request: Any
+) -> RequestKey:
     """Build a stable request identity from JSON-canonical request data."""
-    canonical = json.dumps(request, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    canonical = json.dumps(
+        request, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+    )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return RequestKey(repository, commit, generation, digest)
 
@@ -86,7 +101,9 @@ class SingleFlightCoordinator:
             if flight is None:
                 if len(self._flights) >= self.max_flights:
                     self._metrics["rejections"] += 1
-                    raise SingleFlightError("flight_limit", "maximum active flights reached")
+                    raise SingleFlightError(
+                        "flight_limit", "maximum active flights reached"
+                    )
                 flight = _RequestFlight(threading.Event())
                 self._flights[key] = flight
                 self._metrics["owners"] += 1
@@ -94,7 +111,9 @@ class SingleFlightCoordinator:
             else:
                 if flight.waiters >= self.max_waiters:
                     self._metrics["rejections"] += 1
-                    raise SingleFlightError("waiter_limit", "maximum waiters reached for request")
+                    raise SingleFlightError(
+                        "waiter_limit", "maximum waiters reached for request"
+                    )
                 flight.waiters += 1
                 self._metrics["waiters"] += 1
         if owner:
@@ -121,13 +140,21 @@ class SingleFlightCoordinator:
                 if cancel_event is not None and cancel_event.is_set():
                     with self._lock:
                         self._metrics["waiter_cancellations"] += 1
-                    raise SingleFlightError("waiter_cancelled", "waiter cancelled without stopping owner")
-                remaining = None if deadline is None else max(0.0, deadline - time.monotonic())
-                if remaining == 0.0 or not flight.event.wait(0.05 if remaining is None else min(0.05, remaining)):
+                    raise SingleFlightError(
+                        "waiter_cancelled", "waiter cancelled without stopping owner"
+                    )
+                remaining = (
+                    None if deadline is None else max(0.0, deadline - time.monotonic())
+                )
+                if remaining == 0.0 or not flight.event.wait(
+                    0.05 if remaining is None else min(0.05, remaining)
+                ):
                     if deadline is not None and time.monotonic() >= deadline:
                         with self._lock:
                             self._metrics["waiter_timeouts"] += 1
-                        raise SingleFlightError("waiter_timeout", "waiter deadline exceeded")
+                        raise SingleFlightError(
+                            "waiter_timeout", "waiter deadline exceeded"
+                        )
             if flight.error is not None:
                 raise flight.error
             return flight.result
@@ -200,7 +227,9 @@ class PageLease(AbstractContextManager[bytes]):
 class SemanticPager:
     """Thread-safe, generation-scoped bounded page cache."""
 
-    def __init__(self, repository: str, generation: str, *, max_bytes: int, max_pages: int) -> None:
+    def __init__(
+        self, repository: str, generation: str, *, max_bytes: int, max_pages: int
+    ) -> None:
         if max_bytes < 1 or max_pages < 1:
             raise ValueError("max_bytes and max_pages must be positive")
         self.repository = repository
@@ -239,13 +268,25 @@ class SemanticPager:
         self._metrics["bytes_touched"] += len(page.data)
 
     def _evict(self, required: int = 0, *, allow_eviction: bool = True) -> None:
-        while self._bytes + required > self.max_bytes or len(self._pages) >= self.max_pages:
+        while (
+            self._bytes + required > self.max_bytes
+            or len(self._pages) >= self.max_pages
+        ):
             if not allow_eviction:
-                raise PagerError("budget_exhausted", "prefetch would evict resident pages")
+                raise PagerError(
+                    "budget_exhausted", "prefetch would evict resident pages"
+                )
             candidates = [page for page in self._pages.values() if page.leases == 0]
             if not candidates:
                 raise PagerError("budget_exhausted", "all resident pages are leased")
-            victim = min(candidates, key=lambda page: (page.last_touch, page.key.segment, page.key.logical_range))
+            victim = min(
+                candidates,
+                key=lambda page: (
+                    page.last_touch,
+                    page.key.segment,
+                    page.key.logical_range,
+                ),
+            )
             self._pages.pop(victim.key)
             self._bytes -= len(victim.data)
             self._metrics["evictions"] += 1
@@ -266,12 +307,17 @@ class SemanticPager:
                 if expected_sha256 is not None and page.digest != expected_sha256:
                     page.invalidated = True
                     self._metrics["invalidations"] += 1
-                    raise PagerError("page_digest_mismatch", "resident page digest differs from expected")
+                    raise PagerError(
+                        "page_digest_mismatch",
+                        "resident page digest differs from expected",
+                    )
                 self._metrics["hits"] += 1
                 self._touch(page)
                 return page.data
             if loader is None:
-                raise PagerError("page_not_resident", "a loader is required for a cold page")
+                raise PagerError(
+                    "page_not_resident", "a loader is required for a cold page"
+                )
             flight = self._flights.get(key)
             if flight is None:
                 flight = _Flight(threading.Event())
@@ -284,14 +330,21 @@ class SemanticPager:
             flight.event.wait()
             if flight.error is not None:
                 raise flight.error
-            return self.get(key, loader, expected_sha256=expected_sha256, allow_eviction=allow_eviction)
+            return self.get(
+                key,
+                loader,
+                expected_sha256=expected_sha256,
+                allow_eviction=allow_eviction,
+            )
         try:
             data = loader()
             if not isinstance(data, bytes):
                 raise TypeError("page loader must return bytes")
             digest = hashlib.sha256(data).hexdigest()
             if expected_sha256 is not None and digest != expected_sha256:
-                raise PagerError("page_digest_mismatch", "loaded page digest differs from expected")
+                raise PagerError(
+                    "page_digest_mismatch", "loaded page digest differs from expected"
+                )
             with self._lock:
                 self._evict(len(data), allow_eviction=allow_eviction)
                 self._clock += 1
@@ -350,7 +403,9 @@ class SemanticPager:
                     removed += 1
         return {"removed": removed, "held": held}
 
-    def prefetch(self, keys: Iterable[PageKey], loader: Callable[[PageKey], bytes]) -> dict[str, int]:
+    def prefetch(
+        self, keys: Iterable[PageKey], loader: Callable[[PageKey], bytes]
+    ) -> dict[str, int]:
         useful = wasted = 0
         for key in keys:
             try:

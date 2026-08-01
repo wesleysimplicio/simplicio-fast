@@ -37,13 +37,19 @@ def _source_commit(root: Path) -> tuple[str | None, str | None]:
     except OSError:
         return None, "git_unavailable"
     commit = result.stdout.strip()
-    return (commit, None) if result.returncode == 0 and commit else (None, "not_a_git_checkout")
+    return (
+        (commit, None)
+        if result.returncode == 0 and commit
+        else (None, "not_a_git_checkout")
+    )
 
 
 def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
     temporary.replace(path)
 
 
@@ -56,18 +62,26 @@ class DeliveryEngine:
     def __init__(self, root: Path, snapshot: Path, cache: Path | None = None) -> None:
         self.root = root.resolve()
         self.snapshot = snapshot.resolve()
-        self.cache = (cache or self.root / ".simplicio-fast" / "delivery-cache").resolve()
+        self.cache = (
+            cache or self.root / ".simplicio-fast" / "delivery-cache"
+        ).resolve()
 
     def cache_stats(self) -> dict[str, Any]:
         """Return deterministic size telemetry for the disposable delivery cache."""
-        paths = sorted(path for path in self.cache.rglob("*.json") if path.is_file()) if self.cache.is_dir() else []
+        paths = (
+            sorted(path for path in self.cache.rglob("*.json") if path.is_file())
+            if self.cache.is_dir()
+            else []
+        )
         return {
             "schema": "simplicio.fast.delivery-cache/v1",
             "entries": len(paths),
             "bytes": sum(path.stat().st_size for path in paths),
         }
 
-    def prepare(self, task: str, *, profile: str, engine_receipt: dict[str, Any]) -> dict[str, Any]:
+    def prepare(
+        self, task: str, *, profile: str, engine_receipt: dict[str, Any]
+    ) -> dict[str, Any]:
         started = time.perf_counter_ns()
         if profile not in PROFILE_NAMES:
             raise ValueError(f"unsupported delivery profile: {profile}")
@@ -83,27 +97,43 @@ class DeliveryEngine:
                 "snapshot_generation": snapshot.generation,
             }
             cache_key = hashlib.sha256(
-                json.dumps(key_material, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                json.dumps(key_material, sort_keys=True, separators=(",", ":")).encode(
+                    "utf-8"
+                )
             ).hexdigest()
             cache_path = self.cache / f"{cache_key}.json"
             if cache_path.is_file():
                 cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                cached["cache"] = {"L0_attempt": "hit", "hits": 1, "misses": 0, "key": cache_key}
-                cached["timings"]["prepare_wall_ms"] = (time.perf_counter_ns() - started) / 1_000_000
+                cached["cache"] = {
+                    "L0_attempt": "hit",
+                    "hits": 1,
+                    "misses": 0,
+                    "key": cache_key,
+                }
+                cached["timings"]["prepare_wall_ms"] = (
+                    time.perf_counter_ns() - started
+                ) / 1_000_000
                 return cached
 
             terms = _terms(task)
             spans = []
             for term in terms:
-                spans.extend(snapshot.context(self.root, term, max_results=2, max_bytes=4_000))
+                spans.extend(
+                    snapshot.context(self.root, term, max_results=2, max_bytes=4_000)
+                )
                 if len(spans) >= 8:
                     break
             context_bytes = sum(len(span.content.encode("utf-8")) for span in spans)
-            context_tokens = sum(max(1, len(span.content.split())) for span in spans) if spans else 0
+            context_tokens = (
+                sum(max(1, len(span.content.split())) for span in spans) if spans else 0
+            )
             receipt: dict[str, Any] = {
                 "schema": SCHEMA,
                 "status": "ready",
-                "task": {"text": task, "sha256": hashlib.sha256(task.encode("utf-8")).hexdigest()},
+                "task": {
+                    "text": task,
+                    "sha256": hashlib.sha256(task.encode("utf-8")).hexdigest(),
+                },
                 "profile": PROFILE_NAMES[profile],
                 "engine": engine_receipt,
                 "engine_version": __version__,
@@ -112,23 +142,37 @@ class DeliveryEngine:
                 "source_commit_reason": commit_reason,
                 "base_generation": snapshot.generation,
                 "overlay_generation": None,
-                "mapper": {"schema": "simplicio.mapper-context/v1", "handle": snapshot.generation},
+                "mapper": {
+                    "schema": "simplicio.mapper-context/v1",
+                    "handle": snapshot.generation,
+                },
                 "budgets": {"context_bytes": 32_000, "context_tokens": 8_000},
                 "context": {
                     "terms": terms,
                     "spans": len(spans),
                     "bytes": context_bytes,
                     "estimated_tokens": context_tokens,
-                    "digest": hashlib.sha256("\n".join(span.content for span in spans).encode("utf-8")).hexdigest(),
+                    "digest": hashlib.sha256(
+                        "\n".join(span.content for span in spans).encode("utf-8")
+                    ).hexdigest(),
                 },
-                "cache": {"L0_attempt": "miss", "hits": 0, "misses": 1, "key": cache_key},
+                "cache": {
+                    "L0_attempt": "miss",
+                    "hits": 0,
+                    "misses": 1,
+                    "key": cache_key,
+                },
                 "ownership": {
                     "source_writer": "simplicio-dev-cli",
-                    "full_effect_authority": "simplicio-runtime" if profile == "full" else "local-guard",
+                    "full_effect_authority": "simplicio-runtime"
+                    if profile == "full"
+                    else "local-guard",
                     "mutation_applied": False,
                 },
                 "reason_codes": ["prepared_context_only"],
-                "timings": {"prepare_wall_ms": (time.perf_counter_ns() - started) / 1_000_000},
+                "timings": {
+                    "prepare_wall_ms": (time.perf_counter_ns() - started) / 1_000_000
+                },
             }
         _atomic_json(cache_path, receipt)
         return receipt
@@ -162,18 +206,21 @@ class DeliveryEngine:
             build_snapshot(self.root, self.snapshot)
         canonical = json.dumps(changeset, sort_keys=True, separators=(",", ":"))
         change_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-        request_key = idempotency_key or hashlib.sha256(
-            json.dumps(
-                {
-                    "changeset": change_digest,
-                    "profile": profile,
-                    "write": write,
-                    "runtime_transaction": runtime_transaction,
-                },
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
+        request_key = (
+            idempotency_key
+            or hashlib.sha256(
+                json.dumps(
+                    {
+                        "changeset": change_digest,
+                        "profile": profile,
+                        "write": write,
+                        "runtime_transaction": runtime_transaction,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+            ).hexdigest()
+        )
         result_path = self.cache / "delivery" / f"{request_key}.json"
         if result_path.is_file():
             cached = json.loads(result_path.read_text(encoding="utf-8"))
@@ -194,18 +241,27 @@ class DeliveryEngine:
             if runtime_transaction is not None:
                 try:
                     transaction_write_set = runtime_transaction.get("write_set")
-                    changeset_paths = [change["path"] for change in changeset["changes"]]
+                    changeset_paths = [
+                        change["path"] for change in changeset["changes"]
+                    ]
                     if sorted(transaction_write_set or []) != sorted(changeset_paths):
                         raise ValueError("runtime_write_set_mismatch")
                     effect_payload = runtime_transaction.get("effect")
-                    patch_ref = effect_payload.get("patch_ref") if isinstance(effect_payload, dict) else None
+                    patch_ref = (
+                        effect_payload.get("patch_ref")
+                        if isinstance(effect_payload, dict)
+                        else None
+                    )
                     if patch_ref is not None and patch_ref != change_digest:
                         raise ValueError("runtime_patch_ref_mismatch")
                     runtime_outcome = run_runtime_effect_transaction(
                         self.root, runtime_transaction
                     )
                 except (ImportError, RuntimeError, TypeError, ValueError) as error:
-                    reason_codes = ["runtime_effect_transaction_rejected", type(error).__name__]
+                    reason_codes = [
+                        "runtime_effect_transaction_rejected",
+                        type(error).__name__,
+                    ]
                 else:
                     if runtime_outcome.get("state") == "completed":
                         build_snapshot(self.root, self.snapshot)
@@ -217,10 +273,17 @@ class DeliveryEngine:
                             "profile": PROFILE_NAMES[profile],
                             "engine": engine_receipt,
                             "engine_version": __version__,
-                            "changeset": {"schema": changeset["schema"], "sha256": change_digest},
+                            "changeset": {
+                                "schema": changeset["schema"],
+                                "sha256": change_digest,
+                            },
                             "base_generation": before_generation,
                             "result_generation": after_generation,
-                            "idempotency": {"key": request_key, "hit": False, "replayed": False},
+                            "idempotency": {
+                                "key": request_key,
+                                "hit": False,
+                                "replayed": False,
+                            },
                             "cache": {"L0_delivery": "miss", "key": request_key},
                             "ownership": {
                                 "source_writer": "simplicio-dev-cli",
@@ -230,7 +293,10 @@ class DeliveryEngine:
                             "runtime": runtime_outcome,
                             "refresh": {"attempted": True, "status": "refreshed"},
                             "reason_codes": ["runtime_effect_completed"],
-                            "timings": {"delivery_wall_ms": (time.perf_counter_ns() - started) / 1_000_000},
+                            "timings": {
+                                "delivery_wall_ms": (time.perf_counter_ns() - started)
+                                / 1_000_000
+                            },
                         }
                         _atomic_json(result_path, receipt)
                         return receipt
@@ -251,7 +317,9 @@ class DeliveryEngine:
                 },
                 "runtime": runtime_outcome,
                 "reason_codes": reason_codes,
-                "timings": {"delivery_wall_ms": (time.perf_counter_ns() - started) / 1_000_000},
+                "timings": {
+                    "delivery_wall_ms": (time.perf_counter_ns() - started) / 1_000_000
+                },
             }
             _atomic_json(result_path, receipt)
             return receipt
@@ -292,12 +360,16 @@ class DeliveryEngine:
             "cache": {"L0_delivery": "miss", "key": request_key},
             "ownership": {
                 "source_writer": "simplicio-dev-cli",
-                "full_effect_authority": "simplicio-runtime" if profile == "full" else "local-guard",
+                "full_effect_authority": "simplicio-runtime"
+                if profile == "full"
+                else "local-guard",
                 "mutation_applied": applied,
             },
             "refresh": refresh,
             "reason_codes": reason_codes,
-            "timings": {"delivery_wall_ms": (time.perf_counter_ns() - started) / 1_000_000},
+            "timings": {
+                "delivery_wall_ms": (time.perf_counter_ns() - started) / 1_000_000
+            },
         }
         _atomic_json(result_path, receipt)
         return receipt

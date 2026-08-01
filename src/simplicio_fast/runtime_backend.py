@@ -1,4 +1,5 @@
 """Narrow, verified adapter from Fast to the Rust engine owned by Runtime."""
+
 from __future__ import annotations
 
 import hashlib
@@ -116,9 +117,7 @@ class RuntimeArtifact:
             executable=Path(executable),
             sha256=str(manifest.get("sha256", "")),
             version=str(manifest.get("version") or runtime_data.get("version") or ""),
-            platform=str(
-                manifest.get("platform") or runtime_data.get("target") or ""
-            ),
+            platform=str(manifest.get("platform") or runtime_data.get("target") or ""),
             # The ABI must be asserted by the signed/released manifest.  A
             # compatibility caller must never turn an arbitrary executable
             # into a Runtime artifact by relying on an implicit default.
@@ -133,9 +132,7 @@ class RuntimeArtifact:
             ),
             signature_required=bool(manifest.get("signature_required", False)),
             size=(
-                int(manifest["size"])
-                if isinstance(manifest.get("size"), int)
-                else None
+                int(manifest["size"]) if isinstance(manifest.get("size"), int) else None
             ),
         )
 
@@ -208,9 +205,7 @@ class RuntimeFastBackend:
             "--stdio",
         ]
 
-    def verify_artifact(
-        self, *, current_platform: str | None = None
-    ) -> dict[str, Any]:
+    def verify_artifact(self, *, current_platform: str | None = None) -> dict[str, Any]:
         path = self.artifact.executable
         if not path.is_file():
             raise RuntimeBackendError("RUNTIME_MISSING", str(path))
@@ -232,15 +227,16 @@ class RuntimeFastBackend:
                 path, max_bytes=self.max_artifact_bytes
             )
         except OSError as error:
-            raise RuntimeBackendError("RUNTIME_MISSING", type(error).__name__) from error
+            raise RuntimeBackendError(
+                "RUNTIME_MISSING", type(error).__name__
+            ) from error
         if self.artifact.size is not None and actual_size != self.artifact.size:
             raise RuntimeBackendError(
                 "HASH_MISMATCH",
                 f"size manifest={self.artifact.size} actual={actual_size}",
             )
-        if (
-            len(self.artifact.sha256) != 64
-            or not hmac.compare_digest(actual_hash, self.artifact.sha256)
+        if len(self.artifact.sha256) != 64 or not hmac.compare_digest(
+            actual_hash, self.artifact.sha256
         ):
             raise RuntimeBackendError("HASH_MISMATCH", actual_hash)
         if self.artifact.signature_required and not self.artifact.signature:
@@ -358,8 +354,13 @@ class RuntimeFastBackend:
         artifact_receipt = self.verify_artifact()
         result = self._request("doctor", {}, cancel_event=cancel_event)
         if not isinstance(result, dict):
-            raise RuntimeBackendError("PROTOCOL_ERROR", "doctor result is not an object")
-        if result.get("runtime") != "simplicio-runtime" or result.get("healthy") is not True:
+            raise RuntimeBackendError(
+                "PROTOCOL_ERROR", "doctor result is not an object"
+            )
+        if (
+            result.get("runtime") != "simplicio-runtime"
+            or result.get("healthy") is not True
+        ):
             raise RuntimeBackendError("RUNTIME_UNHEALTHY", "doctor did not pass")
         if result.get("abi") != RUNTIME_FAST_ABI:
             raise RuntimeBackendError("ABI_MISMATCH", str(result.get("abi")))
@@ -505,7 +506,9 @@ def select_runtime_backend(
     candidate = artifact or runtime_artifact_from_environment()
     if candidate is None:
         if requested == "rust":
-            raise RuntimeBackendError("RUNTIME_MISSING", "verified manifest unavailable")
+            raise RuntimeBackendError(
+                "RUNTIME_MISSING", "verified manifest unavailable"
+            )
         return RuntimeSelection(requested, "python", "RUNTIME_MISSING")
     backend = RuntimeFastBackend(
         candidate,

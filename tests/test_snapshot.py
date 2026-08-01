@@ -27,9 +27,13 @@ class SnapshotTest(unittest.TestCase):
             root = Path(directory)
             (root / "app.py").write_text("def run():\n    return True\n")
             (root / "node_modules" / "nested").mkdir(parents=True)
-            (root / "node_modules" / "nested" / "ignored.py").write_text("def ignored():\n    pass\n")
+            (root / "node_modules" / "nested" / "ignored.py").write_text(
+                "def ignored():\n    pass\n"
+            )
             (root / ".git" / "objects").mkdir(parents=True)
-            (root / ".git" / "objects" / "ignored.py").write_text("def ignored():\n    pass\n")
+            (root / ".git" / "objects" / "ignored.py").write_text(
+                "def ignored():\n    pass\n"
+            )
 
             self.assertEqual([root / "app.py"], source_files(root))
 
@@ -82,7 +86,9 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual((), warm.changed_paths)
             self.assertEqual(("no_change",), warm.reason_codes)
 
-            source.write_text(source.read_text() + "\ndef deactivate():\n    return False\n")
+            source.write_text(
+                source.read_text() + "\ndef deactivate():\n    return False\n"
+            )
             with Snapshot(output) as snapshot:
                 with self.assertRaises(StaleSnapshotError):
                     snapshot.context(root, "save")
@@ -105,17 +111,25 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(2, metrics.format_version)
             with Snapshot(output) as snapshot:
                 self.assertEqual("SFAST001/v2", snapshot.stats()["format"])
-                self.assertEqual("Service.run", snapshot.find_exact("Service.run")[0].qualified_name)
-                self.assertTrue(any(item.kind == "call" for item in snapshot.impact("go")))
+                self.assertEqual(
+                    "Service.run", snapshot.find_exact("Service.run")[0].qualified_name
+                )
+                self.assertTrue(
+                    any(item.kind == "call" for item in snapshot.impact("go"))
+                )
                 spans = snapshot.context(root, "run", max_bytes=6, max_tokens=2)
-                self.assertLessEqual(sum(len(item.content.encode()) for item in spans), 6)
+                self.assertLessEqual(
+                    sum(len(item.content.encode()) for item in spans), 6
+                )
                 self.assertLessEqual(sum(item.tokens for item in spans), 2)
 
     def test_async_imports_and_repository_derived_ids(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".git").mkdir()
-            (root / ".git" / "config").write_text('[remote "origin"]\n    url = https://example.invalid/repo.git\n')
+            (root / ".git" / "config").write_text(
+                '[remote "origin"]\n    url = https://example.invalid/repo.git\n'
+            )
             (root / "module.py").write_text(
                 "from package import helper\nfrom .local import value\n\nasync def load(item):\n    return helper(item)\n"
             )
@@ -126,7 +140,9 @@ class SnapshotTest(unittest.TestCase):
                 self.assertEqual("async_function", loaded.kind)
                 self.assertTrue(loaded.signature)
                 self.assertEqual(64, len(loaded.symbol_id))
-                self.assertTrue(any(item.kind == "import" for item in snapshot.relations()))
+                self.assertTrue(
+                    any(item.kind == "import" for item in snapshot.relations())
+                )
 
     def test_corruption_and_truncation_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -174,7 +190,9 @@ class SnapshotTest(unittest.TestCase):
                 strings_offset,
                 total_size,
             )
-            LEGACY_FILE_RECORD.pack_into(payload, files_offset, 0, 9, 1, 0, hashlib.sha256(b"x").digest())
+            LEGACY_FILE_RECORD.pack_into(
+                payload, files_offset, 0, 9, 1, 0, hashlib.sha256(b"x").digest()
+            )
             LEGACY_SYMBOL_RECORD.pack_into(payload, symbols_offset, 9, 1, 0, 1, 1, 2)
             payload[strings_offset:] = strings
             output = root / "legacy.sfast"
@@ -182,7 +200,6 @@ class SnapshotTest(unittest.TestCase):
             with Snapshot(output) as snapshot:
                 self.assertEqual(1, snapshot.format_version)
                 self.assertEqual("A", snapshot.find_exact("A")[0].name)
-
 
     def test_python_encoding_policy_is_explicit(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -201,8 +218,6 @@ class SnapshotTest(unittest.TestCase):
                 build_snapshot(root, output)
             self.assertEqual("source_encoding_unreadable", raised.exception.code)
             self.assertIn("invalid.py", str(raised.exception))
-
-
 
     def test_build_recovers_from_truncated_snapshot_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -233,7 +248,6 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(("b.py",), metrics.parsed_paths)
             self.assertEqual((), metrics.reused_paths)
 
-
     def test_bounded_build_preserves_previous_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -252,7 +266,6 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(0, raised.exception.progress["reused_files"])
             self.assertTrue(raised.exception.progress["previous_snapshot_preserved"])
             self.assertEqual(before, output.read_bytes())
-
 
     def test_oversized_source_fails_before_parse_and_preserves_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -281,25 +294,32 @@ class SnapshotTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "target.py").write_text("def target():\n    return True\n")
-            (root / "caller.py").write_text("from target import target\n\ndef caller():\n    return target()\n")
-            (root / "top.py").write_text("from caller import caller\n\ndef top():\n    return caller()\n")
+            (root / "caller.py").write_text(
+                "from target import target\n\ndef caller():\n    return target()\n"
+            )
+            (root / "top.py").write_text(
+                "from caller import caller\n\ndef top():\n    return caller()\n"
+            )
             output = root / "project.sfast"
             build_snapshot(root, output)
             with Snapshot(output) as snapshot:
                 first = snapshot.invalidation_closure(["target.py"])
                 second = snapshot.invalidation_closure(["target.py"])
-                bounded = snapshot.invalidation_closure(["target.py"], max_symbols=2, max_files=1)
+                bounded = snapshot.invalidation_closure(
+                    ["target.py"], max_symbols=2, max_files=1
+                )
                 missing = snapshot.invalidation_closure(["missing.py"])
             self.assertEqual(first, second)
             self.assertEqual("invalidated", first["status"])
-            self.assertEqual(["caller.py", "target.py", "top.py"], first["affected_files"])
+            self.assertEqual(
+                ["caller.py", "target.py", "top.py"], first["affected_files"]
+            )
             self.assertIn("top", first["affected_symbols"])
             self.assertEqual("truncated", bounded["status"])
             self.assertTrue(bounded["truncated"])
             self.assertLessEqual(len(bounded["affected_symbol_ids"]), 2)
             self.assertEqual("no_op", missing["status"])
             self.assertEqual("no_changed_symbols", missing["reason_code"])
-
 
     def test_validation_cache_skips_source_reads_and_emits_phase_timings(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -332,7 +352,9 @@ class SnapshotTest(unittest.TestCase):
                 },
                 set(metrics.phase_timings_ms),
             )
-            self.assertTrue(all(value >= 0 for value in metrics.phase_timings_ms.values()))
+            self.assertTrue(
+                all(value >= 0 for value in metrics.phase_timings_ms.values())
+            )
 
     def test_validation_cache_rehashes_same_size_change_and_invalid_cache(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -363,7 +385,9 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(0, recovered.metadata_reused_files)
             self.assertEqual(1, recovered.reused_files)
 
-    def test_fresh_validation_cache_rehashes_when_metadata_clock_is_frozen(self) -> None:
+    def test_fresh_validation_cache_rehashes_when_metadata_clock_is_frozen(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "sample.rs"
@@ -388,7 +412,9 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(("sample.rs",), changed.parsed_paths)
             self.assertEqual(0, changed.metadata_reused_files)
 
-    def test_timeout_receipt_includes_phase_timings_with_previous_snapshot(self) -> None:
+    def test_timeout_receipt_includes_phase_timings_with_previous_snapshot(
+        self,
+    ) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "sample.rs"

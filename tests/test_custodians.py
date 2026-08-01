@@ -35,7 +35,12 @@ class CustodianContractTest(unittest.TestCase):
             self.assertTrue(address.virtual)
             self.assertTrue(address.owner)
             self.assertTrue(address.endpoint)
-            for metadata in (address.capabilities, address.inputs, address.outputs, address.invariants):
+            for metadata in (
+                address.capabilities,
+                address.inputs,
+                address.outputs,
+                address.invariants,
+            ):
                 self.assertIsInstance(metadata, tuple)
                 self.assertTrue(metadata)
                 self.assertTrue(all(isinstance(item, str) for item in metadata))
@@ -56,10 +61,17 @@ class CustodianContractTest(unittest.TestCase):
         decoded = json.loads(first)
         self.assertEqual(CATALOG_SCHEMA, decoded["schema"])
         self.assertEqual(4, len(decoded["custodians"]))
-        self.assertEqual(first, json.dumps(decoded, sort_keys=True, separators=(",", ":")))
-        self.assertEqual(first, json.dumps(json.loads(first), sort_keys=True, separators=(",", ":")))
+        self.assertEqual(
+            first, json.dumps(decoded, sort_keys=True, separators=(",", ":"))
+        )
+        self.assertEqual(
+            first, json.dumps(json.loads(first), sort_keys=True, separators=(",", ":"))
+        )
         for address in CUSTODIAN_CATALOG:
-            self.assertEqual(address.to_json(), json.dumps(address.to_dict(), sort_keys=True, separators=(",", ":")))
+            self.assertEqual(
+                address.to_json(),
+                json.dumps(address.to_dict(), sort_keys=True, separators=(",", ":")),
+            )
 
     def test_resolution_is_canonical_and_never_dispatches(self) -> None:
         receipt = resolve_custodian("CacheIntegritySentinel")
@@ -69,7 +81,9 @@ class CustodianContractTest(unittest.TestCase):
         self.assertEqual("CacheIntegritySentinel", receipt["role"])
         self.assertFalse(receipt["dispatch"]["allowed"])
         self.assertEqual("virtual_pointer_only", receipt["dispatch"]["reason_code"])
-        self.assertEqual(CUSTODIANS["CacheIntegritySentinel"].to_dict(), receipt["address"])
+        self.assertEqual(
+            CUSTODIANS["CacheIntegritySentinel"].to_dict(), receipt["address"]
+        )
 
     def test_resolution_rejects_invalid_and_unknown_roles_fail_closed(self) -> None:
         invalid = resolve_custodian("  ")
@@ -96,7 +110,10 @@ class CustodianContractTest(unittest.TestCase):
             {"virtual": False},
         )
         for changes in invalid_values:
-            with self.subTest(changes=changes), self.assertRaises((TypeError, ValueError)):
+            with (
+                self.subTest(changes=changes),
+                self.assertRaises((TypeError, ValueError)),
+            ):
                 CustodianAddressV1(
                     role=changes.get("role", valid.role),
                     endpoint=changes.get("endpoint", valid.endpoint),

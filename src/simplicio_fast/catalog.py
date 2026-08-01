@@ -20,7 +20,17 @@ MAGIC = b"SFACAT01"
 MAX_CATALOG_BYTES = 64 * 1024 * 1024
 MAX_RECORDS = 1_000_000
 STATES = {"active", "superseded", "tombstoned", "held"}
-NAMESPACES = {"file", "symbol", "relation", "span", "test", "plan", "precedent", "receipt", "skill"}
+NAMESPACES = {
+    "file",
+    "symbol",
+    "relation",
+    "span",
+    "test",
+    "plan",
+    "precedent",
+    "receipt",
+    "skill",
+}
 _SHA256 = __import__("re").compile(r"^[0-9a-f]{64}$")
 
 
@@ -81,7 +91,9 @@ class AddressCatalog:
             raise ValueError(f"{field} must be a lowercase SHA-256 digest")
 
     def _make_handle(self, namespace: str, canonical_id: str) -> str:
-        material = "|".join((SCHEMA, self.repository, self.generation, namespace, canonical_id))
+        material = "|".join(
+            (SCHEMA, self.repository, self.generation, namespace, canonical_id)
+        )
         return hashlib.sha256(material.encode("utf-8")).hexdigest()[:20]
 
     def register(
@@ -108,7 +120,10 @@ class AddressCatalog:
         payload_sha256 = hashlib.sha256(payload).hexdigest()
         existing = self._by_identity.get(identity)
         if existing is not None:
-            if existing.payload_sha256 != payload_sha256 or existing.source_sha256 != source_sha256:
+            if (
+                existing.payload_sha256 != payload_sha256
+                or existing.source_sha256 != source_sha256
+            ):
                 raise CatalogResolutionError(
                     "canonical_id_reuse",
                     "canonical Mapper ID cannot silently point at a new payload",
@@ -118,7 +133,9 @@ class AddressCatalog:
         occupant = self._by_handle.get(handle)
         if occupant is not None and occupant.canonical_id != canonical_id:
             self._collisions += 1
-            raise CatalogResolutionError("handle_collision", f"handle collision for {handle}")
+            raise CatalogResolutionError(
+                "handle_collision", f"handle collision for {handle}"
+            )
         entry = CatalogEntry(
             namespace=namespace,
             canonical_id=canonical_id,
@@ -146,22 +163,41 @@ class AddressCatalog:
     ) -> CatalogEntry:
         entry = self._by_handle.get(handle)
         if entry is None:
-            raise CatalogResolutionError("handle_not_found", f"unknown catalog handle: {handle}")
-        if repository is not None and str(Path(repository).resolve()) != entry.repository:
-            raise CatalogResolutionError("cross_repo_handle", "handle belongs to another repository")
+            raise CatalogResolutionError(
+                "handle_not_found", f"unknown catalog handle: {handle}"
+            )
+        if (
+            repository is not None
+            and str(Path(repository).resolve()) != entry.repository
+        ):
+            raise CatalogResolutionError(
+                "cross_repo_handle", "handle belongs to another repository"
+            )
         if generation is not None and generation != entry.generation:
-            raise CatalogResolutionError("stale_generation", "handle belongs to another generation")
+            raise CatalogResolutionError(
+                "stale_generation", "handle belongs to another generation"
+            )
         if namespace is not None and namespace != entry.namespace:
-            raise CatalogResolutionError("namespace_mismatch", "handle namespace does not match")
+            raise CatalogResolutionError(
+                "namespace_mismatch", "handle namespace does not match"
+            )
         if entry.state != "active":
-            raise CatalogResolutionError(entry.state, f"handle is not active: {entry.state}")
+            raise CatalogResolutionError(
+                entry.state, f"handle is not active: {entry.state}"
+            )
         if payload_sha256 is not None and payload_sha256 != entry.payload_sha256:
-            raise CatalogResolutionError("payload_digest_mismatch", "payload digest does not match")
+            raise CatalogResolutionError(
+                "payload_digest_mismatch", "payload digest does not match"
+            )
         if hashlib.sha256(entry.payload).hexdigest() != entry.payload_sha256:
-            raise CatalogResolutionError("payload_corrupt", "catalog payload digest is invalid")
+            raise CatalogResolutionError(
+                "payload_corrupt", "catalog payload digest is invalid"
+            )
         return entry
 
-    def resolve_many(self, handles: Iterable[str], **guards: object) -> list[CatalogEntry]:
+    def resolve_many(
+        self, handles: Iterable[str], **guards: object
+    ) -> list[CatalogEntry]:
         return [self.resolve(handle, **guards) for handle in handles]
 
     def resolve_many_bounded(
@@ -187,14 +223,16 @@ class AddressCatalog:
             if bytes_materialized + len(entry.payload) > max_bytes:
                 truncated = True
                 break
-            references.append({
-                "handle": entry.handle,
-                "namespace": entry.namespace,
-                "canonical_id": entry.canonical_id,
-                "generation": entry.generation,
-                "payload_length": len(entry.payload),
-                "payload_sha256": entry.payload_sha256,
-            })
+            references.append(
+                {
+                    "handle": entry.handle,
+                    "namespace": entry.namespace,
+                    "canonical_id": entry.canonical_id,
+                    "generation": entry.generation,
+                    "payload_length": len(entry.payload),
+                    "payload_sha256": entry.payload_sha256,
+                }
+            )
             materialized.append({"handle": entry.handle, "payload": entry.payload})
             bytes_materialized += len(entry.payload)
         return {
@@ -214,7 +252,9 @@ class AddressCatalog:
             raise ValueError("tombstone state must be superseded, tombstoned or held")
         entry = self._by_handle.get(handle)
         if entry is None:
-            raise CatalogResolutionError("handle_not_found", f"unknown catalog handle: {handle}")
+            raise CatalogResolutionError(
+                "handle_not_found", f"unknown catalog handle: {handle}"
+            )
         replacement = CatalogEntry(
             namespace=entry.namespace,
             canonical_id=entry.canonical_id,
@@ -251,12 +291,19 @@ class AddressCatalog:
     def verify(self) -> dict[str, object]:
         invalid: list[str] = []
         for entry in self._by_handle.values():
-            if entry.repository != self.repository or entry.generation != self.generation:
+            if (
+                entry.repository != self.repository
+                or entry.generation != self.generation
+            ):
                 invalid.append(entry.handle)
                 continue
             if hashlib.sha256(entry.payload).hexdigest() != entry.payload_sha256:
                 invalid.append(entry.handle)
-        return {**self.stat(), "status": "valid" if not invalid else "invalid", "invalid_handles": invalid}
+        return {
+            **self.stat(),
+            "status": "valid" if not invalid else "invalid",
+            "invalid_handles": invalid,
+        }
 
     def to_bytes(self) -> bytes:
         repository = self.repository.encode("utf-8")
@@ -264,7 +311,9 @@ class AddressCatalog:
         if len(repository) > 65535 or len(generation) > 65535:
             raise ValueError("catalog metadata is too long")
         output = bytearray(MAGIC)
-        output.extend(struct.pack(">HHI", len(repository), len(generation), len(self._by_handle)))
+        output.extend(
+            struct.pack(">HHI", len(repository), len(generation), len(self._by_handle))
+        )
         output.extend(repository)
         output.extend(generation)
         for entry in sorted(self._by_handle.values(), key=lambda item: item.handle):
@@ -278,9 +327,16 @@ class AddressCatalog:
                 entry.state.encode("ascii"),
                 entry.payload,
             )
-            if any(len(field) > 65535 for field in fields[:-1]) or len(entry.payload) > 0xFFFFFFFF:
+            if (
+                any(len(field) > 65535 for field in fields[:-1])
+                or len(entry.payload) > 0xFFFFFFFF
+            ):
                 raise ValueError("catalog record is too large")
-            output.extend(struct.pack(">7H I", *(len(field) for field in fields[:-1]), len(entry.payload)))
+            output.extend(
+                struct.pack(
+                    ">7H I", *(len(field) for field in fields[:-1]), len(entry.payload)
+                )
+            )
             for field in fields[:-1]:
                 output.extend(field)
             output.extend(entry.payload)
@@ -314,18 +370,33 @@ class AddressCatalog:
         stored_repository = take(repository_length).decode("utf-8")
         stored_generation = take(generation_length).decode("utf-8")
         catalog = cls(repository or stored_repository, generation or stored_generation)
-        if catalog.repository != str(Path(stored_repository).resolve()) or catalog.generation != stored_generation:
-            raise CatalogResolutionError("catalog_scope_mismatch", "catalog scope does not match requested scope")
+        if (
+            catalog.repository != str(Path(stored_repository).resolve())
+            or catalog.generation != stored_generation
+        ):
+            raise CatalogResolutionError(
+                "catalog_scope_mismatch", "catalog scope does not match requested scope"
+            )
         for _ in range(count):
             lengths = struct.unpack(">7H I", take(18))
-            namespace, canonical_id, handle, segment_id, payload_sha256, source_sha256, state = (
+            (
+                namespace,
+                canonical_id,
+                handle,
+                segment_id,
+                payload_sha256,
+                source_sha256,
+                state,
+            ) = (
                 take(lengths[index]).decode("utf-8" if index in {0, 3} else "ascii")
                 for index in range(7)
             )
             payload = take(lengths[7])
             expected_handle = catalog._make_handle(namespace, canonical_id)
             if handle != expected_handle:
-                raise CatalogResolutionError("handle_digest_mismatch", f"invalid handle for {canonical_id}")
+                raise CatalogResolutionError(
+                    "handle_digest_mismatch", f"invalid handle for {canonical_id}"
+                )
             entry = catalog.register(
                 namespace,
                 canonical_id,
@@ -335,7 +406,9 @@ class AddressCatalog:
                 state=state,
             )
             if entry.handle != handle or entry.payload_sha256 != payload_sha256:
-                raise CatalogResolutionError("catalog_digest_mismatch", "catalog record digest mismatch")
+                raise CatalogResolutionError(
+                    "catalog_digest_mismatch", "catalog record digest mismatch"
+                )
         if cursor != len(data):
             raise ValueError("trailing bytes after catalog records")
         return catalog
@@ -346,7 +419,11 @@ class AddressCatalog:
         temporary = target.with_name(f".{target.name}.tmp")
         temporary.write_bytes(self.to_bytes())
         os.replace(temporary, target)
-        return {**self.verify(), "path": str(target.resolve()), "bytes": target.stat().st_size}
+        return {
+            **self.verify(),
+            "path": str(target.resolve()),
+            "bytes": target.stat().st_size,
+        }
 
     @classmethod
     def load(cls, path: str | Path, **scope: object) -> "AddressCatalog":
