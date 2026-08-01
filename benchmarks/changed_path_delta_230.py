@@ -99,10 +99,28 @@ def _summary(rows: list[dict[str, object]]) -> dict[str, object]:
         values = [row[name] for row in rows if isinstance(row[name], (int, float))]
         return statistics.median(values) if values else None
 
+    def percentile(name: str, fraction: float) -> float | None:
+        values = sorted(
+            float(row[name])
+            for row in rows
+            if isinstance(row[name], (int, float))
+        )
+        if not values:
+            return None
+        position = (len(values) - 1) * fraction
+        lower = int(position)
+        upper = min(lower + 1, len(values) - 1)
+        weight = position - lower
+        return values[lower] + (values[upper] - values[lower]) * weight
+
     return {
         "repetitions": len(rows),
         "wall_ms_median": median("wall_ms"),
+        "wall_ms_p95": percentile("wall_ms", 0.95),
+        "wall_ms_p99": percentile("wall_ms", 0.99),
         "cpu_ms_median": median("cpu_ms"),
+        "cpu_ms_p95": percentile("cpu_ms", 0.95),
+        "cpu_ms_p99": percentile("cpu_ms", 0.99),
         "rss_kib_median": median("rss_kib"),
         "page_faults_median": median("page_faults"),
         "parsed_files_median": median("parsed_files"),
@@ -110,6 +128,15 @@ def _summary(rows: list[dict[str, object]]) -> dict[str, object]:
         "parsed_bytes_median": median("parsed_bytes"),
         "reused_bytes_median": median("reused_bytes"),
         "mapped_bytes_median": median("mapped_bytes"),
+        "stage_coverage_min": (
+            min(
+                float(row["stage_coverage"])
+                for row in rows
+                if isinstance(row.get("stage_coverage"), (int, float))
+            )
+            if any(isinstance(row.get("stage_coverage"), (int, float)) for row in rows)
+            else None
+        ),
         "parity": all(bool(row["parity"]) for row in rows),
     }
 
@@ -238,6 +265,29 @@ def _run_category(
                 "stage_timings_ms": report.get("stage_timings_ms"),
             }
         )
+        stage_timings = sample["stage_timings_ms"]
+        if isinstance(stage_timings, dict) and sample["wall_ms"]:
+            stage_timings = dict(stage_timings)
+            measured_stage_ms = sum(
+                float(value)
+                for value in stage_timings.values()
+                if isinstance(value, (int, float))
+            )
+            stage_timings["orchestration_and_receipt_residual"] = round(
+                max(0.0, float(sample["wall_ms"]) - measured_stage_ms), 3
+            )
+            sample["stage_timings_ms"] = stage_timings
+            sample["stage_coverage"] = round(
+                sum(
+                    float(value)
+                    for value in stage_timings.values()
+                    if isinstance(value, (int, float))
+                )
+                / float(sample["wall_ms"]),
+                6,
+            )
+        else:
+            sample["stage_coverage"] = None
         if (
             sample["parsed_files"] != expected_parsed
             or sample["reused_files"] != expected_reused
