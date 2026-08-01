@@ -62,6 +62,36 @@ class ChangesetCli241Test(unittest.TestCase):
             raise RuntimeError(f"stdout={stdout} stderr={stderr}")
         return json.loads(stdout)
 
+    def run_installed(self, root: Path, *args: str) -> dict:
+        executable = shutil.which("simplicio-fast")
+        if executable is None:
+            self.skipTest("simplicio-fast console entrypoint is not installed")
+        environment = dict(os.environ)
+        environment["PYTHONPATH"] = str(ROOT / "src")
+        with tempfile.TemporaryDirectory() as directory:
+            stdout_path = Path(directory) / "stdout.txt"
+            stderr_path = Path(directory) / "stderr.txt"
+            with (
+                stdout_path.open("w", encoding="utf-8") as stdout,
+                stderr_path.open("w", encoding="utf-8") as stderr,
+            ):
+                result = subprocess.run(
+                    [executable, *args],
+                    cwd=root,
+                    env=environment,
+                    stdin=subprocess.DEVNULL,
+                    stdout=stdout,
+                    stderr=stderr,
+                    text=True,
+                    check=False,
+                )
+            if result.returncode:
+                raise RuntimeError(
+                    f"stdout={stdout_path.read_text(encoding='utf-8')} "
+                    f"stderr={stderr_path.read_text(encoding='utf-8')}"
+                )
+            return json.loads(stdout_path.read_text(encoding="utf-8"))
+
     def prepare_and_materialize(self, root: Path, operations: list[dict]) -> dict:
         intent = root / "intent.json"
         binary = root / "changeset.sfc"
@@ -142,6 +172,65 @@ class ChangesetCli241Test(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertIn("materialize", result.stdout)
         self.assertIn("recover", result.stdout)
+
+    def test_installed_console_materializes_a_real_changeset(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            created = b"installed-create\n"
+            intent = root / "intent.json"
+            binary = root / "changeset.sfc"
+            journal = root / "changeset.journal"
+            intent.write_text(
+                json.dumps(
+                    {
+                        "operations": [
+                            {
+                                "op": "create",
+                                "path": "created.txt",
+                                "after_sha256": digest(created),
+                                "content_b64": encoded(created),
+                            }
+                        ]
+                    }
+                ),
+                encoding="utf-8",
+            )
+            prepared = self.run_installed(
+                root,
+                "changeset",
+                "prepare",
+                str(intent),
+                "--root",
+                str(root),
+                "--output",
+                str(binary),
+                "--base-generation",
+                "b" * 64,
+                "--overlay-generation",
+                "o" * 64,
+                "--attempt",
+                "installed-attempt",
+                "--worktree-id",
+                "installed-worktree",
+                "--lease-id",
+                "installed-lease",
+                "--fencing-token",
+                "installed-fence",
+            )
+            self.assertEqual("sealed", prepared["status"])
+            materialized = self.run_installed(
+                root,
+                "changeset",
+                "materialize",
+                str(binary),
+                "--root",
+                str(root),
+                "--journal",
+                str(journal),
+                "--write",
+            )
+            self.assertEqual("applied", materialized["status"])
+            self.assertEqual(created, (root / "created.txt").read_bytes())
 
     def test_create_replace_rename_delete_and_replay(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
