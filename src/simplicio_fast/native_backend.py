@@ -8,6 +8,7 @@ from pathlib import Path
 import platform
 import subprocess
 import threading
+import time
 from typing import Any, Mapping
 
 from . import __version__
@@ -118,6 +119,14 @@ class ResidentRustSession:
         self.executable = executable
         self.manifest = dict(manifest)
         self._lock = threading.Lock()
+        self._metrics = {
+            "starts": 0,
+            "requests": 0,
+            "failures": 0,
+            "bytes_in": 0,
+            "bytes_out": 0,
+            "wall_ms": 0.0,
+        }
         try:
             self._process = subprocess.Popen(
                 [str(executable), "--session"],
@@ -141,6 +150,7 @@ class ResidentRustSession:
         ):
             self.close()
             raise NativeBackendError("session_handshake_invalid")
+        self._metrics["starts"] = 1
 
     def _readline(self) -> dict[str, Any]:
         line = self._process.stdout.readline() if self._process.stdout else ""
@@ -159,7 +169,11 @@ class ResidentRustSession:
         if len(request) > MAX_SESSION_FRAME_BYTES:
             raise NativeBackendError("session_frame_too_large")
         with self._lock:
+            self._metrics["requests"] += 1
+            self._metrics["bytes_in"] += len(request) + 1
+            started = time.perf_counter()
             if self._process.poll() is not None:
+                self._metrics["failures"] += 1
                 raise NativeBackendError("session_crashed")
             try:
                 assert self._process.stdin is not None
@@ -167,10 +181,20 @@ class ResidentRustSession:
                 self._process.stdin.flush()
                 response = self._readline()
             except (BrokenPipeError, OSError, NativeBackendError) as exc:
+                self._metrics["failures"] += 1
                 raise NativeBackendError("session_crashed") from exc
+            finally:
+                self._metrics["wall_ms"] += (time.perf_counter() - started) * 1000
+            self._metrics["bytes_out"] += len(json.dumps(response, separators=(",", ":"))) + 1
         if response.get("abi") != ABI or response.get("ok") is not True:
+            self._metrics["failures"] += 1
             raise NativeBackendError("session_response_invalid")
         return response.get("result")
+
+    def metrics(self) -> dict[str, int | float]:
+        """Return a snapshot of resident-session health counters."""
+        with self._lock:
+            return dict(self._metrics)
 
     def close(self) -> None:
         process = getattr(self, "_process", None)

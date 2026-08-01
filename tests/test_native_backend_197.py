@@ -192,6 +192,7 @@ def test_resident_session_handshake_and_framed_call(monkeypatch):
                 '{"schema":"simplicio.fast.engine-session/v1",'
                 '"abi":"simplicio.fast-native/v1","ok":true}\n'
                 '{"abi":"simplicio.fast-native/v1","ok":true,"result":"ok"}\n'
+                '{"abi":"simplicio.fast-native/v1","ok":true,"result":"again"}\n'
             )
 
         def poll(self):
@@ -209,4 +210,12 @@ def test_resident_session_handshake_and_framed_call(monkeypatch):
     )
     session = ResidentRustSession(Path("native"), {})
     assert session.call("sha256", {"hex": "00"}) == "ok"
+    assert session.call("sha256", {"hex": "01"}) == "again"
+    metrics = session.metrics()
+    assert metrics["starts"] == 1
+    assert metrics["requests"] == 2
+    assert metrics["failures"] == 0
+    assert metrics["bytes_in"] == 158
+    assert metrics["bytes_out"] == 121
+    assert metrics["wall_ms"] >= 0
     session.close()
