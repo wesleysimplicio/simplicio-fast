@@ -234,6 +234,14 @@ class ContextProvenanceTest(unittest.TestCase):
                 self.assertEqual(0, code)
                 self.assertTrue(payload["schema"].startswith("simplicio.fast."))
 
+            code, capabilities = self.invoke("capabilities")
+            self.assertEqual(0, code)
+            self.assertEqual("ready", capabilities["parser_adapter"]["health"])
+            self.assertEqual("contract", capabilities["parser_adapter"]["completeness"])
+            self.assertEqual(
+                64, len(capabilities["parser_adapter"]["fingerprints"]["contract_sha256"])
+            )
+
         with patch(
             "simplicio_fast.cli.subprocess.run", side_effect=OSError("git unavailable")
         ):
