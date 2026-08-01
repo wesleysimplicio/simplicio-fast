@@ -83,6 +83,31 @@ class ParserAdapter244Test(unittest.TestCase):
             with self.assertRaisesRegex(ParserAdapterError, "path_escape"):
                 build_payload(root, changed_paths=["../outside.py"])
 
+    def test_adapter_limits_fail_closed_before_returning_partial_success(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one.py").write_text(
+                "def one():\n    return 1\n", encoding="utf-8"
+            )
+            (root / "two.py").write_text(
+                "def two():\n    return 2\n", encoding="utf-8"
+            )
+            with self.assertRaisesRegex(ParserAdapterError, "file_limit_exceeded"):
+                build_payload(root, limits={"max_files": 1})
+            with self.assertRaisesRegex(ParserAdapterError, "symbol_limit_exceeded"):
+                build_payload(root, limits={"max_symbols": 1})
+
+    def test_validator_rejects_oversized_contract(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def run():\n    return True\n", encoding="utf-8"
+            )
+            payload = build_payload(root)
+            payload["symbols"] = payload["symbols"] * 1_000_001
+            with self.assertRaisesRegex(ParserAdapterError, "symbol_limit_exceeded"):
+                validate_payload(payload)
+
 
 if __name__ == "__main__":
     unittest.main()
