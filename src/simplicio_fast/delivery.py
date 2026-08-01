@@ -75,6 +75,54 @@ def _terms(task: str) -> list[str]:
     return list(dict.fromkeys(values))[:8]
 
 
+def _mapper_symbol_handles(
+    root: Path, mapper_provenance: dict[str, Any]
+) -> dict[tuple[str, int], str]:
+    """Index Mapper symbol IDs by the public source file/line handle."""
+
+    artifact = next(
+        (
+            item
+            for item in mapper_provenance.get("artifacts", [])
+            if item.get("name") == "context_snapshot"
+        ),
+        None,
+    )
+    if not isinstance(artifact, dict) or not isinstance(artifact.get("path"), str):
+        raise MapperIngestError("mapper_graph_missing")
+    path = (root / artifact["path"]).resolve()
+    try:
+        graph = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise MapperIngestError("mapper_graph_missing") from error
+    if graph.get("schema") != "simplicio.context-snapshot/v1":
+        raise MapperIngestError("mapper_schema_unsupported")
+    nodes = graph.get("graph", {}).get("nodes")
+    if not isinstance(nodes, list):
+        raise MapperIngestError("mapper_graph_missing")
+    result: dict[tuple[str, int], str] = {}
+    for node in nodes:
+        if not isinstance(node, dict) or not isinstance(node.get("id"), str):
+            continue
+        source = node.get("source")
+        if not isinstance(source, dict):
+            continue
+        relative = source.get("file")
+        line = source.get("line")
+        if (
+            not isinstance(relative, str)
+            or not isinstance(line, int)
+            or isinstance(line, bool)
+            or line < 1
+            or not node["id"].startswith("symbol:")
+        ):
+            continue
+        result.setdefault((relative.replace("\\", "/"), line), node["id"])
+    if not result:
+        raise MapperIngestError("mapper_graph_missing")
+    return result
+
+
 class DeliveryEngine:
     def __init__(self, root: Path, snapshot: Path, cache: Path | None = None) -> None:
         self.root = root.resolve()
@@ -117,6 +165,7 @@ class DeliveryEngine:
             if mapper_handoff is None:
                 raise MapperIngestError("mapper_missing")
             mapper_provenance = validate_handoff(self.root, mapper_handoff)
+            mapper_handles = _mapper_symbol_handles(self.root, mapper_provenance)
         else:
             mapper_provenance = {
                 "schema": "simplicio.fast.mapper-ingest/v1",
@@ -125,6 +174,7 @@ class DeliveryEngine:
                 "generation": None,
                 "handle": None,
             }
+            mapper_handles = {}
         if not self.snapshot.is_file():
             if mode == "integrated":
                 raise MapperIngestError("bootstrap_not_allowed")
@@ -237,6 +287,17 @@ class DeliveryEngine:
                     continue
                 selected_spans.append(span)
                 selected_tokens += token_count
+            selected_mapper_handles: dict[str, str] = {}
+            if mode == "integrated":
+                for span in selected_spans:
+                    mapper_handle = mapper_handles.get(
+                        (span.file.replace("\\", "/"), span.start_line)
+                    )
+                    if mapper_handle is None:
+                        raise MapperIngestError("mapper_id_missing", span.file)
+                    selected_mapper_handles[
+                        span.symbol_id or f"{span.file}:{span.start_line}:{span.symbol}"
+                    ] = mapper_handle
             if selected_spans:
                 context_bytes = sum(
                     len(span.content.encode("utf-8")) for span in selected_spans
@@ -263,6 +324,10 @@ class DeliveryEngine:
                     "producer": mapper_provenance["producer"],
                     "generation": mapper_provenance.get("generation"),
                     "handle": mapper_provenance.get("handle"),
+                    "traceability": (
+                        "mapper-symbol-id" if mode == "integrated" else "bootstrap"
+                    ),
+                    "selected_handles": selected_mapper_handles,
                 },
                 "budgets": {"context_bytes": 32_000, "context_tokens": 8_000},
                 "context": {
@@ -279,7 +344,16 @@ class DeliveryEngine:
                     "selection": ranking,
                     "selected": [
                         {
-                            "handle": span.symbol_id
+                            "handle": (
+                                selected_mapper_handles.get(
+                                    span.symbol_id
+                                    or f"{span.file}:{span.start_line}:{span.symbol}"
+                                )
+                                if mode == "integrated"
+                                else span.symbol_id
+                                or f"{span.file}:{span.start_line}:{span.symbol}"
+                            ),
+                            "fast_handle": span.symbol_id
                             or f"{span.file}:{span.start_line}:{span.symbol}",
                             "file": span.file,
                             "start_line": span.start_line,
