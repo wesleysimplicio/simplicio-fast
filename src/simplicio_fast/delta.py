@@ -26,6 +26,7 @@ from .workspace import (
 
 DELTA_SCHEMA = "simplicio.fast.delta/v1"
 HANDOFF_SCHEMA = "simplicio.fast.handoff/v1"
+SOURCE_SUFFIXES = {".py", ".pyi", ".ts", ".tsx", ".js", ".jsx", ".rs", ".cs"}
 
 
 class DeltaError(ValueError):
@@ -300,15 +301,25 @@ def create_delta(
     base, _, snapshot_sha256 = _base_snapshot(store, base_generation)
     if config_fingerprint is not None and config_fingerprint != base.config_fingerprint:
         raise DeltaError("config_fingerprint_mismatch")
-    current_paths = {
-        path.relative_to(store.root).as_posix(): path
-        for path in source_files(store.root)
-    }
     requested = (
         None
         if changed_paths is None
         else sorted({_normal_path(path) for path in changed_paths})
     )
+    if requested is None:
+        current_paths = {
+            path.relative_to(store.root).as_posix(): path
+            for path in source_files(store.root)
+        }
+    else:
+        current_paths = {}
+        root = store.root.resolve()
+        for relative in requested:
+            path = (root / relative).resolve()
+            if not path.is_relative_to(root):
+                raise DeltaError("delta_path_invalid", relative)
+            if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
+                current_paths[relative] = path
     if requested is not None:
         missing = [
             path
