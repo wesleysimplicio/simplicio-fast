@@ -542,7 +542,7 @@ impl SnapshotReader {
         let strings = &self.sections["strings"];
         let mut candidate_ids = candidate_ids
             .into_iter()
-            .filter(|index| cursor.is_none_or(|after| *index > after));
+            .filter(|index| cursor.map_or(true, |after| *index > after));
         let selected_ids: Vec<usize> = candidate_ids.by_ref().take(limit).collect();
         let next_cursor = if selected_ids.len() == limit && candidate_ids.next().is_some() {
             selected_ids.last().map(|index| index.to_string())

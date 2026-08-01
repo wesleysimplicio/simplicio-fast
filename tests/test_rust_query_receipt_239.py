@@ -7,6 +7,7 @@ import tempfile
 import pytest
 
 from simplicio_fast.snapshot import build_snapshot
+from simplicio_fast.snapshot import Snapshot
 from simplicio_fast.rust_session import RustCoreSession
 
 
@@ -109,6 +110,15 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
     assert by_kind["matches"][0]["kind"] == "function"
     assert exact["planner"]["records_decoded"] == 1
     assert prefix["planner"]["records_decoded"] == 1
+    with Snapshot(snapshot) as python_snapshot:
+        python_exact = python_snapshot.search("helper")[:1]
+        python_prefix = python_snapshot.search("help", prefix=True)[:1]
+    assert [match["qualified_name"] for match in exact["matches"]] == [
+        symbol.qualified_name for symbol in python_exact
+    ]
+    assert [match["qualified_name"] for match in prefix["matches"]] == [
+        symbol.qualified_name for symbol in python_prefix
+    ]
 
     context = _run_json(
         executable,
