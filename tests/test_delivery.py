@@ -13,10 +13,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from simplicio_fast.cli import main
-from simplicio_fast.delivery import DeliveryEngine
+from simplicio_fast.delivery import DeliveryEngine, _deduplicate_spans
 from simplicio_fast.engine import select_engine
 from simplicio_fast.snapshot import build_snapshot
-from simplicio_fast.snapshot import Snapshot
+from simplicio_fast.snapshot import ContextSpan, Snapshot
 
 
 class DeliveryEngineTest(unittest.TestCase):
@@ -116,6 +116,31 @@ class DeliveryEngineTest(unittest.TestCase):
                     )
             self.assertEqual(2, len(spans))
             self.assertEqual(1, len(reads))
+
+    def test_overlapping_contained_spans_are_counted_once(self) -> None:
+        outer = ContextSpan(
+            "service",
+            "function",
+            "service.py",
+            1,
+            4,
+            "a" * 64,
+            "one\ntwo\nthree\nfour",
+            "symbol:outer",
+        )
+        inner = ContextSpan(
+            "service.inner",
+            "function",
+            "service.py",
+            2,
+            3,
+            "a" * 64,
+            "two\nthree",
+            "symbol:inner",
+        )
+        selected, rejected = _deduplicate_spans([outer, inner])
+        self.assertEqual([outer], selected)
+        self.assertEqual(["symbol:inner"], rejected)
 
     def test_cache_stats_reports_disposable_cache_size(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

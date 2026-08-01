@@ -88,6 +88,42 @@ def _deduplicate_spans(spans: list[Any]) -> tuple[list[Any], list[str]]:
         if handle in seen_handles or range_key in seen_ranges:
             rejected.append(handle)
             continue
+        contained = False
+        for index, previous in enumerate(selected):
+            same_source = (
+                span.file == previous.file
+                and span.source_sha256 == previous.source_sha256
+            )
+            overlaps = span.start_line <= previous.end_line and previous.start_line <= span.end_line
+            content_confirms = (
+                span.content == previous.content
+                or span.content in previous.content
+                or previous.content in span.content
+            )
+            if same_source and overlaps and content_confirms:
+                previous_handle = previous.symbol_id or (
+                    f"{previous.file}:{previous.start_line}:{previous.symbol}"
+                )
+                previous_size = previous.end_line - previous.start_line
+                current_size = span.end_line - span.start_line
+                if current_size > previous_size:
+                    selected[index] = span
+                    seen_handles.discard(previous_handle)
+                    seen_ranges.discard(
+                        (
+                            previous.file,
+                            previous.start_line,
+                            previous.end_line,
+                            previous.source_sha256,
+                        )
+                    )
+                    rejected.append(previous_handle)
+                else:
+                    rejected.append(handle)
+                contained = True
+                break
+        if contained:
+            continue
         seen_handles.add(handle)
         seen_ranges.add(range_key)
         selected.append(span)
