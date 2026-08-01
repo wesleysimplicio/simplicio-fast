@@ -34,6 +34,7 @@ SCHEMA = "simplicio.fast.delivery-engine/v1"
 CONTEXT_REQUEST_SCHEMA = "simplicio.fast.context-request/v2"
 DEFAULT_SCORING_CONFIG = "semantic-ranking-v1"
 PROFILE_NAMES = {"full": "Full", "loop-standalone": "Loop standalone"}
+SELECTION_MODES = {"semantic", "legacy-regex"}
 
 
 def _source_commit(root: Path) -> tuple[str | None, str | None]:
@@ -213,6 +214,7 @@ class DeliveryEngine:
         tokenizer_id: str | None = None,
         tokenizer: Callable[[str], int] | None = None,
         scoring_config: str = DEFAULT_SCORING_CONFIG,
+        selection_mode: str = "semantic",
     ) -> dict[str, Any]:
         started = time.perf_counter_ns()
         if profile not in PROFILE_NAMES:
@@ -223,6 +225,8 @@ class DeliveryEngine:
             raise ValueError("tokenizer_id is required when an exact tokenizer is supplied")
         if not scoring_config.strip():
             raise ValueError("scoring_config must not be empty")
+        if selection_mode not in SELECTION_MODES:
+            raise ValueError(f"unsupported selection mode: {selection_mode}")
         effective_tokenizer_id = tokenizer_id or "estimated:word-split-v1"
         mapper_provenance: dict[str, Any]
         if mode == "integrated":
@@ -257,6 +261,7 @@ class DeliveryEngine:
                 "tokenizer_id": effective_tokenizer_id,
                 "context_request_schema": CONTEXT_REQUEST_SCHEMA,
                 "scoring_config": scoring_config,
+                "selection_mode": selection_mode,
             }
             cache_key = hashlib.sha256(
                 json.dumps(key_material, sort_keys=True, separators=(",", ":")).encode(
@@ -303,26 +308,53 @@ class DeliveryEngine:
                         structural_score=1.0 / max(1, span.start_line),
                     )
                 )
-            try:
-                ranking = SemanticScorer(
-                    budgets=SemanticBudgets(
-                        max_candidates=max(1, min(64, len(documents) or 1)),
-                        max_selected=max(1, min(8, len(documents) or 1)),
-                        max_request_bytes=32_000,
-                        max_selected_tokens=8_000,
-                    )
-                ).score(
-                    generation=snapshot.generation,
-                    query=task,
-                    candidates=tuple(documents),
-                )
-            except SemanticScoringError as error:
+            if selection_mode == "legacy-regex":
                 ranking = {
                     "schema": "simplicio.fast.semantic-ranking-receipt/v1",
-                    "selected": [],
-                    "fallback": {"used": True, "reason_code": error.args[0]},
-                    "usage": {"candidate_count": len(documents), "selected_count": 0},
+                    "generation": snapshot.generation,
+                    "selected": [
+                        {
+                            "canonical_id": document.canonical_id,
+                            "score": 0.0,
+                            "confidence": 0.0,
+                            "reason": "legacy_regex_explicit",
+                            "method": "legacy_regex",
+                        }
+                        for document in documents[:8]
+                    ],
+                    "fallback": {
+                        "used": True,
+                        "reason_code": "legacy_regex_explicit",
+                    },
+                    "usage": {
+                        "candidate_count": len(documents),
+                        "selected_count": min(8, len(documents)),
+                    },
                 }
+            else:
+                try:
+                    ranking = SemanticScorer(
+                        budgets=SemanticBudgets(
+                            max_candidates=max(1, min(64, len(documents) or 1)),
+                            max_selected=max(1, min(8, len(documents) or 1)),
+                            max_request_bytes=32_000,
+                            max_selected_tokens=8_000,
+                        )
+                    ).score(
+                        generation=snapshot.generation,
+                        query=task,
+                        candidates=tuple(documents),
+                    )
+                except SemanticScoringError as error:
+                    ranking = {
+                        "schema": "simplicio.fast.semantic-ranking-receipt/v1",
+                        "selected": [],
+                        "fallback": {"used": True, "reason_code": error.args[0]},
+                        "usage": {
+                            "candidate_count": len(documents),
+                            "selected_count": 0,
+                        },
+                    }
             selected_spans = []
             selected_tokens = 0
             rejected_budget: list[str] = []
@@ -472,6 +504,7 @@ class DeliveryEngine:
                         else "provider_tokenizer_unavailable",
                     },
                     "scoring_config": scoring_config,
+                    "selection_mode": selection_mode,
                 },
                 "cache": {
                     "L0_attempt": "miss",

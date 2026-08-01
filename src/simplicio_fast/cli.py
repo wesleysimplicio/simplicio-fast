@@ -385,6 +385,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="JSON file emitted by `simplicio-mapper fast-handoff`",
     )
+    delivery.add_argument(
+        "--selection-mode",
+        choices=("semantic", "legacy-regex"),
+        default="semantic",
+        help="bounded semantic ranking by default; legacy-regex is explicit fallback",
+    )
     delivery.add_argument("--max-bytes", type=int, default=32_000)
     delivery.add_argument(
         "--changeset", default=None, help="optional simplicio.fast.changeset/v2 JSON"
@@ -740,6 +746,7 @@ def main() -> None:
                             if args.mapper_handoff
                             else None
                         ),
+                        selection_mode=args.selection_mode,
                     )
                 )
         elif args.command == "changeset":

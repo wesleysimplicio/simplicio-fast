@@ -112,6 +112,26 @@ class DeliveryEngineTest(unittest.TestCase):
                     tokenizer=lambda text: len(text),
                 )
 
+    def test_legacy_regex_selection_is_explicit_and_receipted(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def create_user(name):\n    return name\n", encoding="utf-8"
+            )
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            receipt = DeliveryEngine(root, snapshot).prepare(
+                "understand create_user",
+                profile="loop-standalone",
+                engine_receipt=select_engine("python").receipt(),
+                selection_mode="legacy-regex",
+            )
+            self.assertEqual("legacy-regex", receipt["context"]["selection_mode"])
+            self.assertEqual(
+                "legacy_regex_explicit",
+                receipt["context"]["selection"]["fallback"]["reason_code"],
+            )
+
     def test_context_many_reuses_one_source_read_across_terms(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
