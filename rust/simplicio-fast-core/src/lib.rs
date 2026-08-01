@@ -448,47 +448,59 @@ impl SnapshotReader {
         let symbol_count = self.sections["symbols"].length / SYMBOL_RECORD_SIZE;
         let mut candidate_ids = BTreeSet::new();
         let mut candidates_visited = 0;
-        for values in indexes
-            .names
-            .iter()
-            .filter(|(key, _)| key.contains(&needle))
-            .map(|(_, values)| values)
-            .chain(
-                indexes
-                    .exact
-                    .iter()
-                    .filter(|(key, _)| key.contains(&needle))
-                    .map(|(_, values)| values),
-            )
-        {
-            candidates_visited += values.len();
-            for index in values {
-                if *index >= symbol_count {
-                    return Err(SnapshotError::Invalid(
-                        "persisted index record out of bounds".into(),
-                    ));
+        let mut selected_index = "legacy.names+exact-substring";
+        let mut exact_hit = false;
+        for index in [&indexes.names, &indexes.exact] {
+            if let Some(values) = index.get(&needle) {
+                exact_hit = true;
+                candidates_visited += values.len();
+                add_index_values(values, symbol_count, &mut candidate_ids)?;
+            }
+        }
+        if exact_hit {
+            selected_index = "persisted.exact";
+        } else if !needle.is_empty() {
+            for index in [&indexes.names, &indexes.exact] {
+                for (key, values) in index.range(needle.clone()..) {
+                    if !key.starts_with(&needle) {
+                        break;
+                    }
+                    candidates_visited += values.len();
+                    add_index_values(values, symbol_count, &mut candidate_ids)?;
                 }
-                candidate_ids.insert(*index);
+            }
+            if !candidate_ids.is_empty() {
+                selected_index = "persisted.prefix";
+            }
+        }
+        if candidate_ids.is_empty() {
+            for values in indexes
+                .names
+                .iter()
+                .filter(|(key, _)| key.contains(&needle))
+                .map(|(_, values)| values)
+                .chain(
+                    indexes
+                        .exact
+                        .iter()
+                        .filter(|(key, _)| key.contains(&needle))
+                        .map(|(_, values)| values),
+                )
+            {
+                candidates_visited += values.len();
+                add_index_values(values, symbol_count, &mut candidate_ids)?;
             }
         }
         let strings = &self.sections["strings"];
-        let mut matches: Vec<RustSymbol> = candidate_ids
+        let matches: Vec<RustSymbol> = candidate_ids
             .into_iter()
+            .take(limit)
             .map(|index| self.symbol_at(index, strings))
             .collect::<Result<_, _>>()?;
-        matches.sort_by(|left, right| {
-            left.name
-                .to_lowercase()
-                .cmp(&right.name.to_lowercase())
-                .then(left.qualified_name.cmp(&right.qualified_name))
-                .then(left.file.cmp(&right.file))
-                .then(left.line.cmp(&right.line))
-        });
-        matches.truncate(limit);
         let records_decoded = matches.len();
         Ok(QueryReceipt {
             matches,
-            selected_index: "persisted.names+exact".into(),
+            selected_index: selected_index.into(),
             candidates_visited,
             records_decoded,
         })
@@ -701,6 +713,22 @@ fn region_valid(offset: usize, length: usize, total: usize) -> bool {
 
 pub(crate) fn section_bytes<'a>(bytes: &'a [u8], section: &Section) -> &'a [u8] {
     &bytes[section.offset..section.offset + section.length]
+}
+
+fn add_index_values(
+    values: &[usize],
+    symbol_count: usize,
+    candidates: &mut BTreeSet<usize>,
+) -> Result<(), SnapshotError> {
+    for index in values {
+        if *index >= symbol_count {
+            return Err(SnapshotError::Invalid(
+                "persisted index record out of bounds".into(),
+            ));
+        }
+        candidates.insert(*index);
+    }
+    Ok(())
 }
 
 fn read_text(
