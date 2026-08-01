@@ -18,6 +18,12 @@ from typing import Any
 from . import __version__
 from .integrations import run_runtime_effect_transaction
 from .processor import ProjectProcessor
+from .semantic_scoring import (
+    SemanticBudgets,
+    SemanticScorer,
+    SemanticScoringError,
+    SourceDocument,
+)
 from .snapshot import Snapshot, build_snapshot
 
 
@@ -127,6 +133,59 @@ class DeliveryEngine:
             context_tokens = (
                 sum(max(1, len(span.content.split())) for span in spans) if spans else 0
             )
+            documents: list[SourceDocument] = []
+            spans_by_handle: dict[str, Any] = {}
+            for span in spans:
+                handle = (
+                    span.symbol_id or f"{span.file}:{span.start_line}:{span.symbol}"
+                )
+                if handle in spans_by_handle:
+                    continue
+                spans_by_handle[handle] = span
+                documents.append(
+                    SourceDocument.create(
+                        handle,
+                        span.content,
+                        structural_score=1.0 / max(1, span.start_line),
+                    )
+                )
+            try:
+                ranking = SemanticScorer(
+                    budgets=SemanticBudgets(
+                        max_candidates=max(1, min(64, len(documents) or 1)),
+                        max_selected=max(1, min(8, len(documents) or 1)),
+                        max_request_bytes=32_000,
+                        max_selected_tokens=8_000,
+                    )
+                ).score(
+                    generation=snapshot.generation,
+                    query=task,
+                    candidates=tuple(documents),
+                )
+            except SemanticScoringError as error:
+                ranking = {
+                    "schema": "simplicio.fast.semantic-ranking-receipt/v1",
+                    "selected": [],
+                    "fallback": {"used": True, "reason_code": error.args[0]},
+                    "usage": {"candidate_count": len(documents), "selected_count": 0},
+                }
+            selected_ids = {
+                str(item["canonical_id"])
+                for item in ranking.get("selected", [])
+                if isinstance(item, dict) and isinstance(item.get("canonical_id"), str)
+            }
+            selected_spans = [
+                span
+                for handle, span in spans_by_handle.items()
+                if handle in selected_ids
+            ]
+            if selected_spans:
+                context_bytes = sum(
+                    len(span.content.encode("utf-8")) for span in selected_spans
+                )
+                context_tokens = sum(
+                    max(1, len(span.content.split())) for span in selected_spans
+                )
             receipt: dict[str, Any] = {
                 "schema": SCHEMA,
                 "status": "ready",
@@ -149,12 +208,19 @@ class DeliveryEngine:
                 "budgets": {"context_bytes": 32_000, "context_tokens": 8_000},
                 "context": {
                     "terms": terms,
-                    "spans": len(spans),
+                    "spans": len(selected_spans),
                     "bytes": context_bytes,
                     "estimated_tokens": context_tokens,
                     "digest": hashlib.sha256(
-                        "\n".join(span.content for span in spans).encode("utf-8")
+                        "\n".join(span.content for span in selected_spans).encode(
+                            "utf-8"
+                        )
                     ).hexdigest(),
+                    "selection": ranking,
+                    "tokenizer": {
+                        "mode": "estimated",
+                        "reason": "provider_tokenizer_unavailable",
+                    },
                 },
                 "cache": {
                     "L0_attempt": "miss",
