@@ -106,7 +106,7 @@ jobs:
           output="dist/${{ matrix.platform }}"
           mkdir -p "$output/$compatibility_abi_dir" "$output/$core_abi_dir"
           cp "native/fast-native/target/${{ matrix.target }}/release/${{ matrix.compatibility_filename }}" "$output/$compatibility_abi_dir/${{ matrix.compatibility_filename }}"
-          cp "rust/simplicio-fast-core/target/${{ matrix.target }}/release/${{ matrix.core_filename }}" "$output/$core_abi_dir/${{ matrix.core_filename }}"
+          cp "rust/target/${{ matrix.target }}/release/${{ matrix.core_filename }}" "$output/$core_abi_dir/${{ matrix.core_filename }}"
           python scripts/build_native_manifest.py \
             --binary "$output/$compatibility_abi_dir/${{ matrix.compatibility_filename }}" \
             --platform "${{ matrix.platform }}" \

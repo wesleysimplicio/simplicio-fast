@@ -9,7 +9,10 @@ from pathlib import Path
 import re
 from typing import Any
 
-from scripts.build_native_manifest import ABI, SUPPORTED
+try:
+    from scripts.build_native_manifest import ABI, SUPPORTED
+except ModuleNotFoundError:  # direct `python scripts/verify_native_bundle.py`
+    from build_native_manifest import ABI, SUPPORTED
 
 
 SCHEMA = "simplicio.fast-native-verification/v1"
