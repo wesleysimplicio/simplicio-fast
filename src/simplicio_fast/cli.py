@@ -1124,6 +1124,13 @@ def main() -> None:
                     "engine": selection.receipt(),
                     "engine_manifest": selection.manifest,
                     "capabilities": [asdict(item) for item in capability_report()],
+                    "parser_adapter": {
+                        "schema": "simplicio.fast.parser-adapter/v1",
+                        "producer": "simplicio-fast-python-adapter",
+                        "modes": ["bootstrap", "integrated"],
+                        "bootstrap_status": "available",
+                        "integrated_status": "mapper_required",
+                    },
                     "semantic_scoring": semantic_capabilities(),
                 }
             )

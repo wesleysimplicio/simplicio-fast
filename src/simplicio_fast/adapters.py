@@ -113,6 +113,29 @@ def rust_workspace_fingerprint(root: Path) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
+def discover_typescript_projects(root: Path) -> list[Path]:
+    """Return deterministic TypeScript workspace/config inputs."""
+    names = {
+        "tsconfig.json",
+        "jsconfig.json",
+        "package.json",
+        "package-lock.json",
+        "pnpm-workspace.yaml",
+    }
+    ignored = {".git", ".simplicio", "node_modules", "dist", "build", "coverage"}
+    return sorted(
+        path
+        for path in root.rglob("*")
+        if path.is_file()
+        and (
+            path.name in names
+            or path.name.startswith("tsconfig.")
+            or path.name.startswith("jsconfig.")
+        )
+        and not any(part in ignored for part in path.parts)
+    )
+
+
 def discover_csharp_projects(root: Path) -> list[Path]:
     """Return deterministic .NET solution/project/config inputs."""
     names = {
@@ -192,6 +215,16 @@ def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
                 ),
             ),
             (
+                "type",
+                "type",
+                re.compile(r"^\s*(?:export\s+)?type\s+(\w+)"),
+            ),
+            (
+                "enum",
+                "enum",
+                re.compile(r"^\s*(?:export\s+)?(?:const\s+)?enum\s+(\w+)"),
+            ),
+            (
                 "namespace",
                 "namespace",
                 re.compile(r"^\s*(?:export\s+)?(?:declare\s+)?namespace\s+(\w+)"),
@@ -215,6 +248,25 @@ def _parse_lexical(path: Path, relative: str, language: str) -> list[Symbol]:
                 "function",
                 "function",
                 re.compile(r"^\s*(?:export\s+)?const\s+(\w+)\s*=\s*(?:async\s+)?\("),
+            ),
+            (
+                "method",
+                "function",
+                re.compile(
+                    r"^\s*(?:public|private|protected|static|async|readonly)?\s*(\w+)\s*<[^>]+>\s*\("
+                ),
+            ),
+            (
+                "property",
+                "property",
+                re.compile(
+                    r"^\s*(?:public|private|protected|readonly|static)?\s*(\w+)\??\s*:\s*[^=;]+[;=]"
+                ),
+            ),
+            (
+                "test",
+                "test",
+                re.compile(r"^\s*(?:describe|it|test)\s*\(\s*[\"']([^\"']+)"),
             ),
         ]
     elif language == "rust":
