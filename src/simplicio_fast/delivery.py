@@ -30,6 +30,7 @@ from .snapshot import Snapshot, build_snapshot
 
 
 SCHEMA = "simplicio.fast.delivery-engine/v1"
+CONTEXT_REQUEST_SCHEMA = "simplicio.fast.context-request/v2"
 PROFILE_NAMES = {"full": "Full", "loop-standalone": "Loop standalone"}
 
 
@@ -249,6 +250,7 @@ class DeliveryEngine:
                 "mapper_generation": mapper_provenance.get("generation"),
                 "mapper_handoff": mapper_provenance.get("handoff_sha256"),
                 "tokenizer_id": effective_tokenizer_id,
+                "context_request_schema": CONTEXT_REQUEST_SCHEMA,
                 "scoring_config": "semantic-ranking-v1",
             }
             cache_key = hashlib.sha256(
@@ -359,6 +361,36 @@ class DeliveryEngine:
                     len(span.content.encode("utf-8")) for span in selected_spans
                 )
                 context_tokens = selected_tokens
+            context_request = {
+                "schema": CONTEXT_REQUEST_SCHEMA,
+                "task_sha256": hashlib.sha256(task.encode("utf-8")).hexdigest(),
+                "generation": snapshot.generation,
+                "structural_anchors": [
+                    {
+                        "handle": span.symbol_id
+                        or f"{span.file}:{span.start_line}:{span.symbol}",
+                        "file": span.file,
+                        "line": span.start_line,
+                        "kind": span.kind,
+                    }
+                    for span in spans[:8]
+                ],
+                "languages": sorted(
+                    {
+                        Path(span.file).suffix.casefold().lstrip(".") or "unknown"
+                        for span in spans
+                    }
+                ),
+                "requested_relations": ["calls", "imports", "references", "tests"],
+                "tokenizer_id": effective_tokenizer_id,
+                "budgets": {
+                    "max_candidates": 64,
+                    "max_selected": 8,
+                    "max_request_bytes": 32_000,
+                    "max_selected_tokens": 8_000,
+                    "max_source_bytes": 32_000,
+                },
+            }
             receipt: dict[str, Any] = {
                 "schema": SCHEMA,
                 "status": "ready",
@@ -374,6 +406,7 @@ class DeliveryEngine:
                 "source_commit_reason": commit_reason,
                 "base_generation": snapshot.generation,
                 "overlay_generation": None,
+                "context_request": context_request,
                 "mapper": {
                     "schema": "simplicio.mapper-context/v1",
                     "mode": mode,

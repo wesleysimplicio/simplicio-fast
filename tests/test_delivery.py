@@ -71,6 +71,17 @@ class DeliveryEngineTest(unittest.TestCase):
             )
             self.assertEqual("exact", exact["context"]["tokenizer"]["mode"])
             self.assertEqual("test-exact-v1", exact["context"]["tokenizer"]["id"])
+            self.assertEqual(
+                "simplicio.fast.context-request/v2",
+                exact["context_request"]["schema"],
+            )
+            self.assertEqual(
+                "test-exact-v1", exact["context_request"]["tokenizer_id"]
+            )
+            self.assertEqual(
+                ["calls", "imports", "references", "tests"],
+                exact["context_request"]["requested_relations"],
+            )
             self.assertEqual("miss", changed_config["cache"]["L0_attempt"])
             self.assertGreater(exact["context"]["tokens"], 0)
 
