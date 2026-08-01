@@ -82,14 +82,17 @@ def estimate_tokens(text: str) -> int:
     return max(1, len(text.split())) if text else 0
 
 
-def make_workload(root: Path, *, files: int, functions: int) -> str:
+def make_workload(
+    root: Path, *, files: int, functions: int, compact_symbols: bool = False
+) -> str:
     for index in range(files):
-        lines = [f"class Service{index}:\n"]
+        lines = [] if compact_symbols else [f"class Service{index}:\n"]
         for function in range(functions):
+            indentation = "" if compact_symbols else "    "
             lines.extend(
                 [
-                    f"    def task_{function}(self, value):\n",
-                    "        return value\n",
+                    f"{indentation}def task_{function}(self, value):\n",
+                    f"{indentation}    return value\n",
                 ]
             )
         (root / f"service_{index}.py").write_text("".join(lines), encoding="utf-8")
@@ -305,11 +308,21 @@ def timed(call: Callable[[], str], repetitions: int) -> dict[str, Any]:
 
 
 def run(
-    *, files: int, functions: int, repetitions: int, rust_executable: Path | None = None
+    *,
+    files: int,
+    functions: int,
+    repetitions: int,
+    rust_executable: Path | None = None,
+    compact_symbols: bool = False,
 ) -> dict[str, Any]:
     with tempfile.TemporaryDirectory(prefix="simplicio-fast-bench-") as directory:
         root = Path(directory)
-        make_workload(root, files=files, functions=functions)
+        make_workload(
+            root,
+            files=files,
+            functions=functions,
+            compact_symbols=compact_symbols,
+        )
         term = f"task_{min(7, functions - 1)}"
         corpus_digest = corpus_sha256(root)
         source_commit, source_commit_reason = source_commit_receipt()
@@ -387,7 +400,12 @@ def run(
                 for item in (rust_standalone, full_standalone, loop_standalone)
             )
             else "complete",
-            "workload": {"files": files, "functions_per_file": functions, "term": term},
+            "workload": {
+                "files": files,
+                "functions_per_file": functions,
+                "term": term,
+                "compact_symbols": compact_symbols,
+            },
             "environment": environment_receipt(),
             "provenance": {
                 "source_commit": source_commit,
