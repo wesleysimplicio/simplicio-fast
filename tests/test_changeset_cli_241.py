@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -122,6 +123,25 @@ class ChangesetCli241Test(unittest.TestCase):
             "recover",
         ):
             self.assertIn(command, stdout)
+
+    def test_installed_console_entrypoint_exposes_lifecycle(self) -> None:
+        executable = shutil.which("simplicio-fast")
+        if executable is None:
+            self.skipTest("simplicio-fast console entrypoint is not installed")
+        environment = dict(os.environ)
+        environment["PYTHONPATH"] = str(ROOT / "src")
+        result = subprocess.run(
+            [executable, "changeset", "--help"],
+            cwd=ROOT,
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("materialize", result.stdout)
+        self.assertIn("recover", result.stdout)
 
     def test_create_replace_rename_delete_and_replay(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
