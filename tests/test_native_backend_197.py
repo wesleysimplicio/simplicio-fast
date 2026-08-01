@@ -17,6 +17,7 @@ from simplicio_fast.native_backend import (
     resolve_packaged_backend,
     select_backend,
 )
+from simplicio_fast.snapshot import build_snapshot
 
 
 @pytest.mark.parametrize(
@@ -237,7 +238,7 @@ def test_resident_session_handshake_and_framed_call(monkeypatch):
     session.close()
 
 
-def test_resident_session_compiled_binary_lifecycle() -> None:
+def test_resident_session_compiled_binary_lifecycle(tmp_path: Path) -> None:
     cargo = shutil.which("cargo")
     if cargo is None:
         pytest.skip("cargo is required for compiled native lifecycle E2E")
@@ -261,10 +262,36 @@ def test_resident_session_compiled_binary_lifecycle() -> None:
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         )
         assert session.call("page", {"hex": "616263", "offset": 1, "limit": 1}) == "62"
+        (tmp_path / "service.py").write_text(
+            "def helper():\n    return True\n", encoding="utf-8"
+        )
+        snapshot = tmp_path / "service.sfast"
+        build_snapshot(tmp_path, snapshot)
+        assert session.call("session_cache_stats", {})["snapshots"] == 0
+        query = session.call(
+            "query",
+            {"snapshot": str(snapshot), "term": "helper", "limit": 1},
+        )
+        assert query["matches"][0]["qualified_name"] == "helper"
+        assert session.call("session_cache_stats", {})["snapshots"] == 1
+        context = session.call(
+            "context",
+            {
+                "snapshot": str(snapshot),
+                "root": str(tmp_path),
+                "term": "helper",
+                "limit": 1,
+                "max_lines": 10,
+                "max_bytes": 1000,
+                "max_tokens": 100,
+            },
+        )
+        assert context["spans"][0]["symbol"] == "helper"
+        assert session.call("session_cache_stats", {})["snapshots"] == 1
         metrics = session.metrics()
         assert metrics["starts"] == 1
         assert metrics["reconnects"] == 0
-        assert metrics["requests"] == 2
+        assert metrics["requests"] == 7
         assert metrics["failures"] == 0
     finally:
         process = session._process
