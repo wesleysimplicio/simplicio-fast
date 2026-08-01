@@ -32,6 +32,7 @@ from .snapshot import Snapshot, build_snapshot
 
 SCHEMA = "simplicio.fast.delivery-engine/v1"
 CONTEXT_REQUEST_SCHEMA = "simplicio.fast.context-request/v2"
+DEFAULT_SCORING_CONFIG = "semantic-ranking-v1"
 PROFILE_NAMES = {"full": "Full", "loop-standalone": "Loop standalone"}
 
 
@@ -211,6 +212,7 @@ class DeliveryEngine:
         mapper_handoff: dict[str, Any] | None = None,
         tokenizer_id: str | None = None,
         tokenizer: Callable[[str], int] | None = None,
+        scoring_config: str = DEFAULT_SCORING_CONFIG,
     ) -> dict[str, Any]:
         started = time.perf_counter_ns()
         if profile not in PROFILE_NAMES:
@@ -219,6 +221,8 @@ class DeliveryEngine:
             raise ValueError(f"unsupported mapper mode: {mode}")
         if tokenizer is not None and not tokenizer_id:
             raise ValueError("tokenizer_id is required when an exact tokenizer is supplied")
+        if not scoring_config.strip():
+            raise ValueError("scoring_config must not be empty")
         effective_tokenizer_id = tokenizer_id or "estimated:word-split-v1"
         mapper_provenance: dict[str, Any]
         if mode == "integrated":
@@ -252,7 +256,7 @@ class DeliveryEngine:
                 "mapper_handoff": mapper_provenance.get("handoff_sha256"),
                 "tokenizer_id": effective_tokenizer_id,
                 "context_request_schema": CONTEXT_REQUEST_SCHEMA,
-                "scoring_config": "semantic-ranking-v1",
+                "scoring_config": scoring_config,
             }
             cache_key = hashlib.sha256(
                 json.dumps(key_material, sort_keys=True, separators=(",", ":")).encode(
@@ -467,6 +471,7 @@ class DeliveryEngine:
                         if tokenizer is not None
                         else "provider_tokenizer_unavailable",
                     },
+                    "scoring_config": scoring_config,
                 },
                 "cache": {
                     "L0_attempt": "miss",
