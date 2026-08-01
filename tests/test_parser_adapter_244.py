@@ -68,6 +68,29 @@ class ParserAdapter244Test(unittest.TestCase):
             kinds = {item["kind"] for item in payload["relations"]}
             self.assertTrue({"definition", "call", "test"} <= kinds)
 
+    def test_lexical_language_adapters_emit_relations(self) -> None:
+        fixtures = {
+            "service.ts": 'import { helper } from "./helper";\nexport function testService() { return helper(); }\n',
+            "service.rs": "use crate::helper;\nfn test_service() {}\n",
+            "service.cs": "using System.Text;\npublic class Service {}\n",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, source in fixtures.items():
+                (root / name).write_text(source, encoding="utf-8")
+            payload = build_payload(root)
+            by_language = {
+                item["language"]: {
+                    relation["kind"]
+                    for relation in payload["relations"]
+                    if relation["file"] == item["path"]
+                }
+                for item in payload["files"]
+            }
+            self.assertIn("import", by_language["typescript"])
+            self.assertIn("definition", by_language["rust"])
+            self.assertIn("import", by_language["csharp"])
+
     def test_changed_paths_are_scoped_and_invalid_payloads_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
