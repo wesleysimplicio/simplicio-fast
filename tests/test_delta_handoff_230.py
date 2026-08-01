@@ -439,6 +439,15 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 )
                 self.assertEqual("audited_revision", rows[-1]["background_parity_reason"])
         self.assertEqual("complete", receipt["environment"]["metrics_status"])
+        self.assertIn(receipt["performance_gates"]["status"], {"pass", "fail"})
+        self.assertIn(
+            "one_file_faster_than_cold",
+            receipt["performance_gates"]["checks"],
+        )
+        self.assertIn(
+            "unchanged_within_two_times_warm",
+            receipt["performance_gates"]["checks"],
+        )
 
     def test_scoped_handoff_does_not_materialize_composed_symbols(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
