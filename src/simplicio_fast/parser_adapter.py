@@ -212,7 +212,11 @@ def build_payload(
     changed_paths = sorted(changed_set) if scoped else None
     previous: dict[str, Any] | None = None
     if previous_payload is not None:
-        validate_payload(previous_payload)
+        validate_payload(
+            previous_payload,
+            root=root,
+            skip_file_paths=changed_set,
+        )
         if previous_payload.get("repository") != str(root):
             raise ParserAdapterError("previous_repository_mismatch")
         previous = dict(previous_payload)
@@ -414,7 +418,12 @@ def build_payload(
     return payload
 
 
-def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
+def validate_payload(
+    value: Mapping[str, Any],
+    *,
+    root: Path | None = None,
+    skip_file_paths: Iterable[str] = (),
+) -> dict[str, Any]:
     """Validate schema, bounds, paths, stable IDs and canonical payload digest."""
 
     if value.get("schema") != SCHEMA:
@@ -502,6 +511,7 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
     if len(relations) > limits["max_relations"]:
         raise ParserAdapterError("relation_limit_exceeded")
     file_paths = set()
+    skipped_paths = {_safe_relative(path) for path in skip_file_paths}
     for item in files:
         if not isinstance(item, Mapping):
             raise ParserAdapterError("file_invalid")
@@ -516,6 +526,13 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
         file_paths.add(normalized_path)
         if not isinstance(item.get("sha256"), str) or len(item["sha256"]) != 64:
             raise ParserAdapterError("file_digest_invalid")
+        if root is not None and normalized_path not in skipped_paths:
+            source_root = root.resolve()
+            source = (source_root / normalized_path).resolve()
+            if not source.is_relative_to(source_root) or not source.is_file():
+                raise ParserAdapterError("source_missing", normalized_path)
+            if hashlib.sha256(source.read_bytes()).hexdigest() != item["sha256"]:
+                raise ParserAdapterError("source_digest_mismatch", normalized_path)
     ids: set[str] = set()
     for item in symbols:
         if (
