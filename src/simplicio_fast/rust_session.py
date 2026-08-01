@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import subprocess
 import threading
+import time
 from typing import Any, Mapping
 
 
@@ -27,7 +28,17 @@ class RustCoreSession:
     def __init__(self, executable: str | Path) -> None:
         self.executable = str(executable)
         self._lock = threading.Lock()
-        self._metrics: dict[str, int] = {"requests": 0, "failures": 0}
+        self._metrics: dict[str, int | float] = {
+            "starts": 1,
+            "reconnects": 0,
+            "requests": 0,
+            "failures": 0,
+            "bytes_in": 0,
+            "bytes_out": 0,
+            "wall_ms": 0.0,
+            "mapped_generations": 0,
+            "cache_hits": 0,
+        }
         try:
             self._process = subprocess.Popen(
                 [self.executable, "--session"],
@@ -83,7 +94,9 @@ class RustCoreSession:
         frame = _canonical({"operation": operation, "payload": dict(payload)})
         if len(frame.encode("utf-8")) > MAX_FRAME_BYTES:
             raise RustSessionError("session_frame_too_large")
+        started = time.perf_counter()
         with self._lock:
+            self._metrics["bytes_in"] += len(frame.encode("utf-8")) + 1
             if self._process.poll() is not None:
                 raise RustSessionError("session_crashed")
             try:
@@ -96,15 +109,23 @@ class RustCoreSession:
                 self._metrics["failures"] += 1
                 raise RustSessionError("session_crashed") from error
             self._metrics["requests"] += 1
+            self._metrics["bytes_out"] += len(_canonical(response)) + 1
+            self._metrics["wall_ms"] += (time.perf_counter() - started) * 1000
         if response.get("ok") is not True:
             self._metrics["failures"] += 1
             raise RustSessionError(str(response.get("reason") or "session_request_failed"))
         result = response.get("result")
         if not isinstance(result, dict):
             raise RustSessionError("session_result_invalid")
+        if operation == "session_cache_stats":
+            snapshots = result.get("snapshots")
+            if isinstance(snapshots, int) and snapshots >= 0:
+                self._metrics["mapped_generations"] = snapshots
+                if snapshots:
+                    self._metrics["cache_hits"] += 1
         return result
 
-    def metrics(self) -> dict[str, int]:
+    def metrics(self) -> dict[str, int | float]:
         """Return resident-session request counters for benchmark receipts."""
         with self._lock:
             return dict(self._metrics)
