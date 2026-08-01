@@ -21,20 +21,45 @@ def encoded(value: bytes) -> str:
 
 
 class ChangesetCli241Test(unittest.TestCase):
-    def run_cli(self, root: Path, *args: str) -> dict:
+    def run_process(self, root: Path, *args: str) -> tuple[int, str, str]:
+        """Run the real CLI without anonymous pipes.
+
+        Python 3.14 on Windows can report WinError 6 while duplicating pytest's
+        captured pipe handles for a nested subprocess. File-backed streams keep
+        this installed-CLI test on the same process boundary without relying on
+        that fragile handle path.
+        """
+
         environment = dict(os.environ)
         environment["PYTHONPATH"] = str(ROOT / "src")
-        result = subprocess.run(
-            [sys.executable, "-m", "simplicio_fast.cli", *args],
-            cwd=root,
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if result.returncode:
-            raise RuntimeError(f"stdout={result.stdout} stderr={result.stderr}")
-        return json.loads(result.stdout)
+        with tempfile.TemporaryDirectory() as directory:
+            stdout_path = Path(directory) / "stdout.txt"
+            stderr_path = Path(directory) / "stderr.txt"
+            with (
+                stdout_path.open("w", encoding="utf-8") as stdout,
+                stderr_path.open("w", encoding="utf-8") as stderr,
+            ):
+                result = subprocess.run(
+                    [sys.executable, "-m", "simplicio_fast.cli", *args],
+                    cwd=root,
+                    env=environment,
+                    stdin=subprocess.DEVNULL,
+                    stdout=stdout,
+                    stderr=stderr,
+                    text=True,
+                    check=False,
+                )
+            return (
+                result.returncode,
+                stdout_path.read_text(encoding="utf-8"),
+                stderr_path.read_text(encoding="utf-8"),
+            )
+
+    def run_cli(self, root: Path, *args: str) -> dict:
+        returncode, stdout, stderr = self.run_process(root, *args)
+        if returncode:
+            raise RuntimeError(f"stdout={stdout} stderr={stderr}")
+        return json.loads(stdout)
 
     def prepare_and_materialize(self, root: Path, operations: list[dict]) -> dict:
         intent = root / "intent.json"
@@ -85,16 +110,8 @@ class ChangesetCli241Test(unittest.TestCase):
         )
 
     def test_all_lifecycle_commands_are_public(self) -> None:
-        environment = dict(os.environ)
-        environment["PYTHONPATH"] = str(ROOT / "src")
-        result = subprocess.run(
-            [sys.executable, "-m", "simplicio_fast.cli", "changeset", "--help"],
-            cwd=ROOT,
-            env=environment,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
+        returncode, stdout, stderr = self.run_process(ROOT, "changeset", "--help")
+        self.assertEqual(0, returncode, stderr)
         for command in (
             "prepare",
             "validate",
@@ -104,7 +121,7 @@ class ChangesetCli241Test(unittest.TestCase):
             "materialize",
             "recover",
         ):
-            self.assertIn(command, result.stdout)
+            self.assertIn(command, stdout)
 
     def test_create_replace_rename_delete_and_replay(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
