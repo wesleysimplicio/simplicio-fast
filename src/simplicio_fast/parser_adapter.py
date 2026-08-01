@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import re
+import subprocess
 from typing import Any, Iterable, Mapping
 
 from .adapters import (
@@ -87,6 +88,30 @@ def _mapper_json(root: Path, provenance: Mapping[str, Any], name: str) -> dict[s
     return value
 
 
+def _git_ignored(root: Path, paths: Iterable[str]) -> set[str]:
+    candidates = sorted(set(paths))
+    if not candidates:
+        return set()
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "check-ignore", "--stdin", "--no-index", "-z"],
+            input=b"\0".join(path.encode("utf-8") for path in candidates) + b"\0",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+            close_fds=True,
+        )
+    except OSError:
+        return set()
+    if result.returncode not in {0, 1}:
+        return set()
+    return {
+        value.decode("utf-8")
+        for value in result.stdout.split(b"\0")
+        if value
+    }
+
+
 def build_payload_from_mapper(
     root: Path,
     mapper_handoff: Mapping[str, Any],
@@ -127,12 +152,20 @@ def build_payload_from_mapper(
     raw_files = project_doc.get("files")
     if not isinstance(raw_files, list):
         raise ParserAdapterError("mapper_files_missing")
+    candidate_paths = [
+        _safe_relative(item["path"])
+        for item in raw_files
+        if isinstance(item, dict) and isinstance(item.get("path"), str)
+    ]
+    ignored_paths = _git_ignored(root, candidate_paths)
     files: list[dict[str, Any]] = []
     file_languages: dict[str, str] = {}
     for item in raw_files:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str):
             raise ParserAdapterError("mapper_files_invalid")
         relative = _safe_relative(item["path"])
+        if relative in ignored_paths:
+            continue
         language = item.get("language")
         if not isinstance(language, str) or not language:
             raise ParserAdapterError("mapper_language_missing", relative)

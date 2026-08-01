@@ -10,9 +10,11 @@ __pycache__/
 *.py[cod]
 .venv/
 .pytest_cache/
+.pytest-basetemp-*/
 *.egg-info/
 build/
 dist/
 rust/target/
+native/*/target/
 !data/.gitkeep
 !benchmarks/results/.gitkeep
