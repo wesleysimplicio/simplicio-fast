@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from simplicio_fast.parser_adapter import (
     ParserAdapterError,
+    _git_ignored,
     adapter_capability,
     build_payload,
     build_payload_from_mapper,
@@ -87,6 +88,41 @@ def _mapper_fixture(root: Path) -> tuple[dict[str, object], dict[str, dict[str, 
 
 
 class ParserAdapter244Test(unittest.TestCase):
+    def test_mapper_payload_file_metadata_and_git_ignore_boundaries(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provenance, docs = _mapper_fixture(root)
+            self.assertEqual(set(), _git_ignored(root, []))
+            docs["project_map"]["files"] = [None]
+            (root / ".simplicio/project-map.json").write_text(
+                json.dumps(docs["project_map"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_files_invalid"):
+                build_payload_from_mapper(root, {"ignored": True})
+            docs["project_map"]["files"] = [{"path": "service.rs"}]
+            (root / ".simplicio/project-map.json").write_text(
+                json.dumps(docs["project_map"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_language_missing"):
+                build_payload_from_mapper(root, {"ignored": True})
+            docs["project_map"]["files"] = [
+                {"path": "service.rs", "language": "text", "file_hash": "0" * 64}
+            ]
+            (root / ".simplicio/project-map.json").write_text(
+                json.dumps(docs["project_map"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_symbols_invalid"):
+                build_payload_from_mapper(root, {"ignored": True})
+
     def test_mapper_payload_rejects_decoder_envelope_relation_and_size_failures(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -354,6 +390,25 @@ class ParserAdapter244Test(unittest.TestCase):
                     "confidence": 0.5,
                 }
             )
+            calls["edges"].append(
+                {
+                    "type": "imports",
+                    "source_file": "service.rs",
+                    "source_symbol": None,
+                    "target_symbol": None,
+                    "import": "std::fmt",
+                    "confidence": 0.5,
+                }
+            )
+            calls["edges"].append(
+                {
+                    "type": "future-edge",
+                    "source_file": "service.rs",
+                    "source_symbol": None,
+                    "target_symbol": "service.rs::resolve",
+                    "confidence": 0.5,
+                }
+            )
             (root / ".simplicio/call-graph.json").write_text(json.dumps(calls), encoding="utf-8")
             with patch(
                 "simplicio_fast.parser_adapter.validate_handoff",
@@ -365,6 +420,8 @@ class ParserAdapter244Test(unittest.TestCase):
                 payload = build_payload_from_mapper(root, {"ignored": True})
             self.assertEqual("partial", payload["completeness"])
             self.assertTrue(any(item["code"] == "mapper_relation_id_missing" for item in payload["diagnostics"]))
+            self.assertTrue(any(item["code"] == "mapper_relation_kind_unsupported" for item in payload["diagnostics"]))
+            self.assertIn("import", {item["kind"] for item in payload["relations"]})
             self.assertNotIn(
                 ".pytest-basetemp-case/ignored.py",
                 [item["path"] for item in payload["files"]],

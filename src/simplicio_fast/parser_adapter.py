@@ -175,17 +175,19 @@ def build_payload_from_mapper(
         path = root / relative
         if not path.is_file():
             raise ParserAdapterError("source_missing", relative)
-        raw = path.read_bytes()
-        actual_digest = hashlib.sha256(raw).hexdigest()
-        declared_digest = item.get("file_hash")
-        if declared_digest != actual_digest:
-            raise ParserAdapterError("source_digest_mismatch", relative)
         try:
-            path.read_text(encoding="utf-8")
+            text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError as error:
             raise ParserAdapterError("encoding_invalid", relative) from error
+        raw_digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        normalized_digest = hashlib.sha256(
+            text.replace("\r\n", "\n").encode("utf-8")
+        ).hexdigest()
+        declared_digest = item.get("file_hash")
+        if declared_digest not in {raw_digest, normalized_digest}:
+            raise ParserAdapterError("source_digest_mismatch", relative)
         files.append(
-            {"path": relative, "language": language, "sha256": actual_digest, "encoding": "utf-8"}
+            {"path": relative, "language": language, "sha256": declared_digest, "encoding": "utf-8"}
         )
         file_languages[relative] = language
     if len(files) > selected_limits["max_files"]:
@@ -254,18 +256,46 @@ def build_payload_from_mapper(
     for edge in raw_edges:
         if not isinstance(edge, dict):
             raise ParserAdapterError("mapper_relations_invalid")
-        origin = edge.get("source_symbol")
-        destination = edge.get("target_symbol")
-        if not isinstance(origin, str) or not isinstance(destination, str):
+        source_file = edge.get("source_file")
+        edge_type = edge.get("type")
+        if not isinstance(source_file, str) or source_file not in file_languages:
             raise ParserAdapterError("mapper_relations_invalid")
-        origin_id = symbol_ids.get(origin)
-        destination_id = symbol_ids.get(destination)
-        if origin_id is None or destination_id is None:
+        kind = {
+            "calls": "call",
+            "imports": "import",
+            "defined_in": "definition",
+            "member_of": "reference",
+        }.get(str(edge_type))
+        if kind is None:
+            diagnostics.append(
+                {"path": source_file, "code": "mapper_relation_kind_unsupported", "detail": str(edge_type)}
+            )
+            continue
+        source_symbol = edge.get("source_symbol")
+        target_symbol = edge.get("target_symbol")
+        if kind == "import":
+            origin = source_file
+            destination = edge.get("import", target_symbol)
+            origin_id = ""
+            destination_id = symbol_ids.get(target_symbol, "") if isinstance(target_symbol, str) else ""
+        else:
+            if not isinstance(target_symbol, str):
+                raise ParserAdapterError("mapper_relations_invalid")
+            origin = source_symbol if isinstance(source_symbol, str) else source_file
+            destination = target_symbol
+            origin_id = symbol_ids.get(source_symbol, "") if isinstance(source_symbol, str) else ""
+            destination_id = symbol_ids.get(target_symbol, "")
+        if not isinstance(destination, str) or not destination:
+            raise ParserAdapterError("mapper_relations_invalid")
+        if kind != "import" and (
+            not destination_id
+            or (isinstance(source_symbol, str) and not origin_id)
+        ):
             diagnostics.append(
                 {
-                    "path": edge.get("source_file", ""),
+                    "path": source_file,
                     "code": "mapper_relation_id_missing",
-                    "detail": f"{origin}->{destination}",
+                    "detail": f"{origin}->{target_symbol}",
                 }
             )
             continue
@@ -276,15 +306,11 @@ def build_payload_from_mapper(
             {
                 "origin": origin,
                 "destination": destination,
-                "kind": {
-                    "calls": "call",
-                    "defined_in": "definition",
-                    "member_of": "reference",
-                }.get(str(edge.get("type")), "reference"),
+                "kind": kind,
                 "confidence": confidence,
                 "origin_id": origin_id,
                 "destination_id": destination_id,
-                "file": edge.get("source_file", ""),
+                "file": source_file,
             }
         )
     if len(relations) > selected_limits["max_relations"]:
@@ -796,7 +822,18 @@ def validate_payload(
             source = (source_root / normalized_path).resolve()
             if not source.is_relative_to(source_root) or not source.is_file():
                 raise ParserAdapterError("source_missing", normalized_path)
-            if hashlib.sha256(source.read_bytes()).hexdigest() != item["sha256"]:
+            source_bytes = source.read_bytes()
+            try:
+                source_text = source.read_text(encoding="utf-8")
+            except UnicodeDecodeError as error:
+                raise ParserAdapterError("file_encoding_invalid", normalized_path) from error
+            source_digests = {
+                hashlib.sha256(source_bytes).hexdigest(),
+                hashlib.sha256(
+                    source_text.replace("\r\n", "\n").encode("utf-8")
+                ).hexdigest(),
+            }
+            if item["sha256"] not in source_digests:
                 raise ParserAdapterError("source_digest_mismatch", normalized_path)
     ids: set[str] = set()
     for item in symbols:
