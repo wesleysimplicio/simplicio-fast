@@ -58,13 +58,21 @@ def test_incompatible_or_tampered_artifact_is_never_used(tmp_path):
     )
     assert isinstance(backend, PythonBackend)
     assert reason == "RUST_ABI_INCOMPATIBLE"
-    backend, reason = select_backend(artifact, {**valid, "sha256": "0" * 64})
+    backend, reason = select_backend(
+        artifact,
+        {**valid, "sha256": "0" * 64},
+        expected_platform="linux-x86_64",
+    )
     assert isinstance(backend, PythonBackend)
     assert reason == "RUST_ARTIFACT_HASH_MISMATCH"
-    backend, reason = select_backend(artifact, {**valid, "version": "0.0.0"})
+    backend, reason = select_backend(
+        artifact, {**valid, "version": "0.0.0"}, expected_platform="linux-x86_64"
+    )
     assert isinstance(backend, PythonBackend)
     assert reason == "RUST_VERSION_MISMATCH"
-    backend, reason = select_backend(artifact, {**valid, "size": 999})
+    backend, reason = select_backend(
+        artifact, {**valid, "size": 999}, expected_platform="linux-x86_64"
+    )
     assert isinstance(backend, PythonBackend)
     assert reason == "RUST_ARTIFACT_SIZE_MISMATCH"
 
@@ -175,11 +183,15 @@ def test_artifact_hashing_is_streamed_and_size_bounded(tmp_path, monkeypatch):
             AssertionError("whole-file read is forbidden")
         ),
     )
-    backend, reason = select_backend(artifact, manifest)
+    backend, reason = select_backend(
+        artifact, manifest, expected_platform="linux-x86_64"
+    )
     assert isinstance(backend, RustBackend)
     assert reason is None
     monkeypatch.setattr("simplicio_fast.native_backend.MAX_NATIVE_ARTIFACT_BYTES", 4)
-    backend, reason = select_backend(artifact, manifest)
+    backend, reason = select_backend(
+        artifact, manifest, expected_platform="linux-x86_64"
+    )
     assert isinstance(backend, PythonBackend)
     assert reason == "RUST_ARTIFACT_TOO_LARGE"
 
