@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Iterable, Mapping
 
@@ -44,11 +45,25 @@ def _safe_relative(path: str) -> str:
 
 def _source_files(root: Path, changed_paths: Iterable[str] | None) -> list[Path]:
     if changed_paths is None:
-        return sorted(
-            path
-            for path in root.rglob("*")
-            if path.is_file() and language_for_path(path) is not None
-        )
+        ignored = {
+            ".git",
+            ".simplicio",
+            ".simplicio-fast",
+            "__pycache__",
+            "node_modules",
+            "target",
+            "bin",
+            "obj",
+        }
+        found: list[Path] = []
+        for directory, directories, filenames in os.walk(root, topdown=True):
+            directories[:] = sorted(name for name in directories if name not in ignored)
+            found.extend(
+                Path(directory) / name
+                for name in sorted(filenames)
+                if language_for_path(Path(name)) is not None
+            )
+        return sorted(found)
     result: list[Path] = []
     for relative in changed_paths:
         safe = _safe_relative(relative)
@@ -72,6 +87,13 @@ def build_payload(
     root = root.resolve()
     if mode not in SUPPORTED_MODES:
         raise ParserAdapterError("mode_invalid", mode)
+    if mode == "integrated" and (
+        not isinstance(mapper_generation, str)
+        or not mapper_generation.strip()
+        or not isinstance(commit, str)
+        or len(commit) != 40
+    ):
+        raise ParserAdapterError("mapper_required")
     files: list[dict[str, Any]] = []
     symbols: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
