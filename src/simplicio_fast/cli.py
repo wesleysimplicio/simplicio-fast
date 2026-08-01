@@ -63,14 +63,20 @@ def source_commit(root: Path) -> tuple[str | None, str | None]:
     return commit, None
 
 
-def _rust_bridge(selection: EngineSelection, args: argparse.Namespace) -> dict[str, object] | None:
+def _rust_bridge(
+    selection: EngineSelection, args: argparse.Namespace
+) -> dict[str, object] | None:
     """Dispatch read-only snapshot commands to a proven Rust executable.
 
     Rust is deliberately limited to operations it owns today.  Snapshot
     construction and mutations stay on the Python/Dev CLI paths until their
     contracts are implemented by the native engine.
     """
-    if selection.selected != "rust" or args.command not in {"stats", "query", "context"}:
+    if selection.selected != "rust" or args.command not in {
+        "stats",
+        "query",
+        "context",
+    }:
         return None
     executable = selection.executable
     if not executable:
@@ -145,7 +151,9 @@ def _rust_bridge(selection: EngineSelection, args: argparse.Namespace) -> dict[s
 
 
 def json_option(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--json", action="store_true", help="emit deterministic JSON (the default)")
+    parser.add_argument(
+        "--json", action="store_true", help="emit deterministic JSON (the default)"
+    )
 
 
 def snapshot_argument(parser: argparse.ArgumentParser) -> None:
@@ -174,7 +182,9 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     parser.add_argument(
         "--fast-engine",
         choices=("auto", "rust", "python", "off"),
@@ -197,7 +207,9 @@ def build_parser() -> argparse.ArgumentParser:
             ),
             description="Parse changed Python files and atomically publish a complete snapshot.",
         )
-        command.add_argument("root", nargs="?", default=".", help="repository root (default: .)")
+        command.add_argument(
+            "root", nargs="?", default=".", help="repository root (default: .)"
+        )
         command.add_argument(
             "-o",
             "--output",
@@ -223,9 +235,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="find classes and functions in a snapshot",
         description="Return matching semantic symbols as deterministic JSON.",
     )
-    query.add_argument("term", help="case-insensitive symbol or qualified-name substring")
+    query.add_argument(
+        "term", help="case-insensitive symbol or qualified-name substring"
+    )
     snapshot_argument(query)
-    query.add_argument("--limit", type=int, default=50, help="maximum matches (default: 50)")
+    query.add_argument(
+        "--limit", type=int, default=50, help="maximum matches (default: 50)"
+    )
     json_option(query)
 
     search = commands.add_parser(
@@ -233,10 +249,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="search direct indexes by name, path or kind",
         description="Resolve symbols from direct indexes without deserializing the full symbol table.",
     )
-    search.add_argument("term", help="case-insensitive name or qualified-name substring")
+    search.add_argument(
+        "term", help="case-insensitive name or qualified-name substring"
+    )
     snapshot_argument(search)
-    search.add_argument("--limit", type=int, default=50, help="maximum matches (default: 50)")
-    search.add_argument("--prefix", action="store_true", help="match names beginning with term")
+    search.add_argument(
+        "--limit", type=int, default=50, help="maximum matches (default: 50)"
+    )
+    search.add_argument(
+        "--prefix", action="store_true", help="match names beginning with term"
+    )
     search.add_argument("--path", help="restrict matches to a relative source path")
     search.add_argument("--kind", choices=("class", "function", "async_function"))
     json_option(search)
@@ -248,7 +270,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Resolve symbols through mmap, verify current source hashes and emit bounded source spans."
         ),
     )
-    context.add_argument("term", help="case-insensitive symbol or qualified-name substring")
+    context.add_argument(
+        "term", help="case-insensitive symbol or qualified-name substring"
+    )
     context.add_argument("--root", default=".", help="repository root (default: .)")
     snapshot_argument(context)
     context.add_argument("--max-results", type=int, default=10)
@@ -283,7 +307,9 @@ def build_parser() -> argparse.ArgumentParser:
     impact.add_argument("--limit", type=int, default=100)
     json_option(impact)
 
-    stats = commands.add_parser("stats", help="show snapshot generation and section statistics")
+    stats = commands.add_parser(
+        "stats", help="show snapshot generation and section statistics"
+    )
     snapshot_argument(stats)
     json_option(stats)
 
@@ -294,7 +320,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     query_plan.add_argument("term")
     snapshot_argument(query_plan)
-    query_plan.add_argument("--operation", choices=("query", "search", "context", "impact"), default="query")
+    query_plan.add_argument(
+        "--operation", choices=("query", "search", "context", "impact"), default="query"
+    )
     query_plan.add_argument("--prefix", action="store_true")
     query_plan.add_argument("--path")
     query_plan.add_argument("--kind", choices=("class", "function", "async_function"))
@@ -309,8 +337,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Expose the bounded segmented-storage contract without exposing raw snapshot offsets.",
     )
     segments.add_argument("action", choices=("publish", "validate", "map"))
-    segments.add_argument("--directory", required=True, help="segmented storage directory")
-    segments.add_argument("--snapshot", default=DEFAULT_SNAPSHOT, help="source SFAST snapshot for publish")
+    segments.add_argument(
+        "--directory", required=True, help="segmented storage directory"
+    )
+    segments.add_argument(
+        "--snapshot", default=DEFAULT_SNAPSHOT, help="source SFAST snapshot for publish"
+    )
     segments.add_argument("--name", help="segment name for map")
     json_option(segments)
 
@@ -336,11 +368,21 @@ def build_parser() -> argparse.ArgumentParser:
     delivery.add_argument("--root", default=".", help="repository root (default: .)")
     snapshot_argument(delivery)
     delivery.add_argument("--cache", default=None, help="delivery cache directory")
-    delivery.add_argument("--profile", choices=("full", "loop-standalone"), default="loop-standalone")
+    delivery.add_argument(
+        "--profile", choices=("full", "loop-standalone"), default="loop-standalone"
+    )
     delivery.add_argument("--max-bytes", type=int, default=32_000)
-    delivery.add_argument("--changeset", default=None, help="optional simplicio.fast.changeset/v2 JSON")
-    delivery.add_argument("--write", action="store_true", help="apply a validated changeset; dry-run is the default")
-    delivery.add_argument("--idempotency-key", default=None, help="stable delivery replay key")
+    delivery.add_argument(
+        "--changeset", default=None, help="optional simplicio.fast.changeset/v2 JSON"
+    )
+    delivery.add_argument(
+        "--write",
+        action="store_true",
+        help="apply a validated changeset; dry-run is the default",
+    )
+    delivery.add_argument(
+        "--idempotency-key", default=None, help="stable delivery replay key"
+    )
     delivery.add_argument(
         "--runtime-transaction",
         default=None,
@@ -354,11 +396,85 @@ def build_parser() -> argparse.ArgumentParser:
             "Dry-run by default. Use --write only after inspecting the generated receipt."
         ),
     )
-    apply_command.add_argument("changeset", help="path to simplicio.fast.changeset/v2 JSON")
-    apply_command.add_argument("--root", default=".", help="repository root (default: .)")
+    apply_command.add_argument(
+        "changeset", help="path to simplicio.fast.changeset/v2 JSON"
+    )
+    apply_command.add_argument(
+        "--root", default=".", help="repository root (default: .)"
+    )
     apply_command.add_argument(
         "--write", action="store_true", help="atomically replace validated source files"
     )
+
+    changeset = commands.add_parser(
+        "changeset",
+        help="prepare, validate, inspect and materialize a binary changeset",
+        description="Public binary changeset lifecycle; all output is versioned JSON.",
+    )
+    changeset_commands = changeset.add_subparsers(
+        dest="changeset_action", required=True
+    )
+
+    prepare = changeset_commands.add_parser(
+        "prepare", help="compile JSON intent into a sealed binary changeset"
+    )
+    prepare.add_argument("input_json", help="JSON file containing operations")
+    prepare.add_argument("--root", default=".")
+    prepare.add_argument("--output", required=True, help="output binary changeset path")
+    for option in (
+        "base-generation",
+        "overlay-generation",
+        "attempt",
+        "worktree-id",
+        "lease-id",
+        "fencing-token",
+    ):
+        prepare.add_argument(f"--{option}", required=True)
+    prepare.add_argument("--allowed-path", action="append", default=None)
+    prepare.add_argument("--verification-command", action="append", default=[])
+
+    validate_changeset = changeset_commands.add_parser(
+        "validate", help="validate a binary changeset against source hashes"
+    )
+    validate_changeset.add_argument("binary")
+    validate_changeset.add_argument("--root", default=".")
+    validate_changeset.add_argument("--lease-id")
+    validate_changeset.add_argument("--fencing-token")
+
+    seal = changeset_commands.add_parser(
+        "seal", help="copy and verify a binary changeset into a sealed output"
+    )
+    seal.add_argument("binary")
+    seal.add_argument("--output", required=True)
+
+    inspect_changeset = changeset_commands.add_parser(
+        "inspect", help="inspect binary metadata without exposing offsets"
+    )
+    inspect_changeset.add_argument("binary")
+
+    export_json = changeset_commands.add_parser(
+        "export-json", help="export a binary changeset as versioned JSON"
+    )
+    export_json.add_argument("binary")
+
+    materialize_changeset = changeset_commands.add_parser(
+        "materialize",
+        help="materialize through the installed Dev CLI adapter and refresh changed inputs",
+    )
+    materialize_changeset.add_argument("binary")
+    materialize_changeset.add_argument("--root", default=".")
+    materialize_changeset.add_argument("--journal", required=True)
+    materialize_changeset.add_argument(
+        "--write", action="store_true", help="authorize the source mutation"
+    )
+
+    recover = changeset_commands.add_parser(
+        "recover", help="recover an incomplete binary journal tail"
+    )
+    recover.add_argument("journal")
+    recover.add_argument("--worktree-id", required=True)
+    recover.add_argument("--lease-id", required=True)
+    recover.add_argument("--fencing-token", required=True)
 
     doctor = commands.add_parser(
         "doctor",
@@ -366,8 +482,16 @@ def build_parser() -> argparse.ArgumentParser:
         description="Check Python, snapshot structure and query readiness; emits JSON.",
     )
     snapshot_argument(doctor)
-    doctor.add_argument("--installation", action="store_true", help="report local Python/Rust artifacts without downloading")
-    doctor.add_argument("--smoke", action="store_true", help="run a disposable installed Python CLI smoke flow")
+    doctor.add_argument(
+        "--installation",
+        action="store_true",
+        help="report local Python/Rust artifacts without downloading",
+    )
+    doctor.add_argument(
+        "--smoke",
+        action="store_true",
+        help="run a disposable installed Python CLI smoke flow",
+    )
     json_option(doctor)
 
     rollout = commands.add_parser(
@@ -385,7 +509,9 @@ def build_parser() -> argparse.ArgumentParser:
     server = commands.add_parser("serve", help="run the user CRUD proof-of-concept API")
     server.add_argument("--port", type=int, default=3000)
 
-    base = commands.add_parser("base", help="build an immutable canonical base generation")
+    base = commands.add_parser(
+        "base", help="build an immutable canonical base generation"
+    )
     base.add_argument("root", nargs="?", default=".")
     base.add_argument("--storage", default=None, help="generation storage directory")
 
@@ -395,7 +521,9 @@ def build_parser() -> argparse.ArgumentParser:
     overlay.add_argument("--base-generation", required=True)
     overlay.add_argument("--worktree-id", required=True)
 
-    delta = commands.add_parser("delta", help="build a changed-path delta against a canonical base")
+    delta = commands.add_parser(
+        "delta", help="build a changed-path delta against a canonical base"
+    )
     delta.add_argument("root", nargs="?", default=".")
     delta.add_argument("--storage", default=None)
     delta.add_argument("--base-generation", required=True)
@@ -403,7 +531,9 @@ def build_parser() -> argparse.ArgumentParser:
     delta.add_argument("--changed-path", action="append", default=None)
     delta.add_argument("--config-fingerprint", default=None)
 
-    handoff = commands.add_parser("handoff", help="emit canonical snapshot and changed-path delta handoff")
+    handoff = commands.add_parser(
+        "handoff", help="emit canonical snapshot and changed-path delta handoff"
+    )
     handoff.add_argument("root", nargs="?", default=".")
     handoff.add_argument("--storage", default=None)
     handoff.add_argument("--base-generation", required=True)
@@ -432,7 +562,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     semantic.add_argument("query")
     semantic.add_argument("--generation", required=True)
-    semantic.add_argument("--candidates", required=True, help="JSON list of canonical_id/text records")
+    semantic.add_argument(
+        "--candidates", required=True, help="JSON list of canonical_id/text records"
+    )
     semantic.add_argument("--max-candidates", type=int, default=128)
     semantic.add_argument("--max-results", type=int, default=10)
     semantic.add_argument("--max-request-bytes", type=int, default=256_000)
@@ -441,7 +573,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     commands.add_parser("capabilities", help="report parser capability negotiation")
 
-    pin = commands.add_parser("pin", help="acquire a lease protecting a generation from GC")
+    pin = commands.add_parser(
+        "pin", help="acquire a lease protecting a generation from GC"
+    )
     pin.add_argument("generation")
     pin.add_argument("--root", default=".")
     pin.add_argument("--storage", default=None)
@@ -458,7 +592,9 @@ def build_parser() -> argparse.ArgumentParser:
     gc.add_argument("--storage", default=None)
     gc.add_argument("--apply", action="store_true")
 
-    watch = commands.add_parser("watch", help="refresh an overlay once after source changes")
+    watch = commands.add_parser(
+        "watch", help="refresh an overlay once after source changes"
+    )
     watch.add_argument("root", nargs="?", default=".")
     watch.add_argument("--storage", default=None)
     watch.add_argument("--base-generation", required=True)
@@ -519,19 +655,28 @@ def main() -> None:
                     {
                         "schema": "simplicio.fast.query/v1",
                         "snapshot_version": snapshot.format_version,
-                        "matches": [asdict(item) for item in snapshot.find(args.term)[: args.limit]],
+                        "matches": [
+                            asdict(item)
+                            for item in snapshot.find(args.term)[: args.limit]
+                        ],
                     }
                 )
         elif args.command == "search":
             if args.limit < 1:
                 parser.error("--limit must be positive")
             with Snapshot(Path(args.snapshot)) as snapshot:
-                matches = snapshot.search(args.term, prefix=args.prefix, path=args.path, kind=args.kind)
+                matches = snapshot.search(
+                    args.term, prefix=args.prefix, path=args.path, kind=args.kind
+                )
                 emit(
                     {
                         "schema": "simplicio.fast.search/v1",
                         "snapshot_version": snapshot.format_version,
-                        "filters": {"prefix": args.prefix, "path": args.path, "kind": args.kind},
+                        "filters": {
+                            "prefix": args.prefix,
+                            "path": args.path,
+                            "kind": args.kind,
+                        },
                         "matches": [asdict(item) for item in matches[: args.limit]],
                     }
                 )
@@ -554,7 +699,9 @@ def main() -> None:
                         Path(args.runtime_transaction).read_text(encoding="utf-8")
                     )
                     if not isinstance(runtime_transaction, dict):
-                        raise ValueError("--runtime-transaction must contain a JSON object")
+                        raise ValueError(
+                            "--runtime-transaction must contain a JSON object"
+                        )
                 emit(
                     delivery_engine.deliver(
                         load_changeset(Path(args.changeset)),
@@ -568,9 +715,86 @@ def main() -> None:
             else:
                 emit(
                     delivery_engine.prepare(
-                        args.task, profile=args.profile, engine_receipt=selection.receipt()
+                        args.task,
+                        profile=args.profile,
+                        engine_receipt=selection.receipt(),
                     )
                 )
+        elif args.command == "changeset":
+            from .binary_changeset import (
+                BinaryChangeJournal,
+                inspect_binary,
+                materialize,
+                prepare_from_json,
+                read_binary,
+            )
+
+            action = args.changeset_action
+            if action == "prepare":
+                value = json.loads(Path(args.input_json).read_text(encoding="utf-8"))
+                if not isinstance(value, dict):
+                    raise ValueError("input_json must contain an object")
+                changeset = prepare_from_json(
+                    value,
+                    root=Path(args.root),
+                    base_generation=args.base_generation,
+                    overlay_generation=args.overlay_generation,
+                    attempt=args.attempt,
+                    worktree_id=args.worktree_id,
+                    lease_id=args.lease_id,
+                    fencing_token=args.fencing_token,
+                    allowed_paths=args.allowed_path,
+                    verification_commands=args.verification_command,
+                )
+                emit(changeset.seal_to(Path(args.output)))
+            elif action == "validate":
+                changeset = read_binary(Path(args.binary))
+                emit(
+                    {
+                        "schema": "simplicio.fast.binary-changeset-cli-validation/v1",
+                        "status": "valid",
+                        "changeset_id": changeset.changeset_id,
+                        "validation": changeset.validate(
+                            Path(args.root),
+                            lease_id=args.lease_id,
+                            fencing_token=args.fencing_token,
+                        ),
+                    }
+                )
+            elif action == "seal":
+                emit(read_binary(Path(args.binary)).seal_to(Path(args.output)))
+            elif action == "inspect":
+                emit(inspect_binary(Path(args.binary)))
+            elif action == "export-json":
+                emit(read_binary(Path(args.binary)).to_dict())
+            elif action == "materialize":
+                changeset = read_binary(Path(args.binary))
+                if not args.write:
+                    emit(
+                        {
+                            "schema": "simplicio.fast.binary-changeset-cli-materialize/v1",
+                            "status": "dry_run",
+                            "changeset_id": changeset.changeset_id,
+                            "validation": changeset.validate(Path(args.root)),
+                            "write_required": True,
+                        }
+                    )
+                else:
+                    journal = BinaryChangeJournal(
+                        Path(args.journal),
+                        worktree_id=changeset.worktree_id,
+                        lease_id=changeset.lease_id,
+                        fencing_token=changeset.fencing_token,
+                    )
+                    emit(materialize(changeset, Path(args.root), journal))
+            else:
+                journal = BinaryChangeJournal(
+                    Path(args.journal),
+                    worktree_id=args.worktree_id,
+                    lease_id=args.lease_id,
+                    fencing_token=args.fencing_token,
+                )
+                emit(journal.recover())
         elif args.command == "apply":
             processor = ProjectProcessor(Path(args.root), Path(DEFAULT_SNAPSHOT))
             emit(
@@ -579,7 +803,10 @@ def main() -> None:
                 )
             )
         elif args.command == "context":
-            if min(args.max_results, args.max_lines, args.max_bytes, args.max_tokens) < 1:
+            if (
+                min(args.max_results, args.max_lines, args.max_bytes, args.max_tokens)
+                < 1
+            ):
                 parser.error("context limits must be positive")
             root = Path(args.root).resolve()
             snapshot_path = Path(args.snapshot).resolve()
@@ -627,7 +854,9 @@ def main() -> None:
             if args.fast_engine != "python":
                 raise RuntimeError("navigate_requires_explicit_python_engine")
             budget = NavigationBudget(
-                max_nodes=args.max_nodes, max_bytes=args.max_bytes, max_depth=args.max_depth
+                max_nodes=args.max_nodes,
+                max_bytes=args.max_bytes,
+                max_depth=args.max_depth,
             )
             with Snapshot(Path(args.snapshot)) as snapshot:
                 page = NavigationIndex(snapshot).navigate(
@@ -648,7 +877,10 @@ def main() -> None:
                         "schema": "simplicio.fast.impact/v1",
                         "snapshot_version": snapshot.format_version,
                         "query": args.term,
-                        "relations": [asdict(item) for item in snapshot.impact(args.term)[: args.limit]],
+                        "relations": [
+                            asdict(item)
+                            for item in snapshot.impact(args.term)[: args.limit]
+                        ],
                     }
                 )
         elif args.command == "stats":
@@ -761,43 +993,69 @@ def main() -> None:
             print(f"simplicio-fast listening on http://127.0.0.1:{args.port}")
             serve(service, port=args.port)
         elif args.command == "base":
-            manifest = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).build_base()
+            manifest = WorkspaceStore(
+                Path(args.root), Path(args.storage) if args.storage else None
+            ).build_base()
             emit({"schema": MANIFEST_SCHEMA, "manifest": manifest.to_dict()})
         elif args.command == "overlay":
-            overlay_value = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).create_overlay(
-                args.worktree_id, args.base_generation
-            )
+            overlay_value = WorkspaceStore(
+                Path(args.root), Path(args.storage) if args.storage else None
+            ).create_overlay(args.worktree_id, args.base_generation)
             emit({"schema": OVERLAY_SCHEMA, "overlay": asdict(overlay_value)})
         elif args.command == "delta":
-            store = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None)
+            store = WorkspaceStore(
+                Path(args.root), Path(args.storage) if args.storage else None
+            )
             delta_value = store.create_delta(
-                args.base_generation, args.worktree_id, args.changed_path,
+                args.base_generation,
+                args.worktree_id,
+                args.changed_path,
                 config_fingerprint=args.config_fingerprint,
             )
             emit({"schema": delta_value.schema, "delta": delta_value.to_dict()})
         elif args.command == "handoff":
-            store = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None)
-            emit(store.handoff(
-                args.base_generation, args.worktree_id, args.changed_path,
-                delta_generation=args.delta_generation,
-                config_fingerprint=args.config_fingerprint,
-                parity_snapshot=Path(args.parity_snapshot) if args.parity_snapshot else None,
-            ))
+            store = WorkspaceStore(
+                Path(args.root), Path(args.storage) if args.storage else None
+            )
+            emit(
+                store.handoff(
+                    args.base_generation,
+                    args.worktree_id,
+                    args.changed_path,
+                    delta_generation=args.delta_generation,
+                    config_fingerprint=args.config_fingerprint,
+                    parity_snapshot=Path(args.parity_snapshot)
+                    if args.parity_snapshot
+                    else None,
+                )
+            )
         elif args.command == "merge":
             if args.worktree_id and not args.overlay_generation:
                 raise ValueError("--overlay-generation is required with --worktree-id")
-            with WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).open(
-                args.base_generation, worktree_id=args.worktree_id, overlay_generation=args.overlay_generation
+            with WorkspaceStore(
+                Path(args.root), Path(args.storage) if args.storage else None
+            ).open(
+                args.base_generation,
+                worktree_id=args.worktree_id,
+                overlay_generation=args.overlay_generation,
             ) as view:
-                matches = view.find(args.term)[: args.max_results] if args.term else view.symbols()[: args.max_results]
-                emit({
-                    "schema": "simplicio.fast.merge/v1",
-                    "base_generation": view.base_generation,
-                    "overlay_generation": view.overlay_generation,
-                    "matches": [asdict(item) for item in matches],
-                })
+                matches = (
+                    view.find(args.term)[: args.max_results]
+                    if args.term
+                    else view.symbols()[: args.max_results]
+                )
+                emit(
+                    {
+                        "schema": "simplicio.fast.merge/v1",
+                        "base_generation": view.base_generation,
+                        "overlay_generation": view.overlay_generation,
+                        "matches": [asdict(item) for item in matches],
+                    }
+                )
         elif args.command == "semantic-score":
-            raw_candidates = json.loads(Path(args.candidates).read_text(encoding="utf-8"))
+            raw_candidates = json.loads(
+                Path(args.candidates).read_text(encoding="utf-8")
+            )
             if not isinstance(raw_candidates, list):
                 raise ValueError("--candidates must contain a JSON list")
             candidates = []
@@ -807,7 +1065,9 @@ def main() -> None:
                 text = raw.get("text")
                 canonical_id = raw.get("canonical_id")
                 if not isinstance(text, str) or not isinstance(canonical_id, str):
-                    raise ValueError("semantic candidates require canonical_id and text")
+                    raise ValueError(
+                        "semantic candidates require canonical_id and text"
+                    )
                 if raw.get("source_sha256") is None:
                     candidates.append(
                         SourceDocument.create(
@@ -839,30 +1099,53 @@ def main() -> None:
                 )
             )
         elif args.command == "capabilities":
-            emit({
-                "schema": "simplicio.fast.capabilities/v1",
-                "engine": selection.receipt(),
-                "engine_manifest": selection.manifest,
-                "capabilities": [asdict(item) for item in capability_report()],
-                "semantic_scoring": semantic_capabilities(),
-            })
+            emit(
+                {
+                    "schema": "simplicio.fast.capabilities/v1",
+                    "engine": selection.receipt(),
+                    "engine_manifest": selection.manifest,
+                    "capabilities": [asdict(item) for item in capability_report()],
+                    "semantic_scoring": semantic_capabilities(),
+                }
+            )
         elif args.command == "pin":
-            lease = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).pin(args.generation, args.owner, args.ttl)
+            lease = WorkspaceStore(
+                Path(args.root), Path(args.storage) if args.storage else None
+            ).pin(args.generation, args.owner, args.ttl)
             emit({"schema": "simplicio.fast.lease/v1", "lease": asdict(lease)})
         elif args.command == "release":
-            WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).release_lease(args.lease_id)
+            WorkspaceStore(
+                Path(args.root), Path(args.storage) if args.storage else None
+            ).release_lease(args.lease_id)
             emit({"schema": "simplicio.fast.lease/v1", "released": args.lease_id})
         elif args.command == "gc":
-            emit(WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None).gc(apply=args.apply))
+            emit(
+                WorkspaceStore(
+                    Path(args.root), Path(args.storage) if args.storage else None
+                ).gc(apply=args.apply)
+            )
         elif args.command == "watch":
-            store = WorkspaceStore(Path(args.root), Path(args.storage) if args.storage else None)
+            store = WorkspaceStore(
+                Path(args.root), Path(args.storage) if args.storage else None
+            )
             overlay_value, _ = store.watch_once(args.worktree_id, args.base_generation)
-            emit({"schema": "simplicio.fast.watch/v1", "changed": overlay_value is not None,
-                  "overlay": asdict(overlay_value) if overlay_value else None})
+            emit(
+                {
+                    "schema": "simplicio.fast.watch/v1",
+                    "changed": overlay_value is not None,
+                    "overlay": asdict(overlay_value) if overlay_value else None,
+                }
+            )
     except EngineSelectionError as error:
         emit(error.receipt)
         raise SystemExit(2) from error
-    except (FileNotFoundError, RuntimeError, ValueError, SnapshotBuildTimeout, StaleSnapshotError) as error:
+    except (
+        FileNotFoundError,
+        RuntimeError,
+        ValueError,
+        SnapshotBuildTimeout,
+        StaleSnapshotError,
+    ) as error:
         payload = {
             "schema": "simplicio.fast.error/v1",
             "error": type(error).__name__,
