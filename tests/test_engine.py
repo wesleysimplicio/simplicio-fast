@@ -2,7 +2,6 @@ import contextlib
 import io
 import json
 import os
-import subprocess
 import sys
 import unittest
 from unittest.mock import patch
@@ -19,6 +18,11 @@ from simplicio_fast.cli import main
 
 
 class EngineSelectionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        from simplicio_fast import cli
+
+        cli._close_rust_sessions()
+
     def test_auto_selects_python_with_explicit_rust_gap(self) -> None:
         with patch.dict(os.environ, {}, clear=True):
             with patch("simplicio_fast.engine.shutil.which", return_value=None):
@@ -133,12 +137,16 @@ class EngineSelectionTest(unittest.TestCase):
                 "status": "available",
             },
         )
-        completed = subprocess.CompletedProcess(
-            ["simplicio-fast-rs"],
-            0,
-            '{"schema":"simplicio.fast.query/v1","engine":"rust","matches":[{"name":"save"}]}',
-            "",
-        )
+        class FakeSession:
+            def call(self, operation, payload):
+                self.operation = operation
+                self.payload = payload
+                return {"matches": [{"name": "save"}]}
+
+            def close(self):
+                pass
+
+        fake = FakeSession()
         with (
             patch.object(
                 sys,
@@ -154,7 +162,7 @@ class EngineSelectionTest(unittest.TestCase):
                 ],
             ),
             patch("simplicio_fast.cli.select_engine", return_value=selection),
-            patch("simplicio_fast.cli.subprocess.run", return_value=completed) as run,
+            patch("simplicio_fast.cli.RustCoreSession", return_value=fake),
             contextlib.redirect_stdout(output),
         ):
             main()
@@ -162,8 +170,8 @@ class EngineSelectionTest(unittest.TestCase):
         self.assertEqual("simplicio.fast.query/v1", payload["schema"])
         self.assertEqual("rust", payload["engine"])
         self.assertEqual([{"name": "save"}], payload["matches"])
-        run.assert_called_once()
-        self.assertIn("--query", run.call_args.args[0])
+        self.assertEqual("query", fake.operation)
+        self.assertEqual(50, fake.payload["limit"])
 
     def test_cli_bridges_rust_context_with_bounded_limits(self) -> None:
         output = io.StringIO()
@@ -178,12 +186,16 @@ class EngineSelectionTest(unittest.TestCase):
                 "status": "available",
             },
         )
-        completed = subprocess.CompletedProcess(
-            ["simplicio-fast-rs"],
-            0,
-            '{"schema":"simplicio.fast.context/v1","engine":"rust","spans":[]}',
-            "",
-        )
+        class FakeSession:
+            def call(self, operation, payload):
+                self.operation = operation
+                self.payload = payload
+                return {"spans": []}
+
+            def close(self):
+                pass
+
+        fake = FakeSession()
         with (
             patch.object(
                 sys,
@@ -209,15 +221,14 @@ class EngineSelectionTest(unittest.TestCase):
                 ],
             ),
             patch("simplicio_fast.cli.select_engine", return_value=selection),
-            patch("simplicio_fast.cli.subprocess.run", return_value=completed) as run,
+            patch("simplicio_fast.cli.RustCoreSession", return_value=fake),
             contextlib.redirect_stdout(output),
         ):
             main()
         payload = json.loads(output.getvalue())
         self.assertEqual("simplicio.fast.context/v1", payload["schema"])
-        command = run.call_args.args[0]
-        self.assertIn("--max-lines", command)
-        self.assertIn("9", command)
+        self.assertEqual("context", fake.operation)
+        self.assertEqual(9, fake.payload["max_lines"])
 
     def test_receipt_exposes_python_selection_contract_without_probe(self) -> None:
         with patch("simplicio_fast.engine.probe_rust", side_effect=AssertionError):

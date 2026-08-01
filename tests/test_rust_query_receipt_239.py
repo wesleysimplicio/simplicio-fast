@@ -7,6 +7,7 @@ import tempfile
 import pytest
 
 from simplicio_fast.snapshot import build_snapshot
+from simplicio_fast.rust_session import RustCoreSession
 
 
 def _run_json(executable: Path, *args: str) -> dict[str, object]:
@@ -157,3 +158,11 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
     )
     assert session_responses[0]["ok"] and session_responses[1]["ok"]
     assert session_responses[2] == {"ok": True, "result": {"snapshots": 1}}
+
+    with RustCoreSession(executable) as session:
+        result = session.call(
+            "query",
+            {"snapshot": str(snapshot), "term": "helper", "limit": 1},
+        )
+        assert result["planner"]["records_decoded"] == 1
+        assert session.call("session_cache_stats", {}) == {"snapshots": 1}
