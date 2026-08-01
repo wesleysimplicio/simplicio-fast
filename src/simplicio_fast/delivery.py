@@ -75,6 +75,25 @@ def _terms(task: str) -> list[str]:
     return list(dict.fromkeys(values))[:8]
 
 
+def _deduplicate_spans(spans: list[Any]) -> tuple[list[Any], list[str]]:
+    """Remove repeated source ranges before ranking or token accounting."""
+
+    selected: list[Any] = []
+    seen_handles: set[str] = set()
+    seen_ranges: set[tuple[str, int, int, str]] = set()
+    rejected: list[str] = []
+    for span in spans:
+        handle = span.symbol_id or f"{span.file}:{span.start_line}:{span.symbol}"
+        range_key = (span.file, span.start_line, span.end_line, span.source_sha256)
+        if handle in seen_handles or range_key in seen_ranges:
+            rejected.append(handle)
+            continue
+        seen_handles.add(handle)
+        seen_ranges.add(range_key)
+        selected.append(span)
+    return selected, rejected
+
+
 def _mapper_symbol_handles(
     root: Path, mapper_provenance: dict[str, Any]
 ) -> dict[tuple[str, int], str]:
@@ -160,6 +179,9 @@ class DeliveryEngine:
             raise ValueError(f"unsupported delivery profile: {profile}")
         if mode not in {"bootstrap", "integrated"}:
             raise ValueError(f"unsupported mapper mode: {mode}")
+        if tokenizer is not None and not tokenizer_id:
+            raise ValueError("tokenizer_id is required when an exact tokenizer is supplied")
+        effective_tokenizer_id = tokenizer_id or "estimated:word-split-v1"
         mapper_provenance: dict[str, Any]
         if mode == "integrated":
             if mapper_handoff is None:
@@ -190,7 +212,7 @@ class DeliveryEngine:
                 "mapper_mode": mode,
                 "mapper_generation": mapper_provenance.get("generation"),
                 "mapper_handoff": mapper_provenance.get("handoff_sha256"),
-                "tokenizer_id": tokenizer_id or "estimated:word-split-v1",
+                "tokenizer_id": effective_tokenizer_id,
                 "scoring_config": "semantic-ranking-v1",
             }
             cache_key = hashlib.sha256(
@@ -213,13 +235,11 @@ class DeliveryEngine:
                 return cached
 
             terms = _terms(task)
-            spans = []
-            for term in terms:
-                spans.extend(
-                    snapshot.context(self.root, term, max_results=2, max_bytes=4_000)
+            spans, deduplicated_handles = _deduplicate_spans(
+                snapshot.context_many(
+                    self.root, terms, max_results=8, max_bytes=32_000
                 )
-                if len(spans) >= 8:
-                    break
+            )
             context_bytes = sum(len(span.content.encode("utf-8")) for span in spans)
             context_tokens = (
                 sum(max(1, len(span.content.split())) for span in spans) if spans else 0
@@ -335,7 +355,9 @@ class DeliveryEngine:
                     "spans": len(selected_spans),
                     "bytes": context_bytes,
                     "tokens": context_tokens,
-                    "estimated_tokens": context_tokens,
+                    "estimated_tokens": context_tokens if tokenizer is None else None,
+                    "source_tokens": context_tokens,
+                    "wrapper_tokens": 0,
                     "digest": hashlib.sha256(
                         "\n".join(span.content for span in selected_spans).encode(
                             "utf-8"
@@ -365,9 +387,10 @@ class DeliveryEngine:
                         for span in selected_spans
                     ],
                     "rejected_budget_handles": rejected_budget,
+                    "deduplicated_handles": deduplicated_handles,
                     "tokenizer": {
                         "mode": "exact" if tokenizer is not None else "estimated",
-                        "id": tokenizer_id,
+                        "id": effective_tokenizer_id,
                         "reason": None
                         if tokenizer is not None
                         else "provider_tokenizer_unavailable",

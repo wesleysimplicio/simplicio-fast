@@ -16,6 +16,7 @@ from simplicio_fast.cli import main
 from simplicio_fast.delivery import DeliveryEngine
 from simplicio_fast.engine import select_engine
 from simplicio_fast.snapshot import build_snapshot
+from simplicio_fast.snapshot import Snapshot
 
 
 class DeliveryEngineTest(unittest.TestCase):
@@ -72,6 +73,49 @@ class DeliveryEngineTest(unittest.TestCase):
             self.assertEqual("test-exact-v1", exact["context"]["tokenizer"]["id"])
             self.assertEqual("miss", changed_config["cache"]["L0_attempt"])
             self.assertGreater(exact["context"]["tokens"], 0)
+
+    def test_prepare_requires_identity_for_exact_tokenizer(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def create_user(name):\n    return name\n", encoding="utf-8"
+            )
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            with self.assertRaisesRegex(ValueError, "tokenizer_id"):
+                DeliveryEngine(root, snapshot).prepare(
+                    "understand create_user",
+                    profile="loop-standalone",
+                    engine_receipt=select_engine("python").receipt(),
+                    tokenizer=lambda text: len(text),
+                )
+
+    def test_context_many_reuses_one_source_read_across_terms(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "service.py"
+            source.write_text(
+                "def create_user(name):\n    return name\n\n"
+                "def validate_user(name):\n    return bool(name)\n",
+                encoding="utf-8",
+            )
+            snapshot_path = root / "project.sfast"
+            build_snapshot(root, snapshot_path)
+            original_read_bytes = Path.read_bytes
+            reads: list[Path] = []
+
+            def counted_read_bytes(path: Path) -> bytes:
+                if path.resolve() == source.resolve():
+                    reads.append(path)
+                return original_read_bytes(path)
+
+            with patch.object(Path, "read_bytes", counted_read_bytes):
+                with Snapshot(snapshot_path) as snapshot:
+                    spans = snapshot.context_many(
+                        root, ("create_user", "validate_user"), max_results=8
+                    )
+            self.assertEqual(2, len(spans))
+            self.assertEqual(1, len(reads))
 
     def test_cache_stats_reports_disposable_cache_size(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

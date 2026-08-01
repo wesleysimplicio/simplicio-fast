@@ -1460,6 +1460,26 @@ class Snapshot:
         max_bytes: int = 32_000,
         max_tokens: int | None = None,
     ) -> list[ContextSpan]:
+        return self.context_many(
+            root,
+            (query,),
+            max_results=max_results,
+            max_lines=max_lines,
+            max_bytes=max_bytes,
+            max_tokens=max_tokens,
+        )
+
+    def context_many(
+        self,
+        root: Path,
+        queries: Iterable[str],
+        *,
+        max_results: int = 10,
+        max_lines: int = 120,
+        max_bytes: int = 32_000,
+        max_tokens: int | None = None,
+    ) -> list[ContextSpan]:
+        """Resolve several queries with one verified source cache per request."""
         if (
             max_results < 1
             or max_lines < 1
@@ -1476,74 +1496,75 @@ class Snapshot:
         # the verified source bytes local to this request so each file is
         # read, decoded and hashed at most once.
         source_cache: dict[str, tuple[bytes, str, list[str]]] = {}
-        for symbol in self.find(query):
-            if len(spans) >= max_results:
-                break
-            if symbol.file not in expected_hashes:
-                raise ValueError(f"symbol references unknown file: {symbol.file}")
-            path = (root / symbol.file).resolve()
-            try:
-                path.relative_to(root)
-            except ValueError as error:
-                raise ValueError(
-                    f"snapshot path escapes root: {symbol.file}"
-                ) from error
-            cached_source = source_cache.get(symbol.file)
-            if cached_source is None:
-                contents = path.read_bytes()
-                actual_hash = hashlib.sha256(contents).digest()
+        for query in queries:
+            for symbol in self.find(query):
+                if len(spans) >= max_results:
+                    return spans
+                if symbol.file not in expected_hashes:
+                    raise ValueError(f"symbol references unknown file: {symbol.file}")
+                path = (root / symbol.file).resolve()
                 try:
-                    lines = contents.decode("utf-8").splitlines()
-                except UnicodeDecodeError as error:
-                    raise ValueError(f"source is not valid UTF-8: {symbol.file}") from error
-                source_cache[symbol.file] = (contents, actual_hash.hex(), lines)
-            else:
-                contents, actual_hash_hex, lines = cached_source
-                actual_hash = bytes.fromhex(actual_hash_hex)
-            if actual_hash != expected_hashes[symbol.file]:
-                raise StaleSnapshotError(
-                    f"source changed after snapshot: {symbol.file}; run simplicio-fast refresh"
-                )
-            start = symbol.line
-            end = min(symbol.end_line, start + max_lines - 1)
-            key = (symbol.file, start, end)
-            if key in seen:
-                continue
-            snippet = "\n".join(lines[start - 1 : end])
-            if consumed + len(snippet.encode("utf-8")) > max_bytes:
-                remaining = max_bytes - consumed
-                if remaining <= 0:
-                    break
-                snippet = snippet.encode("utf-8")[:remaining].decode(
-                    "utf-8", errors="ignore"
-                )
-            encoded_size = len(snippet.encode("utf-8"))
-            tokens = max(1, (encoded_size + 3) // 4) if encoded_size else 0
-            if max_tokens is not None and consumed_tokens + tokens > max_tokens:
-                remaining_tokens = max_tokens - consumed_tokens
-                if remaining_tokens <= 0:
-                    break
-                snippet = snippet.encode("utf-8")[: remaining_tokens * 4].decode(
-                    "utf-8", errors="ignore"
-                )
+                    path.relative_to(root)
+                except ValueError as error:
+                    raise ValueError(
+                        f"snapshot path escapes root: {symbol.file}"
+                    ) from error
+                cached_source = source_cache.get(symbol.file)
+                if cached_source is None:
+                    contents = path.read_bytes()
+                    actual_hash = hashlib.sha256(contents).digest()
+                    try:
+                        lines = contents.decode("utf-8").splitlines()
+                    except UnicodeDecodeError as error:
+                        raise ValueError(f"source is not valid UTF-8: {symbol.file}") from error
+                    source_cache[symbol.file] = (contents, actual_hash.hex(), lines)
+                else:
+                    contents, actual_hash_hex, lines = cached_source
+                    actual_hash = bytes.fromhex(actual_hash_hex)
+                if actual_hash != expected_hashes[symbol.file]:
+                    raise StaleSnapshotError(
+                        f"source changed after snapshot: {symbol.file}; run simplicio-fast refresh"
+                    )
+                start = symbol.line
+                end = min(symbol.end_line, start + max_lines - 1)
+                key = (symbol.file, start, end)
+                if key in seen:
+                    continue
+                snippet = "\n".join(lines[start - 1 : end])
+                if consumed + len(snippet.encode("utf-8")) > max_bytes:
+                    remaining = max_bytes - consumed
+                    if remaining <= 0:
+                        return spans
+                    snippet = snippet.encode("utf-8")[:remaining].decode(
+                        "utf-8", errors="ignore"
+                    )
                 encoded_size = len(snippet.encode("utf-8"))
                 tokens = max(1, (encoded_size + 3) // 4) if encoded_size else 0
-            seen.add(key)
-            consumed += encoded_size
-            consumed_tokens += tokens
-            spans.append(
-                ContextSpan(
-                    symbol.qualified_name,
-                    symbol.kind,
-                    symbol.file,
-                    start,
-                    end,
-                    actual_hash.hex(),
-                    snippet,
-                    symbol.symbol_id,
-                    tokens,
+                if max_tokens is not None and consumed_tokens + tokens > max_tokens:
+                    remaining_tokens = max_tokens - consumed_tokens
+                    if remaining_tokens <= 0:
+                        return spans
+                    snippet = snippet.encode("utf-8")[: remaining_tokens * 4].decode(
+                        "utf-8", errors="ignore"
+                    )
+                    encoded_size = len(snippet.encode("utf-8"))
+                    tokens = max(1, (encoded_size + 3) // 4) if encoded_size else 0
+                seen.add(key)
+                consumed += encoded_size
+                consumed_tokens += tokens
+                spans.append(
+                    ContextSpan(
+                        symbol.qualified_name,
+                        symbol.kind,
+                        symbol.file,
+                        start,
+                        end,
+                        actual_hash.hex(),
+                        snippet,
+                        symbol.symbol_id,
+                        tokens,
+                    )
                 )
-            )
         return spans
 
     def stats(self) -> dict[str, object]:
