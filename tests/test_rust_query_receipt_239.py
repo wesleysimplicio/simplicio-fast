@@ -184,11 +184,17 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         )
         assert result["planner"]["records_decoded"] == 1
         assert session.call("session_cache_stats", {}) == {"snapshots": 1}
+        session.restart()
+        assert session.call(
+            "query", {"snapshot": str(snapshot), "term": "helper", "limit": 1}
+        )["planner"]["records_decoded"] == 1
+        assert session.call("session_cache_stats", {}) == {"snapshots": 1}
         metrics = session.metrics()
-        assert metrics["starts"] == 1
-        assert metrics["requests"] == 2
+        assert metrics["starts"] == 2
+        assert metrics["reconnects"] == 1
+        assert metrics["requests"] == 4
         assert metrics["bytes_in"] > 0
         assert metrics["bytes_out"] > 0
         assert metrics["wall_ms"] >= 0
         assert metrics["mapped_generations"] == 1
-        assert metrics["cache_hits"] == 1
+        assert metrics["cache_hits"] == 2

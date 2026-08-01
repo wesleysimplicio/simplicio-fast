@@ -53,6 +53,15 @@ class RustCoreSession:
         except (OSError, ValueError, RustSessionError) as error:
             self.close()
             raise RustSessionError(f"session_start_failed:{type(error).__name__}") from error
+        try:
+            self._validate_handshake(handshake)
+        except RustSessionError:
+            self.close()
+            raise
+        self.handshake = handshake
+
+    @staticmethod
+    def _validate_handshake(handshake: dict[str, Any]) -> None:
         if (
             handshake.get("schema") != SESSION_SCHEMA
             or handshake.get("abi") != SESSION_SCHEMA
@@ -66,7 +75,6 @@ class RustCoreSession:
             or not isinstance(handshake.get("platform"), str)
             or not isinstance(handshake.get("nonce"), str)
         ):
-            self.close()
             raise RustSessionError("session_handshake_invalid")
         capabilities = handshake.get("capabilities")
         if not isinstance(capabilities, list) or not {
@@ -74,9 +82,7 @@ class RustCoreSession:
             "query",
             "context",
         }.issubset(capabilities):
-            self.close()
             raise RustSessionError("session_capabilities_invalid")
-        self.handshake = handshake
 
     def _readline(self) -> dict[str, Any]:
         line = self._process.stdout.readline() if self._process.stdout else ""
@@ -129,6 +135,32 @@ class RustCoreSession:
         """Return resident-session request counters for benchmark receipts."""
         with self._lock:
             return dict(self._metrics)
+
+    def restart(self) -> None:
+        """Restart the child and require a fresh verified handshake."""
+        with self._lock:
+            self.close()
+            try:
+                self._process = subprocess.Popen(
+                    [self.executable, "--session"],
+                    stdin=subprocess.PIPE,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    text=True,
+                    encoding="utf-8",
+                    bufsize=1,
+                )
+                handshake = self._readline()
+                self._validate_handshake(handshake)
+            except (OSError, ValueError, RustSessionError) as error:
+                self._metrics["failures"] += 1
+                self.close()
+                raise RustSessionError(
+                    f"session_restart_failed:{type(error).__name__}"
+                ) from error
+            self.handshake = handshake
+            self._metrics["starts"] += 1
+            self._metrics["reconnects"] += 1
 
     def close(self) -> None:
         process = getattr(self, "_process", None)
