@@ -77,7 +77,7 @@ def validate_handoff(root: Path, envelope: dict[str, Any]) -> dict[str, Any]:
         raise MapperIngestError("mapper_schema_unsupported")
     if receipt.get("schema") != "simplicio.mapper-fast-handoff-receipt/v1":
         raise MapperIngestError("mapper_schema_unsupported")
-    if receipt.get("status") != "parsed" or not _is_digest(
+    if receipt.get("status") not in {"parsed", "reused"} or not _is_digest(
         receipt.get("handoff_sha256")
     ):
         raise MapperIngestError("mapper_incomplete")
@@ -104,7 +104,7 @@ def validate_handoff(root: Path, envelope: dict[str, Any]) -> dict[str, Any]:
         counters = receipt.get("counters")
         if (
             not isinstance(counters, dict)
-            or counters.get("parsed", 0) < 1
+            or counters.get("parsed", 0) + counters.get("reused", 0) < 1
             or counters.get("degraded", 1) != 0
             or counters.get("fallback", 1) != 0
         ):

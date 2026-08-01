@@ -84,6 +84,23 @@ def test_validates_mapper_owned_handoff_and_artifact_digest(tmp_path: Path) -> N
     assert provenance["generation"] == "g1"
 
 
+def test_accepts_complete_reused_mapper_handoff(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    envelope = _envelope(root, "a" * 40)
+    envelope["receipt"]["status"] = "reused"
+    envelope["receipt"]["counters"] = {
+        "parsed": 0,
+        "reused": 1,
+        "degraded": 0,
+        "fallback": 0,
+    }
+    del envelope["handoff"]["fidelity"]
+    with patch("simplicio_fast.mapper_ingest._head", return_value="a" * 40):
+        provenance = validate_handoff(root, envelope)
+    assert provenance["mode"] == "integrated"
+
+
 def test_tampered_mapper_artifact_fails_closed(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     root.mkdir()
@@ -174,8 +191,12 @@ def test_installed_mapper_handoff_is_accepted(tmp_path: Path) -> None:
     _run_mapper(root, "snapshot", "build", "--root", str(root), json_output=False)
     envelope = _run_mapper(root, "fast-handoff", str(root))
     provenance = validate_handoff(root, envelope)
+    reused_envelope = _run_mapper(root, "fast-handoff", str(root))
+    reused_provenance = validate_handoff(root, reused_envelope)
 
     assert provenance["mode"] == "integrated"
     assert provenance["producer"]["name"] == "simplicio-mapper"
     assert provenance["commit"]
     assert len(provenance["artifacts"]) >= 3
+    assert reused_envelope["receipt"]["status"] == "reused"
+    assert reused_provenance["generation"] == provenance["generation"]
