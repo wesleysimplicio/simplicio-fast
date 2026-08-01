@@ -371,6 +371,17 @@ def build_parser() -> argparse.ArgumentParser:
     delivery.add_argument(
         "--profile", choices=("full", "loop-standalone"), default="loop-standalone"
     )
+    delivery.add_argument(
+        "--mapper-mode",
+        choices=("bootstrap", "integrated"),
+        default="bootstrap",
+        help="context producer mode; integrated requires a validated Mapper handoff",
+    )
+    delivery.add_argument(
+        "--mapper-handoff",
+        default=None,
+        help="JSON file emitted by `simplicio-mapper fast-handoff`",
+    )
     delivery.add_argument("--max-bytes", type=int, default=32_000)
     delivery.add_argument(
         "--changeset", default=None, help="optional simplicio.fast.changeset/v2 JSON"
@@ -718,6 +729,14 @@ def main() -> None:
                         args.task,
                         profile=args.profile,
                         engine_receipt=selection.receipt(),
+                        mode=args.mapper_mode,
+                        mapper_handoff=(
+                            json.loads(
+                                Path(args.mapper_handoff).read_text(encoding="utf-8")
+                            )
+                            if args.mapper_handoff
+                            else None
+                        ),
                     )
                 )
         elif args.command == "changeset":

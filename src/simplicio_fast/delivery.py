@@ -17,6 +17,7 @@ from typing import Any
 
 from . import __version__
 from .integrations import run_runtime_effect_transaction
+from .mapper_ingest import MapperIngestError, validate_handoff
 from .processor import ProjectProcessor
 from .snapshot import Snapshot, build_snapshot
 
@@ -80,12 +81,35 @@ class DeliveryEngine:
         }
 
     def prepare(
-        self, task: str, *, profile: str, engine_receipt: dict[str, Any]
+        self,
+        task: str,
+        *,
+        profile: str,
+        engine_receipt: dict[str, Any],
+        mode: str = "bootstrap",
+        mapper_handoff: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         started = time.perf_counter_ns()
         if profile not in PROFILE_NAMES:
             raise ValueError(f"unsupported delivery profile: {profile}")
+        if mode not in {"bootstrap", "integrated"}:
+            raise ValueError(f"unsupported mapper mode: {mode}")
+        mapper_provenance: dict[str, Any]
+        if mode == "integrated":
+            if mapper_handoff is None:
+                raise MapperIngestError("mapper_missing")
+            mapper_provenance = validate_handoff(self.root, mapper_handoff)
+        else:
+            mapper_provenance = {
+                "schema": "simplicio.fast.mapper-ingest/v1",
+                "mode": "bootstrap",
+                "producer": "simplicio-fast-python-bootstrap",
+                "generation": None,
+                "handle": None,
+            }
         if not self.snapshot.is_file():
+            if mode == "integrated":
+                raise MapperIngestError("bootstrap_not_allowed")
             build_snapshot(self.root, self.snapshot)
         commit, commit_reason = _source_commit(self.root)
         with Snapshot(self.snapshot) as snapshot:
@@ -144,7 +168,10 @@ class DeliveryEngine:
                 "overlay_generation": None,
                 "mapper": {
                     "schema": "simplicio.mapper-context/v1",
-                    "handle": snapshot.generation,
+                    "mode": mode,
+                    "producer": mapper_provenance["producer"],
+                    "generation": mapper_provenance.get("generation"),
+                    "handle": mapper_provenance.get("handle"),
                 },
                 "budgets": {"context_bytes": 32_000, "context_tokens": 8_000},
                 "context": {
