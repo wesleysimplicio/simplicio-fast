@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -16,6 +17,14 @@ from benchmarks.compare_fast import run as run_comparison
 
 SCHEMA = "simplicio.fast.issue246-benchmark/v1"
 DEFAULT_SIZES = (10_000, 100_000, 1_000_000)
+
+
+def _default_rust_executable() -> Path | None:
+    """Find the checked-out debug Rust core for reproducible local runs."""
+    root = Path(__file__).parents[1].resolve()
+    name = "simplicio-fast-rs.exe" if os.name == "nt" else "simplicio-fast-rs"
+    candidate = root / "rust" / "target" / "debug" / name
+    return candidate if candidate.is_file() else None
 
 
 def _shape(symbols: int) -> tuple[int, int]:
@@ -109,11 +118,13 @@ def main() -> int:
     parser.add_argument("--resident-executable", type=Path)
     parser.add_argument("--json-out", type=Path)
     args = parser.parse_args()
+    rust_executable = args.rust_executable or _default_rust_executable()
+    resident_executable = args.resident_executable or rust_executable
     receipt = run_matrix(
         sizes=(int(value) for value in args.sizes.split(",")),
         repetitions=args.repetitions,
-        rust_executable=args.rust_executable,
-        resident_executable=args.resident_executable,
+        rust_executable=rust_executable,
+        resident_executable=resident_executable,
     )
     rendered = json.dumps(receipt, indent=2, sort_keys=True)
     if args.json_out:
