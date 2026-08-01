@@ -86,6 +86,7 @@ def _measure(binary: Path, snapshot: Path, root: Path) -> dict[str, Any]:
         warm = session.call(
             "query", {"snapshot": str(snapshot), "term": "value_0", "limit": 10}
         )
+        baseline_rss = _rss_kib(session._process.pid)
         samples: list[float] = []
         decoded: list[int] = []
         rss: list[int] = []
@@ -110,6 +111,12 @@ def _measure(binary: Path, snapshot: Path, root: Path) -> dict[str, Any]:
             "candidates_visited": int(planner["candidates_visited"]),
             "selected_index": planner["selected_index"],
             "rss_kib_max": max(rss) if rss else None,
+            "rss_additional_kib_max": (
+                max(max(0, value - baseline_rss) for value in rss)
+                if rss and baseline_rss is not None
+                else None
+            ),
+            "rss_baseline_kib": baseline_rss,
             "rss_reason": None if rss else "process_rss_unavailable",
             "matches": len(warm["matches"]),
             "root": str(root),
@@ -141,6 +148,11 @@ def run(binary: Path | None = None, *, scales: tuple[int, ...] = (10_000, 100_00
         ),
         "indexed_candidates_bounded": all(
             value["records_decoded_max"] <= 10 for value in results.values()
+        ),
+        "query_additional_rss_le_8_mib": all(
+            value["rss_additional_kib_max"] is not None
+            and value["rss_additional_kib_max"] <= 8 * 1024
+            for value in results.values()
         ),
     }
     return {
