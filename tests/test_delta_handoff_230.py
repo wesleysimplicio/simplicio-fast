@@ -72,6 +72,20 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             self.assertGreater(report["mapped_bytes"], 0)
             self.assertGreaterEqual(report["cpu_ms"], 0)
 
+    def test_explicit_changed_paths_do_not_scan_the_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            (root / "one.py").write_text(
+                "def one():\n    return 10\n", encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.delta.source_files",
+                side_effect=AssertionError("explicit delta scanned the repository"),
+            ):
+                delta = store.create_delta(base.generation_id, "scoped", ["one.py"])
+            self.assertEqual(["one.py"], sorted(delta.changed))
+
     def test_repeated_identical_delta_is_content_addressed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, store = self._store(directory)
