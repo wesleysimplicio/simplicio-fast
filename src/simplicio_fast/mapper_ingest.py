@@ -20,6 +20,14 @@ class MapperIngestError(ValueError):
         super().__init__(f"{reason_code}: {detail}" if detail else reason_code)
 
 
+def _is_digest(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
 def _sha256(path: Path) -> tuple[str, int]:
     digest = hashlib.sha256()
     size = 0
@@ -69,13 +77,28 @@ def validate_handoff(root: Path, envelope: dict[str, Any]) -> dict[str, Any]:
         raise MapperIngestError("mapper_schema_unsupported")
     if receipt.get("schema") != "simplicio.mapper-fast-handoff-receipt/v1":
         raise MapperIngestError("mapper_schema_unsupported")
-    if receipt.get("status") != "parsed" or receipt.get("handoff_sha256") is None:
+    if receipt.get("status") != "parsed" or not _is_digest(
+        receipt.get("handoff_sha256")
+    ):
         raise MapperIngestError("mapper_incomplete")
     if handoff.get("repository_id") != root.name:
         raise MapperIngestError("mapper_repository_mismatch")
     revision = handoff.get("revision")
     if revision != _head(root):
         raise MapperIngestError("mapper_commit_mismatch")
+    generation = handoff.get("generation")
+    if not isinstance(generation, str) or not generation.strip():
+        raise MapperIngestError("mapper_generation_stale")
+    producer = handoff.get("producer")
+    if producer is not None and (
+        not isinstance(producer, dict)
+        or producer.get("name") not in {None, "simplicio-mapper"}
+        or (
+            producer.get("version") is not None
+            and not isinstance(producer.get("version"), str)
+        )
+    ):
+        raise MapperIngestError("mapper_schema_unsupported")
     fidelity = handoff.get("fidelity")
     if not isinstance(fidelity, dict):
         counters = receipt.get("counters")
@@ -97,7 +120,16 @@ def validate_handoff(root: Path, envelope: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(artifact, dict):
             raise MapperIngestError("mapper_schema_unsupported")
         relative = artifact.get("path")
-        if not isinstance(relative, str):
+        if (
+            not isinstance(relative, str)
+            or not relative
+            or Path(relative).is_absolute()
+            or ".." in Path(relative).parts
+            or not isinstance(artifact.get("bytes"), int)
+            or isinstance(artifact.get("bytes"), bool)
+            or artifact.get("bytes") < 0
+            or not _is_digest(artifact.get("sha256"))
+        ):
             raise MapperIngestError("mapper_schema_unsupported")
         path = (root / relative).resolve()
         if not path.is_relative_to(root.resolve()) or not path.is_file():
@@ -117,7 +149,7 @@ def validate_handoff(root: Path, envelope: dict[str, Any]) -> dict[str, Any]:
         },
         "repository_id": handoff["repository_id"],
         "commit": revision,
-        "generation": handoff.get("generation"),
+        "generation": generation,
         "fidelity": fidelity,
         "handoff_sha256": receipt["handoff_sha256"],
         "artifacts": checked,

@@ -43,7 +43,7 @@ def _run_mapper(
 
 def _envelope(root: Path, commit: str) -> dict[str, object]:
     artifact = root / ".simplicio" / "context-snapshot.json"
-    artifact.parent.mkdir()
+    artifact.parent.mkdir(exist_ok=True)
     artifact.write_text(
         '{"schema":"simplicio.context-snapshot/v1"}\n', encoding="utf-8"
     )
@@ -93,6 +93,33 @@ def test_tampered_mapper_artifact_fails_closed(tmp_path: Path) -> None:
     artifact.write_text('{"tampered":true}\n', encoding="utf-8")
     with patch("simplicio_fast.mapper_ingest._head", return_value="a" * 40):
         with pytest.raises(MapperIngestError, match="mapper_digest_mismatch"):
+            validate_handoff(root, envelope)
+
+
+def test_missing_generation_and_malformed_receipt_digest_fail_closed(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    envelope = _envelope(root, "a" * 40)
+    envelope["handoff"]["generation"] = ""
+    with patch("simplicio_fast.mapper_ingest._head", return_value="a" * 40):
+        with pytest.raises(MapperIngestError, match="mapper_generation_stale"):
+            validate_handoff(root, envelope)
+    envelope = _envelope(root, "a" * 40)
+    envelope["receipt"]["handoff_sha256"] = "not-a-digest"
+    with patch("simplicio_fast.mapper_ingest._head", return_value="a" * 40):
+        with pytest.raises(MapperIngestError, match="mapper_incomplete"):
+            validate_handoff(root, envelope)
+
+
+def test_artifact_metadata_is_validated_before_filesystem_use(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    envelope = _envelope(root, "a" * 40)
+    envelope["handoff"]["artifacts"][0]["sha256"] = "short"
+    with patch("simplicio_fast.mapper_ingest._head", return_value="a" * 40):
+        with pytest.raises(MapperIngestError, match="mapper_schema_unsupported"):
             validate_handoff(root, envelope)
 
 
