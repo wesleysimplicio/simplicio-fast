@@ -35,3 +35,18 @@ def test_matrix_preserves_raw_receipts_and_marks_partial(
 def test_matrix_requires_ten_repetitions() -> None:
     with pytest.raises(ValueError, match="at least 10"):
         issue246_matrix.run_matrix(sizes=(10_000,), repetitions=9)
+
+
+def test_matrix_preserves_comparison_failure_as_blocked_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_run(**_: object) -> dict[str, object]:
+        raise RuntimeError("snapshot_too_large size=550910038")
+
+    monkeypatch.setattr(issue246_matrix, "run_comparison", fail_run)
+    receipt = issue246_matrix.run_matrix(sizes=(1_000_000,), repetitions=10)
+    cell = receipt["raw_runs"][0]["receipt"]
+    assert receipt["status"] == "partial"
+    assert cell["status"] == "blocked"
+    assert cell["error"]["type"] == "RuntimeError"
+    assert "snapshot_too_large" in cell["error"]["message"]

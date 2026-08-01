@@ -45,12 +45,26 @@ def run_matrix(
     raw: list[dict[str, Any]] = []
     for symbols in requested_sizes:
         files, functions = _shape(symbols)
-        receipt = run_comparison(
-            files=files,
-            functions=functions,
-            repetitions=repetitions,
-            rust_executable=rust_executable,
-        )
+        try:
+            receipt = run_comparison(
+                files=files,
+                functions=functions,
+                repetitions=repetitions,
+                rust_executable=rust_executable,
+            )
+        except Exception as error:  # noqa: BLE001 - preserve a fail-closed receipt
+            receipt = {
+                "status": "blocked",
+                "reason": "comparison_failed",
+                "error": {
+                    "type": type(error).__name__,
+                    "message": str(error),
+                },
+                "claims": {
+                    "speed": "unavailable",
+                    "tokens": "unavailable",
+                },
+            }
         raw.append(
             {
                 "requested_symbols": symbols,
