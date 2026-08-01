@@ -51,6 +51,7 @@ def run_matrix(
                 functions=functions,
                 repetitions=repetitions,
                 rust_executable=rust_executable,
+                compact_symbols=symbols >= 1_000_000,
             )
         except Exception as error:  # noqa: BLE001 - preserve a fail-closed receipt
             receipt = {
