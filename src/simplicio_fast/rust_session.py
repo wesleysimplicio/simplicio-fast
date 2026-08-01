@@ -44,8 +44,16 @@ class RustCoreSession:
             raise RustSessionError(f"session_start_failed:{type(error).__name__}") from error
         if (
             handshake.get("schema") != SESSION_SCHEMA
+            or handshake.get("abi") != SESSION_SCHEMA
             or handshake.get("engine") != "rust"
             or handshake.get("status") != "ready"
+            or not isinstance(handshake.get("engine_version"), str)
+            or not isinstance(handshake.get("schemas"), list)
+            or not isinstance(handshake.get("binary_digest"), str)
+            or not isinstance(handshake.get("source_commit"), str)
+            or not isinstance(handshake.get("conformance_digest"), str)
+            or not isinstance(handshake.get("platform"), str)
+            or not isinstance(handshake.get("nonce"), str)
         ):
             self.close()
             raise RustSessionError("session_handshake_invalid")

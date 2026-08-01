@@ -1,4 +1,5 @@
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use simplicio_fast_core::{manifest, SegmentReader, SegmentWriter, SnapshotReader};
 use std::{
     collections::HashMap,
@@ -126,16 +127,44 @@ fn session_execute(
     }
 }
 
+fn hex_digest(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn session_handshake() -> Value {
+    let binary_digest = env::current_exe()
+        .ok()
+        .and_then(|path| std::fs::read(path).ok())
+        .map(|bytes| format!("sha256:{}", hex_digest(Sha256::digest(&bytes).as_slice())))
+        .unwrap_or_else(|| "unavailable:current-exe".to_owned());
+    let metadata = manifest();
+    let conformance = &metadata["conformance"];
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos().to_string())
+        .unwrap_or_else(|_| "0".to_owned());
+    serde_json::json!({
+        "schema": "simplicio.fast.engine-session/v1",
+        "abi": "simplicio.fast.engine-session/v1",
+        "engine": "rust",
+        "engine_version": env!("CARGO_PKG_VERSION"),
+        "status": "ready",
+        "schemas": ["simplicio.fast.engine-session/v1", "simplicio.fast.context/v1", "simplicio.fast.stats/v1"],
+        "capabilities": ["stats", "query", "context", "session_cache_stats"],
+        "binary_digest": binary_digest,
+        "source_commit": conformance["source_commit"],
+        "conformance_digest": conformance["digest"],
+        "platform": format!("{}-{}", env::consts::OS, env::consts::ARCH),
+        "nonce": nonce,
+        "transport": "stdio-lines"
+    })
+}
+
 fn run_session() -> ExitCode {
     let stdin = io::stdin();
     let mut stdout = io::BufWriter::new(io::stdout().lock());
     let mut snapshots = HashMap::new();
-    let handshake = serde_json::json!({
-        "schema": "simplicio.fast.engine-session/v1",
-        "engine": "rust",
-        "status": "ready",
-        "capabilities": ["stats", "query", "context", "session_cache_stats"],
-    });
+    let handshake = session_handshake();
     if writeln!(stdout, "{}", handshake).is_err() || stdout.flush().is_err() {
         return ExitCode::from(1);
     }

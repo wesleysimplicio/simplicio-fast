@@ -41,6 +41,14 @@ def _run_session(executable: Path, requests: list[dict[str, object]]) -> list[di
     assert process.stdin is not None and process.stdout is not None
     handshake = json.loads(process.stdout.readline())
     assert handshake["schema"] == "simplicio.fast.engine-session/v1"
+    assert handshake["abi"] == handshake["schema"]
+    assert handshake["engine_version"]
+    assert "simplicio.fast.context/v1" in handshake["schemas"]
+    assert handshake["binary_digest"].startswith("sha256:")
+    assert handshake["source_commit"]
+    assert handshake["conformance_digest"].startswith("sha256:")
+    assert handshake["platform"]
+    assert handshake["nonce"]
     responses = []
     for request in requests:
         process.stdin.write(json.dumps(request) + "\n")
