@@ -27,6 +27,27 @@ DEFAULT_LIMITS = {
 }
 
 
+def adapter_capability() -> dict[str, Any]:
+    """Return the versioned, deterministic capability receipt for this adapter."""
+
+    contract = {
+        "schema": SCHEMA,
+        "producer": "simplicio-fast-python-adapter",
+        "limits": DEFAULT_LIMITS,
+        "modes": sorted(SUPPORTED_MODES),
+    }
+    return {
+        "schema": SCHEMA,
+        "producer": contract["producer"],
+        "version": "1",
+        "health": "ready",
+        "completeness": "contract",
+        "modes": contract["modes"],
+        "fingerprints": {"contract_sha256": _digest(contract)},
+        "limits": dict(DEFAULT_LIMITS),
+    }
+
+
 class ParserAdapterError(ValueError):
     def __init__(self, reason_code: str, detail: str = "") -> None:
         self.reason_code = reason_code

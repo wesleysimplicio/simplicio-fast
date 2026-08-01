@@ -8,6 +8,7 @@ from pathlib import Path
 
 from . import __version__
 from .processor import ProjectProcessor, load_changeset
+from .parser_adapter import adapter_capability
 from .rollout import RolloutController
 from .snapshot import (
     DEFAULT_BUILD_TIMEOUT_SECONDS,
@@ -956,8 +957,14 @@ def main() -> None:
             from .integrations import integration_status
 
             integration = integration_status()
+            parser_adapter = adapter_capability()
             checks: list[dict[str, object]] = [
                 {"name": "python", "status": "pass", "detail": sys.version.split()[0]},
+                {
+                    "name": "parser_adapter",
+                    "status": "pass" if parser_adapter["health"] == "ready" else "fail",
+                    "detail": parser_adapter,
+                },
                 {
                     "name": "snapshot_exists",
                     "status": "pass" if path.is_file() else "fail",
@@ -999,6 +1006,7 @@ def main() -> None:
                     "ready": integrated_ready,
                     "integrated_ready": integrated_ready,
                     "integration": integration,
+                    "parser_adapter": parser_adapter,
                     "checks": checks,
                 }
             )
@@ -1127,13 +1135,7 @@ def main() -> None:
                     "engine": selection.receipt(),
                     "engine_manifest": selection.manifest,
                     "capabilities": [asdict(item) for item in capability_report()],
-                    "parser_adapter": {
-                        "schema": "simplicio.fast.parser-adapter/v1",
-                        "producer": "simplicio-fast-python-adapter",
-                        "modes": ["bootstrap", "integrated"],
-                        "bootstrap_status": "available",
-                        "integrated_status": "mapper_required",
-                    },
+                    "parser_adapter": adapter_capability(),
                     "semantic_scoring": semantic_capabilities(),
                 }
             )
