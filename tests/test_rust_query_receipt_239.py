@@ -28,6 +28,28 @@ def _run_json(executable: Path, *args: str) -> dict[str, object]:
         return json.loads(stdout.read_text(encoding="utf-8"))
 
 
+def _run_session(executable: Path, requests: list[dict[str, object]]) -> list[dict[str, object]]:
+    process = subprocess.Popen(
+        [str(executable), "--session"],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert process.stdin is not None and process.stdout is not None
+    handshake = json.loads(process.stdout.readline())
+    assert handshake["schema"] == "simplicio.fast.engine-session/v1"
+    responses = []
+    for request in requests:
+        process.stdin.write(json.dumps(request) + "\n")
+        process.stdin.flush()
+        responses.append(json.loads(process.stdout.readline()))
+    process.stdin.close()
+    process.wait(timeout=10)
+    assert process.returncode == 0
+    return responses
+
+
 def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> None:
     cargo = shutil.which("cargo")
     if cargo is None:
@@ -118,3 +140,20 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
     assert second_page["matches"]
     assert second_page["matches"][0]["file"] != first_page["matches"][0]["file"]
     assert second_page["planner"]["records_decoded"] == 1
+
+    session_responses = _run_session(
+        executable,
+        [
+            {
+                "operation": "query",
+                "payload": {"snapshot": str(snapshot), "term": "helper", "limit": 1},
+            },
+            {
+                "operation": "query",
+                "payload": {"snapshot": str(snapshot), "term": "help", "limit": 1},
+            },
+            {"operation": "session_cache_stats", "payload": {}},
+        ],
+    )
+    assert session_responses[0]["ok"] and session_responses[1]["ok"]
+    assert session_responses[2] == {"ok": True, "result": {"snapshots": 1}}
