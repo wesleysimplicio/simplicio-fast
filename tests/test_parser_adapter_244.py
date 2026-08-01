@@ -29,7 +29,8 @@ def _mapper_fixture(root: Path) -> tuple[dict[str, object], dict[str, dict[str, 
                     {
                         "id": "symbol:service.rs::resolve",
                         "source": {"file": "service.rs", "line": 1},
-                    }
+                    },
+                    {"id": "file:service.rs", "source": {"file": "service.rs"}},
                 ]
             },
         },

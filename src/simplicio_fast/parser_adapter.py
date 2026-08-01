@@ -161,6 +161,7 @@ def build_payload_from_mapper(
     ignored_paths = _git_ignored(root, candidate_paths)
     files: list[dict[str, Any]] = []
     file_languages: dict[str, str] = {}
+    diagnostics: list[dict[str, Any]] = []
     for item in raw_files:
         if not isinstance(item, dict) or not isinstance(item.get("path"), str):
             raise ParserAdapterError("mapper_files_invalid")
@@ -186,8 +187,23 @@ def build_payload_from_mapper(
         declared_digest = item.get("file_hash")
         if declared_digest not in {raw_digest, normalized_digest}:
             raise ParserAdapterError("source_digest_mismatch", relative)
+        file_id = f"file:{relative}"
+        file_node = mapper_nodes.get(file_id)
+        file_id_value = file_node.get("id") if isinstance(file_node, dict) else None
+        file_record: dict[str, Any] = {
+            "path": relative,
+            "language": language,
+            "sha256": declared_digest,
+            "encoding": "utf-8",
+        }
+        if isinstance(file_id_value, str):
+            file_record["id"] = file_id_value
+        else:
+            diagnostics.append(
+                {"path": relative, "code": "mapper_file_id_missing", "detail": file_id}
+            )
         files.append(
-            {"path": relative, "language": language, "sha256": declared_digest, "encoding": "utf-8"}
+            file_record
         )
         file_languages[relative] = language
     if len(files) > selected_limits["max_files"]:
@@ -197,7 +213,6 @@ def build_payload_from_mapper(
         raise ParserAdapterError("mapper_symbols_missing")
     symbols: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
-    diagnostics: list[dict[str, Any]] = []
     for item in raw_symbols:
         if not isinstance(item, dict):
             raise ParserAdapterError("mapper_symbols_invalid")
