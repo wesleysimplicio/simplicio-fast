@@ -1,5 +1,11 @@
+use serde_json::Value;
 use simplicio_fast_core::{manifest, SegmentReader, SegmentWriter, SnapshotReader};
-use std::{env, process::ExitCode};
+use std::{
+    collections::HashMap,
+    env,
+    io::{self, BufRead, Write},
+    process::ExitCode,
+};
 
 fn print_help() {
     println!("simplicio-fast-rs — Rust snapshot and segment engine");
@@ -11,8 +17,148 @@ fn print_help() {
     println!("  simplicio-fast-rs --context <snapshot.sfast> <repo> <term> [--limit <positive>] [--max-lines <positive>] [--max-bytes <positive>] [--max-tokens <positive>]");
     println!("  simplicio-fast-rs --publish-segments <snapshot.sfast> <directory>");
     println!("  simplicio-fast-rs --segment <directory> <name>");
+    println!("  simplicio-fast-rs --session");
     println!();
     println!("Use --help or -h to show this message.");
+}
+
+fn session_snapshot<'a>(
+    snapshots: &'a mut HashMap<String, SnapshotReader>,
+    path: &str,
+) -> Result<&'a SnapshotReader, String> {
+    if !snapshots.contains_key(path) {
+        let reader = SnapshotReader::open(path).map_err(|error| error.to_string())?;
+        snapshots.insert(path.to_owned(), reader);
+    }
+    snapshots
+        .get(path)
+        .ok_or_else(|| "session_snapshot_missing".to_owned())
+}
+
+fn session_execute(
+    request: &Value,
+    snapshots: &mut HashMap<String, SnapshotReader>,
+) -> Result<Value, String> {
+    let operation = request
+        .get("operation")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "operation_missing".to_owned())?;
+    let payload = request
+        .get("payload")
+        .ok_or_else(|| "payload_missing".to_owned())?;
+    match operation {
+        "stats" => {
+            let snapshot = payload
+                .get("snapshot")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "snapshot_missing".to_owned())?;
+            Ok(serde_json::json!({"stats": session_snapshot(snapshots, snapshot)?.stats()}))
+        }
+        "query" => {
+            let snapshot = payload
+                .get("snapshot")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "snapshot_missing".to_owned())?;
+            let term = payload
+                .get("term")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "term_missing".to_owned())?;
+            let path = payload.get("path").and_then(Value::as_str);
+            let kind = payload.get("kind").and_then(Value::as_str);
+            let limit = payload.get("limit").and_then(Value::as_u64).unwrap_or(50) as usize;
+            let cursor = payload
+                .get("cursor")
+                .and_then(Value::as_u64)
+                .map(|value| value as usize);
+            let receipt = session_snapshot(snapshots, snapshot)?
+                .query_filtered_after(term, path, kind, limit, cursor)
+                .map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({
+                "matches": receipt.matches,
+                "planner": {
+                    "selected_index": receipt.selected_index,
+                    "candidates_visited": receipt.candidates_visited,
+                    "records_decoded": receipt.records_decoded,
+                    "next_cursor": receipt.next_cursor,
+                }
+            }))
+        }
+        "context" => {
+            let snapshot = payload
+                .get("snapshot")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "snapshot_missing".to_owned())?;
+            let root = payload
+                .get("root")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "root_missing".to_owned())?;
+            let term = payload
+                .get("term")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "term_missing".to_owned())?;
+            let number = |name: &str, default: usize| {
+                payload
+                    .get(name)
+                    .and_then(Value::as_u64)
+                    .unwrap_or(default as u64) as usize
+            };
+            let receipt = session_snapshot(snapshots, snapshot)?
+                .context_with_receipt(
+                    std::path::Path::new(root),
+                    term,
+                    number("limit", 10),
+                    number("max_lines", 120) as u32,
+                    number("max_bytes", 32_000),
+                    number("max_tokens", 8_000),
+                )
+                .map_err(|error| error.to_string())?;
+            Ok(serde_json::json!({
+                "spans": receipt.spans,
+                "planner": {
+                    "source_files_read": receipt.source_files_read,
+                    "source_cache_hits": receipt.source_cache_hits,
+                    "source_bytes_read": receipt.source_bytes_read,
+                }
+            }))
+        }
+        "session_cache_stats" => Ok(serde_json::json!({"snapshots": snapshots.len()})),
+        _ => Err("operation_unsupported".to_owned()),
+    }
+}
+
+fn run_session() -> ExitCode {
+    let stdin = io::stdin();
+    let mut stdout = io::BufWriter::new(io::stdout().lock());
+    let mut snapshots = HashMap::new();
+    let handshake = serde_json::json!({
+        "schema": "simplicio.fast.engine-session/v1",
+        "engine": "rust",
+        "status": "ready",
+        "capabilities": ["stats", "query", "context", "session_cache_stats"],
+    });
+    if writeln!(stdout, "{}", handshake).is_err() || stdout.flush().is_err() {
+        return ExitCode::from(1);
+    }
+    for line in stdin.lock().lines() {
+        let line = match line {
+            Ok(line) if line.len() <= 1_048_576 => line,
+            _ => {
+                let _ = writeln!(stdout, "{{\"ok\":false,\"reason\":\"frame_invalid\"}}");
+                continue;
+            }
+        };
+        let response = match serde_json::from_str::<Value>(&line) {
+            Ok(request) => match session_execute(&request, &mut snapshots) {
+                Ok(result) => serde_json::json!({"ok": true, "result": result}),
+                Err(reason) => serde_json::json!({"ok": false, "reason": reason}),
+            },
+            Err(_) => serde_json::json!({"ok": false, "reason": "frame_invalid"}),
+        };
+        if writeln!(stdout, "{}", response).is_err() || stdout.flush().is_err() {
+            return ExitCode::from(1);
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 fn main() -> ExitCode {
@@ -24,6 +170,9 @@ fn main() -> ExitCode {
     if args.iter().any(|arg| arg == "--version") {
         println!("{}", manifest());
         return ExitCode::SUCCESS;
+    }
+    if args.iter().any(|arg| arg == "--session") {
+        return run_session();
     }
     if let Some(index) = args.iter().position(|arg| arg == "--query") {
         let Some(path) = args.get(index + 1) else {
