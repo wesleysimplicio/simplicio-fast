@@ -136,6 +136,8 @@ def build_payload_from_mapper(
         language = item.get("language")
         if not isinstance(language, str) or not language:
             raise ParserAdapterError("mapper_language_missing", relative)
+        if language not in set(SUPPORTED_EXTENSIONS.values()):
+            continue
         path = root / relative
         if not path.is_file():
             raise ParserAdapterError("source_missing", relative)
@@ -159,6 +161,7 @@ def build_payload_from_mapper(
         raise ParserAdapterError("mapper_symbols_missing")
     symbols: list[dict[str, Any]] = []
     seen_ids: set[str] = set()
+    diagnostics: list[dict[str, Any]] = []
     for item in raw_symbols:
         if not isinstance(item, dict):
             raise ParserAdapterError("mapper_symbols_invalid")
@@ -180,9 +183,15 @@ def build_payload_from_mapper(
         node = mapper_nodes.get(symbol_id)
         source = node.get("source") if isinstance(node, dict) else None
         if not isinstance(source, dict) or source.get("file") != relative or source.get("line") != line:
-            raise ParserAdapterError("mapper_id_missing", qualified)
+            diagnostics.append(
+                {"path": relative, "code": "mapper_id_missing", "detail": qualified}
+            )
+            continue
         if symbol_id in seen_ids:
-            raise ParserAdapterError("symbol_id_collision", symbol_id)
+            diagnostics.append(
+                {"path": relative, "code": "mapper_symbol_ambiguous", "detail": qualified}
+            )
+            continue
         seen_ids.add(symbol_id)
         symbols.append(
             {
@@ -199,6 +208,8 @@ def build_payload_from_mapper(
         )
     if len(symbols) > selected_limits["max_symbols"]:
         raise ParserAdapterError("symbol_limit_exceeded")
+    if raw_symbols and not symbols:
+        raise ParserAdapterError("mapper_id_missing")
     symbol_ids = {item["qualified_name"]: item["id"] for item in symbols}
     raw_edges = calls_doc.get("edges")
     if not isinstance(raw_edges, list):
@@ -214,7 +225,14 @@ def build_payload_from_mapper(
         origin_id = symbol_ids.get(origin)
         destination_id = symbol_ids.get(destination)
         if origin_id is None or destination_id is None:
-            raise ParserAdapterError("mapper_relation_id_missing")
+            diagnostics.append(
+                {
+                    "path": edge.get("source_file", ""),
+                    "code": "mapper_relation_id_missing",
+                    "detail": f"{origin}->{destination}",
+                }
+            )
+            continue
         confidence = edge.get("confidence")
         if not isinstance(confidence, (int, float)) or isinstance(confidence, bool) or not 0 <= confidence <= 1:
             raise ParserAdapterError("mapper_relation_confidence_invalid")
@@ -251,13 +269,15 @@ def build_payload_from_mapper(
         "files": files,
         "symbols": symbols,
         "relations": relations,
-        "diagnostics": [],
-        "completeness": "complete",
+        "diagnostics": diagnostics,
+        "completeness": "complete" if not diagnostics else "partial",
         "invalidation": {
             "schema": "simplicio.fast.parser-invalidation/v1",
             "requested_paths": changed_paths,
             "parsed_paths": changed_paths or [item["path"] for item in files],
-            "reused_paths": [] if changed_paths else [item["path"] for item in files],
+            "reused_paths": [item["path"] for item in files if item["path"] not in changed_paths]
+            if changed_paths
+            else [],
             "deleted_paths": [],
             "reason_codes": ["mapper_delta" if changed_paths else "mapper_full_snapshot"],
         },
