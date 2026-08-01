@@ -418,8 +418,14 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 "parsed_bytes_median",
                 "reused_bytes_median",
                 "mapped_bytes_median",
-            ):
+                ):
                 self.assertIn(field, summary)
+            if category in {"unchanged", "one_file"}:
+                for row in receipt["categories"][category]["raw"]:
+                    self.assertIsInstance(row["stage_timings_ms"], dict)
+                    self.assertIn(
+                        "base_validation_and_open", row["stage_timings_ms"]
+                    )
         self.assertEqual("complete", receipt["environment"]["metrics_status"])
 
     def test_scoped_handoff_does_not_materialize_composed_symbols(self) -> None:

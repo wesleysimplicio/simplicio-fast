@@ -186,6 +186,7 @@ def _run_category(
                     "reused_bytes": sum(sizes.values()),
                     "mapped_bytes": base_mapped_bytes,
                     "parity": count == files,
+                    "stage_timings_ms": None,
                 }
             )
             rows.append(sample)
@@ -234,6 +235,7 @@ def _run_category(
                 "reused_bytes": expected_reused_bytes,
                 "mapped_bytes": base_mapped_bytes,
                 "parity": bool(report["parity"]),
+                "stage_timings_ms": report.get("stage_timings_ms"),
             }
         )
         if (
