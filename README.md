@@ -311,6 +311,25 @@ make the decision from those spans, and return a versioned changeset for guarded
 7. Runtime authorizes effects and Loop validates/converges.
 8. Fast incrementally refreshes changed files.
 
+### Integrated delivery versus bootstrap
+
+The production delivery path is explicit and Mapper-owned. Produce the Mapper handoff first, then pass it to Fast:
+
+```bash
+simplicio-mapper snapshot build --root .
+simplicio-mapper fast-handoff . > mapper-handoff.json
+simplicio-fast build . --output fast.sfast
+simplicio-fast delivery "implement the requested change" --root . --snapshot fast.sfast --mapper-mode integrated --mapper-handoff mapper-handoff.json
+```
+
+Integrated delivery fails closed when the handoff is absent, stale, incomplete or incompatible. The Python snapshot extractor is only an explicit development fallback:
+
+```bash
+simplicio-fast delivery "diagnose locally" --root . --snapshot fast.sfast --mapper-mode bootstrap
+```
+
+Receipts record the producer, mode, Mapper generation and stable handles; bootstrap output is never labeled as integrated production context.
+
 Version 2.0.18 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
 `query` and the CRUD proof. Internal mapping/editing remain bootstrap fallbacks when integrations
 are absent; `doctor` identifies whether the complete integrated path is ready.
