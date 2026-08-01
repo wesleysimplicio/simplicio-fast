@@ -413,6 +413,28 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 self.assertIn(field, summary)
         self.assertEqual("complete", receipt["environment"]["metrics_status"])
 
+    def test_scoped_handoff_does_not_materialize_composed_symbols(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            (root / "one.py").write_text(
+                "def one_changed():\n    return 3\n", encoding="utf-8"
+            )
+            delta = store.create_delta(base.generation_id, "scoped", ["one.py"])
+            with patch("simplicio_fast.delta.EffectiveSnapshot.symbols") as symbols:
+                report = store.handoff(
+                    base.generation_id,
+                    "scoped",
+                    ["one.py"],
+                    delta_generation=delta.delta_generation,
+                )
+            symbols.assert_not_called()
+            self.assertIsNone(report["parity_result"]["composed_symbol_count"])
+            self.assertEqual(
+                "scoped_query_not_materialized",
+                report["parity_result"]["composed_symbol_count_reason"],
+            )
+
     def test_benchmark_rejects_fewer_than_ten_repetitions(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least 10"):
             run_delta_benchmark(files=4, repetitions=9)
