@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from simplicio_fast.adapters import discover_csharp_projects, parse_path
+from simplicio_fast.adapters import (
+    csharp_workspace_fingerprint,
+    discover_csharp_projects,
+    parse_path,
+)
 
 
 def test_csharp_adapter_covers_declared_constructs(tmp_path: Path) -> None:
@@ -31,3 +35,12 @@ def test_csharp_project_discovery_excludes_build_output(tmp_path: Path) -> None:
         "App.csproj",
         "Directory.Build.props",
     ]
+
+
+def test_csharp_workspace_fingerprint_changes_with_project_inputs(tmp_path: Path) -> None:
+    project = tmp_path / "App.csproj"
+    project.write_text("<Project />", encoding="utf-8")
+    first = csharp_workspace_fingerprint(tmp_path)
+    project.write_text("<Project><PropertyGroup /></Project>", encoding="utf-8")
+    second = csharp_workspace_fingerprint(tmp_path)
+    assert first != second
