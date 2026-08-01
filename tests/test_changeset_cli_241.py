@@ -230,6 +230,8 @@ class ChangesetCli241Test(unittest.TestCase):
                 "--write",
             )
             self.assertEqual("applied", materialized["status"])
+            self.assertEqual("simplicio.fast.dev-cli-adapter/v1", materialized["adapter"]["schema"])
+            self.assertEqual("ok", materialized["adapter"]["result"]["status"])
             self.assertEqual(created, (root / "created.txt").read_bytes())
 
     def test_create_replace_rename_delete_and_replay(self) -> None:
