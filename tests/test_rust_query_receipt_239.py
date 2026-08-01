@@ -83,3 +83,22 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
     assert by_kind["matches"][0]["kind"] == "function"
     assert exact["planner"]["records_decoded"] == 1
     assert prefix["planner"]["records_decoded"] == 1
+
+    first_page = _run_json(
+        executable, "--query", str(snapshot), "helper", "--limit", "1"
+    )
+    cursor = first_page["planner"]["next_cursor"]
+    assert isinstance(cursor, str) and cursor.isdigit()
+    second_page = _run_json(
+        executable,
+        "--query",
+        str(snapshot),
+        "helper",
+        "--limit",
+        "1",
+        "--cursor",
+        cursor,
+    )
+    assert second_page["matches"]
+    assert second_page["matches"][0]["file"] != first_page["matches"][0]["file"]
+    assert second_page["planner"]["records_decoded"] == 1

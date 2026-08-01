@@ -7,7 +7,7 @@ fn print_help() {
     println!("Usage:");
     println!("  simplicio-fast-rs --version [--json]");
     println!("  simplicio-fast-rs --stats <snapshot.sfast>");
-    println!("  simplicio-fast-rs --query <snapshot.sfast> <term> [--path <file>] [--kind <kind>] [--limit <positive>]");
+    println!("  simplicio-fast-rs --query <snapshot.sfast> <term> [--path <file>] [--kind <kind>] [--limit <positive>] [--cursor <record-id>]");
     println!("  simplicio-fast-rs --context <snapshot.sfast> <repo> <term> [--limit <positive>] [--max-lines <positive>] [--max-bytes <positive>] [--max-tokens <positive>]");
     println!("  simplicio-fast-rs --publish-segments <snapshot.sfast> <directory>");
     println!("  simplicio-fast-rs --segment <directory> <name>");
@@ -50,9 +50,14 @@ fn main() -> ExitCode {
             .position(|arg| arg == "--kind")
             .and_then(|position| args.get(position + 1))
             .map(String::as_str);
-        return match SnapshotReader::open(path)
-            .and_then(|snapshot| snapshot.query_filtered(term, path_filter, kind_filter, limit))
-        {
+        let cursor = args
+            .iter()
+            .position(|arg| arg == "--cursor")
+            .and_then(|position| args.get(position + 1))
+            .and_then(|value| value.parse::<usize>().ok());
+        return match SnapshotReader::open(path).and_then(|snapshot| {
+            snapshot.query_filtered_after(term, path_filter, kind_filter, limit, cursor)
+        }) {
             Ok(receipt) => {
                 println!(
                     "{}",
@@ -64,6 +69,7 @@ fn main() -> ExitCode {
                             "selected_index": receipt.selected_index,
                             "candidates_visited": receipt.candidates_visited,
                             "records_decoded": receipt.records_decoded,
+                            "next_cursor": receipt.next_cursor,
                         }
                     })
                 );

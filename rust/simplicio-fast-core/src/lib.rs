@@ -94,6 +94,7 @@ pub struct QueryReceipt {
     pub selected_index: String,
     pub candidates_visited: usize,
     pub records_decoded: usize,
+    pub next_cursor: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -442,6 +443,17 @@ impl SnapshotReader {
         kind: Option<&str>,
         limit: usize,
     ) -> Result<QueryReceipt, SnapshotError> {
+        self.query_filtered_after(term, path, kind, limit, None)
+    }
+
+    pub fn query_filtered_after(
+        &self,
+        term: &str,
+        path: Option<&str>,
+        kind: Option<&str>,
+        limit: usize,
+        cursor: Option<usize>,
+    ) -> Result<QueryReceipt, SnapshotError> {
         if limit == 0 {
             return Err(SnapshotError::Invalid(
                 "query limit must be positive".into(),
@@ -517,7 +529,16 @@ impl SnapshotReader {
             selected_index.push_str(label);
         }
         let strings = &self.sections["strings"];
-        let matches: Vec<RustSymbol> = candidate_ids
+        let mut candidate_ids = candidate_ids
+            .into_iter()
+            .filter(|index| cursor.is_none_or(|after| *index > after));
+        let selected_ids: Vec<usize> = candidate_ids.by_ref().take(limit).collect();
+        let next_cursor = if selected_ids.len() == limit && candidate_ids.next().is_some() {
+            selected_ids.last().map(|index| index.to_string())
+        } else {
+            None
+        };
+        let matches: Vec<RustSymbol> = selected_ids
             .into_iter()
             .take(limit)
             .map(|index| self.symbol_at(index, strings))
@@ -528,6 +549,7 @@ impl SnapshotReader {
             selected_index,
             candidates_visited,
             records_decoded,
+            next_cursor,
         })
     }
 
