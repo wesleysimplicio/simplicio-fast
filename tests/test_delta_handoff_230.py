@@ -71,6 +71,15 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             self.assertEqual(2, report["cache_reuse"])
             self.assertGreater(report["mapped_bytes"], 0)
             self.assertGreaterEqual(report["cpu_ms"], 0)
+            self.assertEqual(
+                {
+                    "base_validation_and_open",
+                    "delta_load_or_create",
+                    "compose_and_validate",
+                    "source_verification_and_parity",
+                },
+                set(report["stage_timings_ms"]),
+            )
 
     def test_explicit_changed_paths_do_not_scan_the_repository(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
