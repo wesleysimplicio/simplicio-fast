@@ -330,6 +330,8 @@ def python_smoke() -> dict[str, Any]:
                     str(snapshot),
                     "--profile",
                     "loop-standalone",
+                    "--mapper-mode",
+                    "bootstrap",
                 ],
                 root=root,
                 environment=environment,
