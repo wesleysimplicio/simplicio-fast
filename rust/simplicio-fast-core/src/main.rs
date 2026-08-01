@@ -40,11 +40,22 @@ fn main() -> ExitCode {
             .and_then(|position| args.get(position + 1))
             .and_then(|value| value.parse::<usize>().ok())
             .unwrap_or(50);
-        return match SnapshotReader::open(path).and_then(|snapshot| snapshot.query(term, limit)) {
-            Ok(matches) => {
+        return match SnapshotReader::open(path)
+            .and_then(|snapshot| snapshot.query_with_receipt(term, limit))
+        {
+            Ok(receipt) => {
                 println!(
                     "{}",
-                    serde_json::json!({"schema":"simplicio.fast.query/v1", "engine":"rust", "matches":matches})
+                    serde_json::json!({
+                        "schema":"simplicio.fast.query/v1",
+                        "engine":"rust",
+                        "matches":receipt.matches,
+                        "planner": {
+                            "selected_index": receipt.selected_index,
+                            "candidates_visited": receipt.candidates_visited,
+                            "records_decoded": receipt.records_decoded,
+                        }
+                    })
                 );
                 ExitCode::SUCCESS
             }

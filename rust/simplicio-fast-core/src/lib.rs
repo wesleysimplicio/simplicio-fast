@@ -88,6 +88,14 @@ pub struct RustContextSpan {
     pub tokens: usize,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct QueryReceipt {
+    pub matches: Vec<RustSymbol>,
+    pub selected_index: String,
+    pub candidates_visited: usize,
+    pub records_decoded: usize,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct Section {
     pub(crate) offset: usize,
@@ -418,6 +426,14 @@ impl SnapshotReader {
     }
 
     pub fn query(&self, term: &str, limit: usize) -> Result<Vec<RustSymbol>, SnapshotError> {
+        Ok(self.query_with_receipt(term, limit)?.matches)
+    }
+
+    pub fn query_with_receipt(
+        &self,
+        term: &str,
+        limit: usize,
+    ) -> Result<QueryReceipt, SnapshotError> {
         if limit == 0 {
             return Err(SnapshotError::Invalid(
                 "query limit must be positive".into(),
@@ -431,6 +447,7 @@ impl SnapshotReader {
         .map_err(|_| SnapshotError::Invalid("invalid persisted indexes".into()))?;
         let symbol_count = self.sections["symbols"].length / SYMBOL_RECORD_SIZE;
         let mut candidate_ids = BTreeSet::new();
+        let mut candidates_visited = 0;
         for values in indexes
             .names
             .iter()
@@ -444,6 +461,7 @@ impl SnapshotReader {
                     .map(|(_, values)| values),
             )
         {
+            candidates_visited += values.len();
             for index in values {
                 if *index >= symbol_count {
                     return Err(SnapshotError::Invalid(
@@ -467,7 +485,13 @@ impl SnapshotReader {
                 .then(left.line.cmp(&right.line))
         });
         matches.truncate(limit);
-        Ok(matches)
+        let records_decoded = matches.len();
+        Ok(QueryReceipt {
+            matches,
+            selected_index: "persisted.names+exact".into(),
+            candidates_visited,
+            records_decoded,
+        })
     }
 
     pub fn context(
