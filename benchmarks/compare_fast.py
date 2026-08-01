@@ -28,7 +28,7 @@ from typing import Any, Callable
 
 from simplicio_fast.delivery import DeliveryEngine
 from simplicio_fast.engine import select_engine
-from simplicio_fast.native_backend import NativeBackendError, ResidentRustSession
+from simplicio_fast.rust_session import RustCoreSession, RustSessionError
 from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
@@ -312,7 +312,7 @@ def rust_context(root: Path, snapshot: Path, term: str, executable: Path) -> str
 
 
 def resident_rust_context(
-    session: ResidentRustSession, root: Path, snapshot: Path, term: str
+    session: RustCoreSession, root: Path, snapshot: Path, term: str
 ) -> str:
     payload = session.call(
         "context",
@@ -433,7 +433,7 @@ def run(
             }
         if resident_executable is not None and resident_executable.is_file():
             try:
-                with ResidentRustSession(resident_executable, {}) as session:
+                with RustCoreSession(resident_executable) as session:
                     session.call("stats", {"snapshot": str(snapshot)})
                     resident_rust = timed(
                         lambda: resident_rust_context(session, root, snapshot, term),
@@ -442,7 +442,7 @@ def run(
                     resident_rust["status"] = "complete"
                     resident_rust["operation"] = "rust-resident-session-context"
                     resident_rust["session_metrics"] = session.metrics()
-            except (NativeBackendError, OSError) as error:
+            except (RustSessionError, OSError) as error:
                 resident_rust = {
                     "status": "blocked",
                     "reason": type(error).__name__,
