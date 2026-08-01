@@ -11,6 +11,9 @@ from unittest.mock import patch
 import pytest
 
 from simplicio_fast.mapper_ingest import MapperIngestError, validate_handoff
+from simplicio_fast.delivery import DeliveryEngine
+from simplicio_fast.engine import select_engine
+from simplicio_fast.snapshot import build_snapshot
 
 
 def _run_mapper(
@@ -200,3 +203,16 @@ def test_installed_mapper_handoff_is_accepted(tmp_path: Path) -> None:
     assert len(provenance["artifacts"]) >= 3
     assert reused_envelope["receipt"]["status"] == "reused"
     assert reused_provenance["generation"] == provenance["generation"]
+
+    snapshot = root / "fast.sfast"
+    build_snapshot(root, snapshot)
+    receipt = DeliveryEngine(root, snapshot).prepare(
+        "understand helper",
+        profile="loop-standalone",
+        engine_receipt=select_engine("python").receipt(),
+        mode="integrated",
+        mapper_handoff=envelope,
+    )
+    assert receipt["mapper"]["mode"] == "integrated"
+    assert receipt["mapper"]["traceability"] == "mapper-symbol-id"
+    assert receipt["context"]["selected"]
