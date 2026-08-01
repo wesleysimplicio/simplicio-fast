@@ -219,6 +219,21 @@ class ParserAdapter244Test(unittest.TestCase):
             assert current["invalidation"]["parsed_paths"] == ["one.py"]
             assert current["invalidation"]["reused_paths"] == ["two.py"]
 
+    def test_previous_payload_rejects_stale_unmodified_source_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "one.py").write_text("def one():\n    return 1\n", encoding="utf-8")
+            (root / "two.py").write_text("def two():\n    return 2\n", encoding="utf-8")
+            previous = build_payload(root)
+            (root / "one.py").write_text("def one():\n    return 3\n", encoding="utf-8")
+            (root / "two.py").write_text("def two():\n    return 4\n", encoding="utf-8")
+            with self.assertRaisesRegex(ParserAdapterError, "source_digest_mismatch"):
+                build_payload(
+                    root,
+                    changed_paths=["one.py"],
+                    previous_payload=previous,
+                )
+
     def test_adapter_limits_fail_closed_before_returning_partial_success(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
