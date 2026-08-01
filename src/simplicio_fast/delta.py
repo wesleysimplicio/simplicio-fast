@@ -413,6 +413,7 @@ def compose_delta(
     delta_generation: str,
     *,
     config_fingerprint: str | None = None,
+    changed_paths: Iterable[str] | None = None,
 ) -> EffectiveSnapshot:
     base, snapshot_path, snapshot_sha256 = _base_snapshot(store, base_generation)
     delta = load_delta(store, worktree_id, delta_generation)
@@ -429,12 +430,30 @@ def compose_delta(
         or delta.base_snapshot_sha256 != snapshot_sha256
     ):
         raise DeltaError("base_artifact_digest_mismatch")
-    current_hashes = {
-        path.relative_to(store.root).as_posix(): _hash_source(path)
-        for path in source_files(store.root)
-    }
+    scoped_paths = (
+        None
+        if changed_paths is None
+        else sorted({_normal_path(path) for path in changed_paths})
+    )
+    if scoped_paths is None:
+        current_hashes = {
+            path.relative_to(store.root).as_posix(): _hash_source(path)
+            for path in source_files(store.root)
+        }
+    else:
+        current_hashes = {}
+        root = store.root.resolve()
+        for relative in scoped_paths:
+            path = (root / relative).resolve()
+            if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
+                current_hashes[relative] = _hash_source(path)
     expected_hashes = _composed_source_hashes(store, base, delta)
-    for relative in sorted(set(current_hashes) | set(expected_hashes)):
+    verification_paths = (
+        sorted(set(current_hashes) | set(expected_hashes))
+        if scoped_paths is None
+        else scoped_paths
+    )
+    for relative in verification_paths:
         if current_hashes.get(relative) == expected_hashes.get(relative):
             continue
         if relative not in delta.changed:
@@ -475,6 +494,11 @@ def handoff(
 ) -> dict[str, object]:
     cold_start = perf_counter()
     cpu_start = time.process_time()
+    changed_paths = (
+        None
+        if changed_paths is None
+        else sorted({_normal_path(path) for path in changed_paths})
+    )
     base, snapshot_path, snapshot_sha256 = _base_snapshot(store, base_generation)
     with Snapshot(snapshot_path) as canonical:
         canonical_files = canonical.files()
@@ -499,21 +523,42 @@ def handoff(
         worktree_id,
         delta.delta_generation,
         config_fingerprint=config_fingerprint,
+        changed_paths=changed_paths,
     ) as composed:
         composed_symbols = len(composed.symbols())
     warm_ms = (perf_counter() - warm_start) * 1000
     merged = _composed_source_hashes(store, base, delta)
-    current = {
-        path.relative_to(store.root).as_posix(): _hash_source(path)
-        for path in source_files(store.root)
-    }
+    scoped_paths = (
+        None
+        if changed_paths is None
+        else sorted({_normal_path(path) for path in changed_paths})
+    )
+    if scoped_paths is None:
+        current = {
+            path.relative_to(store.root).as_posix(): _hash_source(path)
+            for path in source_files(store.root)
+        }
+    else:
+        current = {}
+        root = store.root.resolve()
+        for relative in scoped_paths:
+            path = (root / relative).resolve()
+            if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
+                current[relative] = _hash_source(path)
     target = current
     parity_snapshot_hash = None
     if parity_snapshot is not None:
         with Snapshot(Path(parity_snapshot)) as candidate:
             target = {path: digest.hex() for path, digest in candidate.files()}
             parity_snapshot_hash = candidate.sha256
-    parity = merged == target
+    if scoped_paths is None:
+        parity = merged == target
+        parity_scope = "full_source_tree"
+    else:
+        parity = all(
+            current.get(relative) == merged.get(relative) for relative in scoped_paths
+        )
+        parity_scope = "explicit_changed_paths"
     return {
         "schema": HANDOFF_SCHEMA,
         "status": "pass" if parity else "parity_mismatch",
@@ -531,6 +576,7 @@ def handoff(
         "parity_result": {
             "source_tree_sha256": _digest(merged),
             "target_tree_sha256": _digest(target),
+            "scope": parity_scope,
             "canonical_file_count": len(canonical_files),
             "composed_symbol_count": composed_symbols,
         },
