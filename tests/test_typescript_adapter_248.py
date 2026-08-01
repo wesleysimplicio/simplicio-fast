@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from simplicio_fast.adapters import discover_typescript_projects, parse_path
+from simplicio_fast.adapters import (
+    discover_typescript_projects,
+    parse_path,
+    typescript_workspace_fingerprint,
+)
 
 
 def test_typescript_adapter_covers_modules_types_and_tests(tmp_path: Path) -> None:
@@ -32,3 +36,12 @@ def test_typescript_project_discovery_excludes_dependencies(tmp_path: Path) -> N
         "package.json",
         "tsconfig.json",
     ]
+
+
+def test_typescript_workspace_fingerprint_changes_with_config(tmp_path: Path) -> None:
+    config = tmp_path / "tsconfig.json"
+    config.write_text("{}", encoding="utf-8")
+    first = typescript_workspace_fingerprint(tmp_path)
+    config.write_text('{"compilerOptions":{"strict":true}}', encoding="utf-8")
+    second = typescript_workspace_fingerprint(tmp_path)
+    assert first != second

@@ -136,6 +136,26 @@ def discover_typescript_projects(root: Path) -> list[Path]:
     )
 
 
+def _workspace_fingerprint(root: Path, paths: list[Path]) -> str:
+    root = root.resolve()
+    records = [
+        {
+            "path": path.relative_to(root).as_posix(),
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        }
+        for path in sorted(paths)
+    ]
+    payload = json.dumps(records, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def typescript_workspace_fingerprint(root: Path) -> str:
+    """Hash TypeScript/JavaScript project-boundary inputs deterministically."""
+
+    root = root.resolve()
+    return _workspace_fingerprint(root, discover_typescript_projects(root))
+
+
 def discover_csharp_projects(root: Path) -> list[Path]:
     """Return deterministic .NET solution/project/config inputs."""
     names = {
@@ -152,6 +172,13 @@ def discover_csharp_projects(root: Path) -> list[Path]:
         )
         and not any(part in {".git", ".simplicio", "bin", "obj"} for part in path.parts)
     )
+
+
+def csharp_workspace_fingerprint(root: Path) -> str:
+    """Hash .NET solution/project/config inputs deterministically."""
+
+    root = root.resolve()
+    return _workspace_fingerprint(root, discover_csharp_projects(root))
 
 
 def parse_path(path: Path, relative_path: str | None = None) -> list[Symbol]:
