@@ -123,6 +123,31 @@ class SnapshotTest(unittest.TestCase):
                 )
                 self.assertLessEqual(sum(item.tokens for item in spans), 2)
 
+    def test_context_reads_each_matching_source_file_once(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "service.py"
+            source.write_text(
+                "def run_one():\n    return 1\n\ndef run_two():\n    return 2\n"
+            )
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            original_read_bytes = Path.read_bytes
+            reads = 0
+
+            def read_bytes(path: Path) -> bytes:
+                nonlocal reads
+                if path.resolve() == source.resolve():
+                    reads += 1
+                return original_read_bytes(path)
+
+            with patch.object(Path, "read_bytes", read_bytes):
+                with Snapshot(output) as snapshot:
+                    spans = snapshot.context(root, "run", max_results=10)
+
+            self.assertGreaterEqual(len(spans), 2)
+            self.assertEqual(1, reads)
+
     def test_async_imports_and_repository_derived_ids(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
