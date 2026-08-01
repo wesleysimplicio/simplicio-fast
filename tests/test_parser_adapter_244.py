@@ -108,6 +108,38 @@ class ParserAdapter244Test(unittest.TestCase):
             with self.assertRaisesRegex(ParserAdapterError, "symbol_limit_exceeded"):
                 validate_payload(payload)
 
+    def test_validator_rejects_incomplete_integrated_identity_and_ranges(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def run():\n    return True\n", encoding="utf-8"
+            )
+            payload = build_payload(
+                root,
+                mode="integrated",
+                mapper_generation="mapper-g1",
+                commit="a" * 40,
+            )
+            payload["commit"] = "short"
+            with self.assertRaisesRegex(ParserAdapterError, "mapper_identity_invalid"):
+                validate_payload(payload)
+            payload = build_payload(root)
+            payload["symbols"][0]["end_line"] = 0
+            with self.assertRaisesRegex(ParserAdapterError, "symbol_invalid"):
+                validate_payload(payload)
+
+    def test_validator_rejects_invalid_relation_confidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def helper():\n    return True\n\ndef test_helper():\n    return helper()\n",
+                encoding="utf-8",
+            )
+            payload = build_payload(root)
+            payload["relations"][0]["confidence"] = 2
+            with self.assertRaisesRegex(ParserAdapterError, "relation_file_missing"):
+                validate_payload(payload)
+
 
 if __name__ == "__main__":
     unittest.main()

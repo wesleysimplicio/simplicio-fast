@@ -229,6 +229,37 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
         raise ParserAdapterError("mode_invalid")
     if value.get("producer") != "simplicio-fast-python-adapter":
         raise ParserAdapterError("producer_invalid")
+    mode = value.get("mode")
+    commit = value.get("commit")
+    mapper_generation = value.get("mapper_generation")
+    if mode == "integrated":
+        if (
+            not isinstance(commit, str)
+            or len(commit) != 40
+            or any(character not in "0123456789abcdef" for character in commit)
+            or not isinstance(mapper_generation, str)
+            or not mapper_generation.strip()
+        ):
+            raise ParserAdapterError("mapper_identity_invalid")
+    elif commit is not None and (
+        not isinstance(commit, str)
+        or len(commit) != 40
+        or any(character not in "0123456789abcdef" for character in commit)
+    ):
+        raise ParserAdapterError("commit_invalid")
+    changed_paths = value.get("changed_paths")
+    if not isinstance(changed_paths, list):
+        raise ParserAdapterError("changed_paths_invalid")
+    for path in changed_paths:
+        if not isinstance(path, str):
+            raise ParserAdapterError("changed_path_invalid")
+        _safe_relative(path)
+    completeness = value.get("completeness")
+    if completeness not in {"complete", "partial"}:
+        raise ParserAdapterError("completeness_invalid")
+    diagnostics = value.get("diagnostics")
+    if not isinstance(diagnostics, list):
+        raise ParserAdapterError("diagnostics_invalid")
     files = value.get("files")
     symbols = value.get("symbols")
     relations = value.get("relations")
@@ -249,20 +280,53 @@ def validate_payload(value: Mapping[str, Any]) -> dict[str, Any]:
     for item in files:
         if not isinstance(item, Mapping):
             raise ParserAdapterError("file_invalid")
-        file_paths.add(_safe_relative(str(item.get("path", ""))))
+        path = item.get("path")
+        if not isinstance(path, str):
+            raise ParserAdapterError("file_invalid")
+        normalized_path = _safe_relative(path)
+        if item.get("language") not in set(SUPPORTED_EXTENSIONS.values()):
+            raise ParserAdapterError("file_language_invalid")
+        if item.get("encoding") != "utf-8":
+            raise ParserAdapterError("file_encoding_invalid")
+        file_paths.add(normalized_path)
         if not isinstance(item.get("sha256"), str) or len(item["sha256"]) != 64:
             raise ParserAdapterError("file_digest_invalid")
     ids: set[str] = set()
     for item in symbols:
-        if not isinstance(item, Mapping) or not isinstance(item.get("id"), str):
+        if (
+            not isinstance(item, Mapping)
+            or not isinstance(item.get("id"), str)
+            or not isinstance(item.get("name"), str)
+            or not isinstance(item.get("qualified_name"), str)
+            or not isinstance(item.get("kind"), str)
+            or not isinstance(item.get("language"), str)
+            or not isinstance(item.get("line"), int)
+            or isinstance(item.get("line"), bool)
+            or not isinstance(item.get("end_line"), int)
+            or isinstance(item.get("end_line"), bool)
+            or item.get("line") < 1
+            or item.get("end_line") < item.get("line")
+        ):
             raise ParserAdapterError("symbol_invalid")
         if item["id"] in ids:
             raise ParserAdapterError("symbol_id_collision")
         ids.add(item["id"])
-        if item.get("file") not in file_paths:
+        if item.get("file") not in file_paths or item.get("language") not in set(
+            SUPPORTED_EXTENSIONS.values()
+        ):
             raise ParserAdapterError("symbol_file_missing")
     for item in relations:
-        if not isinstance(item, Mapping) or item.get("file") not in file_paths:
+        if (
+            not isinstance(item, Mapping)
+            or item.get("file") not in file_paths
+            or not isinstance(item.get("origin"), str)
+            or not isinstance(item.get("destination"), str)
+            or not isinstance(item.get("origin_id"), str)
+            or not isinstance(item.get("destination_id"), str)
+            or not isinstance(item.get("confidence"), (int, float))
+            or isinstance(item.get("confidence"), bool)
+            or not 0 <= item.get("confidence") <= 1
+        ):
             raise ParserAdapterError("relation_file_missing")
         if item.get("kind") not in {
             "import",
