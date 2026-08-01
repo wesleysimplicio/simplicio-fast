@@ -96,6 +96,12 @@ class ParserAdapter244Test(unittest.TestCase):
                 {"csharp", "rust", "typescript"},
                 set(payload["workspace_fingerprints"]),
             )
+            assert payload["completeness"] == "partial"
+            assert {
+                item["path"]
+                for item in payload["diagnostics"]
+                if item["code"] == "native_parser_unavailable"
+            } == set(fixtures)
 
     def test_changed_paths_are_scoped_and_invalid_payloads_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
