@@ -2,15 +2,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from simplicio_fast.snapshot import Snapshot, Symbol, _build_v2
 
 
-def test_snapshot_accepts_parser_test_symbol_kind(tmp_path: Path) -> None:
+@pytest.mark.parametrize("kind", ["test", "property", "attribute"])
+def test_snapshot_accepts_parser_symbol_kinds(tmp_path: Path, kind: str) -> None:
     output = tmp_path / "project.sfast"
     symbol = Symbol(
-        "test_example",
-        "test_example",
-        "test",
+        f"{kind}_example",
+        f"{kind}_example",
+        kind,
         "tests/test_example.py",
         1,
         1,
@@ -23,6 +26,6 @@ def test_snapshot_accepts_parser_test_symbol_kind(tmp_path: Path) -> None:
     )
     snapshot = Snapshot(output)
     try:
-        assert any(symbol.kind == "test" for symbol in snapshot.symbols())
+        assert any(symbol.kind == kind for symbol in snapshot.symbols())
     finally:
         snapshot.close()
