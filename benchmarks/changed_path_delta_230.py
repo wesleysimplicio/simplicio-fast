@@ -142,14 +142,16 @@ def _summary(rows: list[dict[str, object]]) -> dict[str, object]:
 
 
 def _make_root(
-    parent: Path, files: int, label: str
+    parent: Path, files: int, label: str, functions_per_file: int = 1
 ) -> tuple[Path, WorkspaceStore, object, dict[str, int]]:
     root = parent / label
     root.mkdir()
     for index in range(files):
-        (root / f"module_{index:03d}.py").write_text(
-            f"def value_{index}():\n    return {index}\n", encoding="utf-8"
+        source = "".join(
+            f"def value_{index}_{function}():\n    return {function}\n"
+            for function in range(functions_per_file)
         )
+        (root / f"module_{index:03d}.py").write_text(source, encoding="utf-8")
     store = WorkspaceStore(root)
     base = store.build_base(config={"benchmark": "issue-230"})
     sizes = {
@@ -165,9 +167,16 @@ def _mapped_bytes(store: WorkspaceStore, base: object) -> int:
 
 
 def _run_category(
-    parent: Path, files: int, repetitions: int, category: str
+    parent: Path,
+    files: int,
+    repetitions: int,
+    category: str,
+    functions_per_file: int = 1,
 ) -> list[dict[str, object]]:
-    root, store, base, sizes = _make_root(parent, files, category)
+    root, store, base, sizes = _make_root(
+        parent, files, category, functions_per_file
+    )
+    unchanged_source = (root / "module_000.py").read_text(encoding="utf-8")
     rows: list[dict[str, object]] = []
     if category == "cold":
         for revision in range(repetitions):
@@ -191,8 +200,6 @@ def _run_category(
         return rows
 
     base_mapped_bytes = _mapped_bytes(store, base)
-    parity_snapshot = root / "parity.sfast"
-    build_snapshot(root, parity_snapshot)
     if category == "warm":
         for revision in range(repetitions):
 
@@ -221,11 +228,14 @@ def _run_category(
 
     for revision in range(repetitions):
         source = root / "module_000.py"
+        audit_parity = revision in {0, repetitions - 1} and category != "unchanged"
+        parity_snapshot = root / f"parity-{revision}.sfast"
         if category == "one_file":
             source.write_text(
                 f"def value_0():\n    return {revision + 1}\n", encoding="utf-8"
             )
-            build_snapshot(root, parity_snapshot)
+            if audit_parity:
+                build_snapshot(root, parity_snapshot)
             changed_bytes = source.stat().st_size
             expected_parsed = 1
             expected_reused = files - 1
@@ -235,8 +245,9 @@ def _run_category(
             )
             changed_paths = ["module_000.py"]
         else:
-            source.write_text("def value_0():\n    return 0\n", encoding="utf-8")
-            build_snapshot(root, parity_snapshot)
+            source.write_text(unchanged_source, encoding="utf-8")
+            if audit_parity:
+                build_snapshot(root, parity_snapshot)
             expected_parsed = 0
             expected_reused = files
             expected_parsed_bytes = 0
@@ -251,7 +262,7 @@ def _run_category(
                 # Unchanged is measured from validated base + changed-path
                 # evidence; background parity remains explicit for other
                 # categories and must not contaminate the hot-path budget.
-                parity_snapshot=parity_snapshot if category != "unchanged" else None,
+                parity_snapshot=parity_snapshot if audit_parity else None,
             )
 
         sample, report = _measure(handoff)
@@ -265,6 +276,10 @@ def _run_category(
                 "reused_bytes": expected_reused_bytes,
                 "mapped_bytes": base_mapped_bytes,
                 "parity": bool(report["parity"]),
+                "background_parity": bool(report["parity"]) if audit_parity else None,
+                "background_parity_reason": (
+                    "audited_revision" if audit_parity else "hot_path_not_materialized"
+                ),
                 "stage_timings_ms": report.get("stage_timings_ms"),
             }
         )
@@ -300,15 +315,21 @@ def _run_category(
     return rows
 
 
-def run(*, files: int = 24, repetitions: int = MIN_REPETITIONS) -> dict[str, object]:
+def run(
+    *, files: int = 24, repetitions: int = MIN_REPETITIONS, functions_per_file: int = 1
+) -> dict[str, object]:
     if files < 2:
         raise ValueError("files must be at least two")
     if repetitions < MIN_REPETITIONS:
         raise ValueError(f"repetitions must be at least {MIN_REPETITIONS}")
+    if functions_per_file < 1:
+        raise ValueError("functions_per_file must be positive")
     with tempfile.TemporaryDirectory(prefix="simplicio-fast-delta-") as directory:
         parent = Path(directory)
         categories = {
-            category: _run_category(parent, files, repetitions, category)
+            category: _run_category(
+                parent, files, repetitions, category, functions_per_file
+            )
             for category in ("cold", "warm", "unchanged", "one_file")
         }
         metric_reasons = {
@@ -334,6 +355,8 @@ def run(*, files: int = 24, repetitions: int = MIN_REPETITIONS) -> dict[str, obj
             else "parity_mismatch",
             "workload": {
                 "files": files,
+                "symbols": files * functions_per_file,
+                "functions_per_file": functions_per_file,
                 "changed_files": 1,
                 "repetitions": repetitions,
                 "minimum_repetitions": MIN_REPETITIONS,
@@ -360,10 +383,28 @@ def run(*, files: int = 24, repetitions: int = MIN_REPETITIONS) -> dict[str, obj
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--files", type=int, default=24)
+    parser.add_argument(
+        "--symbols",
+        type=int,
+        help="target symbol count; distributes symbols across approximately sqrt(N) files",
+    )
     parser.add_argument("--repetitions", type=int, default=MIN_REPETITIONS)
     parser.add_argument("--json-out", type=Path)
     args = parser.parse_args()
-    receipt = run(files=args.files, repetitions=args.repetitions)
+    files = args.files
+    functions_per_file = 1
+    if args.symbols is not None:
+        if args.symbols < 1:
+            parser.error("--symbols must be positive")
+        files = max(1, int(args.symbols**0.5))
+        while files * files < args.symbols:
+            files += 1
+        functions_per_file = (args.symbols + files - 1) // files
+    receipt = run(
+        files=files,
+        repetitions=args.repetitions,
+        functions_per_file=functions_per_file,
+    )
     payload = json.dumps(receipt, indent=2, sort_keys=True) + "\n"
     if args.json_out:
         args.json_out.write_text(payload, encoding="utf-8")

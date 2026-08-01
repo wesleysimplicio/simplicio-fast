@@ -431,6 +431,13 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                         "base_validation_and_open", row["stage_timings_ms"]
                     )
                     self.assertGreaterEqual(row["stage_coverage"], 0.95)
+            if category == "one_file":
+                rows = receipt["categories"][category]["raw"]
+                self.assertEqual(
+                    ["audited_revision", "hot_path_not_materialized"],
+                    [row["background_parity_reason"] for row in rows[:2]],
+                )
+                self.assertEqual("audited_revision", rows[-1]["background_parity_reason"])
         self.assertEqual("complete", receipt["environment"]["metrics_status"])
 
     def test_scoped_handoff_does_not_materialize_composed_symbols(self) -> None:
