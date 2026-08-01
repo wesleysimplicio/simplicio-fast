@@ -48,16 +48,38 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         else "simplicio-fast-rs"
     )
     assert executable.is_file()
-    (tmp_path / "service.py").write_text(
-        "def helper():\n    return True\n\ndef helper_extra():\n    return False\n",
-        encoding="utf-8",
-    )
+    (tmp_path / "a.py").write_text("def helper():\n    return True\n", encoding="utf-8")
+    (tmp_path / "b.py").write_text("def helper():\n    return False\n", encoding="utf-8")
     snapshot = tmp_path / "service.sfast"
     build_snapshot(tmp_path, snapshot)
 
     exact = _run_json(executable, "--query", str(snapshot), "helper", "--limit", "1")
     prefix = _run_json(executable, "--query", str(snapshot), "help", "--limit", "1")
+    by_path = _run_json(
+        executable,
+        "--query",
+        str(snapshot),
+        "helper",
+        "--path",
+        "b.py",
+        "--limit",
+        "1",
+    )
+    by_kind = _run_json(
+        executable,
+        "--query",
+        str(snapshot),
+        "helper",
+        "--kind",
+        "function",
+        "--limit",
+        "1",
+    )
     assert exact["planner"]["selected_index"] == "persisted.exact"
     assert prefix["planner"]["selected_index"] == "persisted.prefix"
+    assert by_path["planner"]["selected_index"] == "persisted.exact+path"
+    assert by_kind["planner"]["selected_index"] == "persisted.exact+kind"
+    assert by_path["matches"][0]["file"] == "b.py"
+    assert by_kind["matches"][0]["kind"] == "function"
     assert exact["planner"]["records_decoded"] == 1
     assert prefix["planner"]["records_decoded"] == 1

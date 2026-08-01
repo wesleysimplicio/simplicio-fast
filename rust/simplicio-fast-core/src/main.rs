@@ -7,7 +7,7 @@ fn print_help() {
     println!("Usage:");
     println!("  simplicio-fast-rs --version [--json]");
     println!("  simplicio-fast-rs --stats <snapshot.sfast>");
-    println!("  simplicio-fast-rs --query <snapshot.sfast> <term> [--limit <positive>]");
+    println!("  simplicio-fast-rs --query <snapshot.sfast> <term> [--path <file>] [--kind <kind>] [--limit <positive>]");
     println!("  simplicio-fast-rs --context <snapshot.sfast> <repo> <term> [--limit <positive>] [--max-lines <positive>] [--max-bytes <positive>] [--max-tokens <positive>]");
     println!("  simplicio-fast-rs --publish-segments <snapshot.sfast> <directory>");
     println!("  simplicio-fast-rs --segment <directory> <name>");
@@ -40,8 +40,18 @@ fn main() -> ExitCode {
             .and_then(|position| args.get(position + 1))
             .and_then(|value| value.parse::<usize>().ok())
             .unwrap_or(50);
+        let path_filter = args
+            .iter()
+            .position(|arg| arg == "--path")
+            .and_then(|position| args.get(position + 1))
+            .map(String::as_str);
+        let kind_filter = args
+            .iter()
+            .position(|arg| arg == "--kind")
+            .and_then(|position| args.get(position + 1))
+            .map(String::as_str);
         return match SnapshotReader::open(path)
-            .and_then(|snapshot| snapshot.query_with_receipt(term, limit))
+            .and_then(|snapshot| snapshot.query_filtered(term, path_filter, kind_filter, limit))
         {
             Ok(receipt) => {
                 println!(
