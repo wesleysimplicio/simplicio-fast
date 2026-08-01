@@ -7,12 +7,14 @@ import json
 from pathlib import Path
 import platform
 import subprocess
+import threading
 from typing import Any, Mapping
 
 from . import __version__
 
 ABI = "simplicio.fast-native/v1"
 MAX_NATIVE_ARTIFACT_BYTES = 256 * 1024 * 1024
+MAX_SESSION_FRAME_BYTES = 1 * 1024 * 1024
 
 
 class NativeBackendError(RuntimeError):
@@ -97,6 +99,95 @@ class RustBackend:
         if response.get("abi") != ABI or not response.get("ok"):
             raise NativeBackendError("native_response_invalid")
         return response.get("result")
+
+    def start_session(self) -> "ResidentRustSession":
+        return ResidentRustSession(self.executable, self.manifest)
+
+
+class ResidentRustSession:
+    """Resident line-framed Rust client for read-only native operations.
+
+    The one-shot RustBackend remains the diagnostic/fallback path.  A session
+    owns exactly one verified child and serializes requests over its stdin/stdout
+    pair; it never exposes source mutation or Runtime authority.
+    """
+
+    name = "rust-session"
+
+    def __init__(self, executable: Path, manifest: Mapping[str, Any]) -> None:
+        self.executable = executable
+        self.manifest = dict(manifest)
+        self._lock = threading.Lock()
+        try:
+            self._process = subprocess.Popen(
+                [str(executable), "--session"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                bufsize=1,
+            )
+            handshake = self._readline()
+        except (OSError, ValueError) as exc:
+            self.close()
+            raise NativeBackendError(
+                "session_start_failed", type(exc).__name__
+            ) from exc
+        if (
+            handshake.get("schema") != "simplicio.fast.engine-session/v1"
+            or handshake.get("abi") != ABI
+            or handshake.get("ok") is not True
+        ):
+            self.close()
+            raise NativeBackendError("session_handshake_invalid")
+
+    def _readline(self) -> dict[str, Any]:
+        line = self._process.stdout.readline() if self._process.stdout else ""
+        if not line or len(line.encode("utf-8")) > MAX_SESSION_FRAME_BYTES:
+            raise NativeBackendError("session_frame_invalid")
+        try:
+            value = json.loads(line)
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise NativeBackendError("session_frame_invalid") from exc
+        if not isinstance(value, dict):
+            raise NativeBackendError("session_frame_invalid")
+        return value
+
+    def call(self, operation: str, payload: Mapping[str, Any]) -> Any:
+        request = canonical({"abi": ABI, "operation": operation, "payload": payload})
+        if len(request) > MAX_SESSION_FRAME_BYTES:
+            raise NativeBackendError("session_frame_too_large")
+        with self._lock:
+            if self._process.poll() is not None:
+                raise NativeBackendError("session_crashed")
+            try:
+                assert self._process.stdin is not None
+                self._process.stdin.write(request.decode("utf-8") + "\n")
+                self._process.stdin.flush()
+                response = self._readline()
+            except (BrokenPipeError, OSError, NativeBackendError) as exc:
+                raise NativeBackendError("session_crashed") from exc
+        if response.get("abi") != ABI or response.get("ok") is not True:
+            raise NativeBackendError("session_response_invalid")
+        return response.get("result")
+
+    def close(self) -> None:
+        process = getattr(self, "_process", None)
+        if process is None or process.poll() is not None:
+            return
+        try:
+            process.stdin.close() if process.stdin else None
+            process.wait(timeout=2)
+        except (OSError, subprocess.TimeoutExpired):
+            process.kill()
+            process.wait(timeout=2)
+
+    def __enter__(self) -> "ResidentRustSession":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
 
 
 def select_backend(

@@ -1,7 +1,7 @@
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
-use std::io::{self, Read};
+use std::io::{self, BufRead, Read, Write};
 
 const ABI: &str = "simplicio.fast-native/v1";
 
@@ -48,7 +48,56 @@ fn execute(operation: &str, payload: &Value) -> Result<Value, String> {
     }
 }
 
+fn response(request: &Value) -> Value {
+    if request["abi"] != ABI {
+        return json!({"abi": ABI, "ok": false, "reason": "abi"});
+    }
+    match execute(
+        request["operation"].as_str().unwrap_or(""),
+        &request["payload"],
+    ) {
+        Ok(result) => json!({"abi": ABI, "ok": true, "result": result}),
+        Err(reason) => json!({"abi": ABI, "ok": false, "reason": reason}),
+    }
+}
+
+fn run_session() -> io::Result<()> {
+    let stdout = io::stdout();
+    let mut output = stdout.lock();
+    writeln!(
+        output,
+        "{}",
+        json!({
+            "schema": "simplicio.fast.engine-session/v1",
+            "abi": ABI,
+            "ok": true,
+            "capabilities": ["sha256", "catalog_lookup", "page", "overlay_merge"],
+            "transport": "stdio-lines"
+        })
+    )?;
+    output.flush()?;
+    for line in io::stdin().lock().lines() {
+        let line = line?;
+        if line.trim().is_empty() {
+            continue;
+        }
+        let request = match serde_json::from_str::<Value>(&line) {
+            Ok(value) => value,
+            Err(_) => json!({"abi": ABI, "ok": false, "reason": "frame_invalid"}),
+        };
+        writeln!(output, "{}", response(&request))?;
+        output.flush()?;
+    }
+    Ok(())
+}
+
 fn main() {
+    if std::env::args().any(|arg| arg == "--session") {
+        if run_session().is_err() {
+            std::process::exit(2);
+        }
+        return;
+    }
     let mut input = String::new();
     if io::stdin().read_to_string(&mut input).is_err() {
         std::process::exit(2);
@@ -60,13 +109,10 @@ fn main() {
     if request["abi"] != ABI {
         std::process::exit(3);
     }
-    match execute(
-        request["operation"].as_str().unwrap_or(""),
-        &request["payload"],
-    ) {
-        Ok(result) => println!("{}", json!({"abi": ABI, "ok": true, "result": result})),
-        Err(reason) => {
-            println!("{}", json!({"abi": ABI, "ok": false, "reason": reason}));
+    match response(&request) {
+        value if value["ok"] == true => println!("{}", value),
+        value => {
+            println!("{}", value);
             std::process::exit(4);
         }
     }
