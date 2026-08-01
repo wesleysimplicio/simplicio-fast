@@ -18,6 +18,7 @@ from .adapters import (
     SUPPORTED_EXTENSIONS,
     csharp_workspace_fingerprint,
     language_for_path,
+    negotiate,
     parse_path,
     rust_workspace_fingerprint,
     typescript_workspace_fingerprint,
@@ -241,6 +242,16 @@ def build_payload(
                 "encoding": "utf-8",
             }
         )
+        capability = negotiate(language)
+        if capability.status != "available":
+            diagnostics.append(
+                {
+                    "path": relative,
+                    "code": "native_parser_unavailable",
+                    "detail": capability.reason or "adapter_fallback",
+                    "fallback": capability.fallback,
+                }
+            )
         try:
             if language == "python":
                 parsed, parsed_relations = _parse_file(path, relative, str(root))
