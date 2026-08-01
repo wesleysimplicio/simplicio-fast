@@ -5,12 +5,72 @@ import unittest
 
 from simplicio_fast.parser_adapter import (
     ParserAdapterError,
+    adapter_capability,
     build_payload,
     validate_payload,
 )
 
 
 class ParserAdapter244Test(unittest.TestCase):
+    def test_capability_receipt_is_versioned_and_bounded(self) -> None:
+        capability = adapter_capability()
+        self.assertEqual("simplicio.fast.parser-adapter/v1", capability["schema"])
+        self.assertEqual("ready", capability["health"])
+        self.assertEqual("contract", capability["completeness"])
+        self.assertEqual("1", capability["version"])
+        self.assertEqual(64, len(capability["fingerprints"]["contract_sha256"]))
+        self.assertIn("integrated", capability["modes"])
+
+    def test_builder_rejects_invalid_mode_limits_and_previous_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            with self.assertRaisesRegex(ParserAdapterError, "mode_invalid"):
+                build_payload(root, mode="unknown")
+            with self.assertRaisesRegex(ParserAdapterError, "limit_invalid"):
+                build_payload(root, limits={"max_files": 0})
+            with self.assertRaisesRegex(ParserAdapterError, "limit_invalid"):
+                build_payload(root, limits={"max_files": True})
+            previous = build_payload(root)
+            with self.assertRaisesRegex(
+                ParserAdapterError, "previous_payload_requires_changed_paths"
+            ):
+                build_payload(root, previous_payload=previous)
+
+    def test_builder_reports_encoding_and_parse_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "bad.py").write_bytes(b"def bad(:\n\xff")
+            payload = build_payload(root)
+            self.assertEqual("partial", payload["completeness"])
+            self.assertEqual("encoding_invalid", payload["diagnostics"][0]["code"])
+            (root / "bad.py").write_text("def bad(:\n    pass\n", encoding="utf-8")
+            payload = build_payload(root)
+            self.assertEqual("parse_failed", payload["diagnostics"][0]["code"])
+
+    def test_validator_rejects_contract_metadata_variants(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            payload = build_payload(root)
+            for field, value, reason in (
+                ("schema", "future", "schema_unsupported"),
+                ("mode", "future", "mode_invalid"),
+                ("producer", "other", "producer_invalid"),
+                ("adapter_version", "2", "adapter_version_unsupported"),
+                ("commit", "short", "commit_invalid"),
+                ("changed_paths", "bad", "changed_paths_invalid"),
+                ("completeness", "unknown", "completeness_invalid"),
+                ("diagnostics", "bad", "diagnostics_invalid"),
+                ("invalidation", "bad", "invalidation_invalid"),
+                ("workspace_fingerprints", "bad", "workspace_fingerprints_invalid"),
+            ):
+                broken = copy.deepcopy(payload)
+                broken[field] = value
+                with self.subTest(field=field):
+                    with self.assertRaisesRegex(ParserAdapterError, reason):
+                        validate_payload(broken)
+
     def test_integrated_mode_requires_mapper_identity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
