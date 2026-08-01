@@ -1,10 +1,14 @@
 import json
 from pathlib import Path
+import shutil
+import subprocess
+import tempfile
 
 import pytest
 
 from simplicio_fast.delivery import _mapper_symbol_handles
 from simplicio_fast.mapper_ingest import MapperIngestError
+from simplicio_fast.snapshot import build_snapshot
 
 
 def _provenance(path: str = ".simplicio/context-snapshot.json") -> dict[str, object]:
@@ -53,3 +57,71 @@ def test_integrated_traceability_fails_closed_without_symbol_nodes(tmp_path: Pat
     )
     with pytest.raises(MapperIngestError, match="mapper_graph_missing"):
         _mapper_symbol_handles(tmp_path, _provenance())
+
+
+def test_installed_mapper_to_integrated_delivery_traceability(tmp_path: Path) -> None:
+    executable = shutil.which("simplicio-mapper")
+    if executable is None:
+        pytest.fail("simplicio-mapper is required for installed delivery E2E")
+    root = tmp_path / "mapper-delivery"
+    root.mkdir()
+    (root / "service.py").write_text(
+        "def helper():\n    return True\n\ndef test_helper():\n    return helper()\n",
+        encoding="utf-8",
+    )
+
+    def run(*args: str) -> str:
+        with tempfile.TemporaryDirectory(prefix="simplicio-fast-e2e-") as logs:
+            stdout_path = Path(logs) / "stdout.txt"
+            stderr_path = Path(logs) / "stderr.txt"
+            with (
+                stdout_path.open("w", encoding="utf-8") as stdout,
+                stderr_path.open("w", encoding="utf-8") as stderr,
+            ):
+                result = subprocess.run(
+                    [*args],
+                    cwd=root,
+                    stdin=subprocess.DEVNULL,
+                    stdout=stdout,
+                    stderr=stderr,
+                    text=True,
+                    check=False,
+                )
+            assert result.returncode == 0, stderr_path.read_text(encoding="utf-8")
+            return stdout_path.read_text(encoding="utf-8", errors="replace")
+
+    for command in (
+        ["git", "init", "--quiet"],
+        ["git", "config", "user.email", "e2e@example.invalid"],
+        ["git", "config", "user.name", "Fast E2E"],
+        ["git", "add", "service.py"],
+        ["git", "commit", "--quiet", "-m", "initial"],
+    ):
+        subprocess.run(
+            command,
+            cwd=root,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    run(executable, "snapshot", "build", "--root", str(root))
+    envelope = json.loads(run(executable, "fast-handoff", str(root)))
+    snapshot = root / "fast.sfast"
+    build_snapshot(root, snapshot)
+
+    from simplicio_fast.delivery import DeliveryEngine
+
+    receipt = DeliveryEngine(root, snapshot, root / "cache").prepare(
+        "helper",
+        profile="loop-standalone",
+        engine_receipt={"backend": "python"},
+        mode="integrated",
+        mapper_handoff=envelope,
+    )
+    assert receipt["mapper"]["traceability"] == "mapper-symbol-id"
+    assert receipt["mapper"]["selected_handles"]
+    assert all(
+        span["handle"].startswith("symbol:")
+        for span in receipt["context"]["selected"]
+    )
