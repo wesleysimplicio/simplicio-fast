@@ -24,6 +24,7 @@ from .adapters import (
     typescript_workspace_fingerprint,
 )
 from .snapshot import _parse_file, stable_id
+from .mapper_ingest import MapperIngestError, validate_handoff
 
 SCHEMA = "simplicio.fast.parser-adapter/v1"
 SUPPORTED_MODES = {"bootstrap", "integrated"}
@@ -60,6 +61,212 @@ class ParserAdapterError(ValueError):
     def __init__(self, reason_code: str, detail: str = "") -> None:
         self.reason_code = reason_code
         super().__init__(f"{reason_code}: {detail}" if detail else reason_code)
+
+
+def _mapper_artifact_path(root: Path, provenance: Mapping[str, Any], name: str) -> Path:
+    artifact = next(
+        (item for item in provenance.get("artifacts", []) if item.get("name") == name),
+        None,
+    )
+    if not isinstance(artifact, Mapping) or not isinstance(artifact.get("path"), str):
+        raise ParserAdapterError("mapper_artifact_missing", name)
+    path = (root / str(artifact["path"])).resolve()
+    if not path.is_file() or not path.is_relative_to(root.resolve()):
+        raise ParserAdapterError("mapper_artifact_missing", name)
+    return path
+
+
+def _mapper_json(root: Path, provenance: Mapping[str, Any], name: str) -> dict[str, Any]:
+    path = _mapper_artifact_path(root, provenance, name)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ParserAdapterError("mapper_artifact_invalid", name) from error
+    if not isinstance(value, dict):
+        raise ParserAdapterError("mapper_artifact_invalid", name)
+    return value
+
+
+def build_payload_from_mapper(
+    root: Path,
+    mapper_handoff: Mapping[str, Any],
+    *,
+    limits: Mapping[str, int] | None = None,
+) -> dict[str, Any]:
+    """Convert Mapper-owned language facts into the v1 adapter contract.
+
+    Stable IDs are read only from the Mapper context snapshot.  The symbol and
+    call indexes are metadata sources; they cannot invent or remap IDs.
+    """
+
+    root = root.resolve()
+    try:
+        provenance = validate_handoff(root, dict(mapper_handoff))
+    except MapperIngestError as error:
+        raise ParserAdapterError(error.reason_code) from error
+    selected_limits = _adapter_limits(limits)
+    symbols_doc = _mapper_json(root, provenance, "symbol_index")
+    project_doc = _mapper_json(root, provenance, "project_map")
+    context_doc = _mapper_json(root, provenance, "context_snapshot")
+    calls_doc = _mapper_json(root, provenance, "call_graph")
+    if symbols_doc.get("schema") != "simplicio.symbol-index/v1":
+        raise ParserAdapterError("mapper_schema_unsupported", "symbol_index")
+    if project_doc.get("schema") != "simplicio.project-map/v1":
+        raise ParserAdapterError("mapper_schema_unsupported", "project_map")
+    if context_doc.get("schema") != "simplicio.context-snapshot/v1":
+        raise ParserAdapterError("mapper_schema_unsupported", "context_snapshot")
+    if calls_doc.get("schema") != "simplicio.call-graph/v1":
+        raise ParserAdapterError("mapper_schema_unsupported", "call_graph")
+    nodes = context_doc.get("graph", {}).get("nodes")
+    if not isinstance(nodes, list):
+        raise ParserAdapterError("mapper_graph_missing")
+    mapper_nodes: dict[str, dict[str, Any]] = {}
+    for node in nodes:
+        if isinstance(node, dict) and isinstance(node.get("id"), str):
+            mapper_nodes[node["id"]] = node
+    raw_files = project_doc.get("files")
+    if not isinstance(raw_files, list):
+        raise ParserAdapterError("mapper_files_missing")
+    files: list[dict[str, Any]] = []
+    file_languages: dict[str, str] = {}
+    for item in raw_files:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            raise ParserAdapterError("mapper_files_invalid")
+        relative = _safe_relative(item["path"])
+        language = item.get("language")
+        if not isinstance(language, str) or not language:
+            raise ParserAdapterError("mapper_language_missing", relative)
+        path = root / relative
+        if not path.is_file():
+            raise ParserAdapterError("source_missing", relative)
+        raw = path.read_bytes()
+        actual_digest = hashlib.sha256(raw).hexdigest()
+        declared_digest = item.get("file_hash")
+        if declared_digest != actual_digest:
+            raise ParserAdapterError("source_digest_mismatch", relative)
+        try:
+            path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            raise ParserAdapterError("encoding_invalid", relative) from error
+        files.append(
+            {"path": relative, "language": language, "sha256": actual_digest, "encoding": "utf-8"}
+        )
+        file_languages[relative] = language
+    if len(files) > selected_limits["max_files"]:
+        raise ParserAdapterError("file_limit_exceeded")
+    raw_symbols = symbols_doc.get("symbols")
+    if not isinstance(raw_symbols, list):
+        raise ParserAdapterError("mapper_symbols_missing")
+    symbols: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+    for item in raw_symbols:
+        if not isinstance(item, dict):
+            raise ParserAdapterError("mapper_symbols_invalid")
+        qualified = item.get("qualified_name")
+        relative = item.get("defined_in")
+        line = item.get("line")
+        if (
+            not isinstance(qualified, str)
+            or not isinstance(relative, str)
+            or not isinstance(line, int)
+            or isinstance(line, bool)
+            or relative not in file_languages
+            or not isinstance(item.get("name"), str)
+            or not isinstance(item.get("kind"), str)
+            or item.get("language", file_languages[relative]) not in set(SUPPORTED_EXTENSIONS.values())
+        ):
+            raise ParserAdapterError("mapper_symbols_invalid")
+        symbol_id = f"symbol:{qualified}"
+        node = mapper_nodes.get(symbol_id)
+        source = node.get("source") if isinstance(node, dict) else None
+        if not isinstance(source, dict) or source.get("file") != relative or source.get("line") != line:
+            raise ParserAdapterError("mapper_id_missing", qualified)
+        if symbol_id in seen_ids:
+            raise ParserAdapterError("symbol_id_collision", symbol_id)
+        seen_ids.add(symbol_id)
+        symbols.append(
+            {
+                "id": symbol_id,
+                "name": item.get("name"),
+                "qualified_name": qualified,
+                "kind": item.get("kind"),
+                "language": item.get("language", file_languages[relative]),
+                "file": relative,
+                "line": line,
+                "end_line": line,
+                "signature": None,
+            }
+        )
+    if len(symbols) > selected_limits["max_symbols"]:
+        raise ParserAdapterError("symbol_limit_exceeded")
+    symbol_ids = {item["qualified_name"]: item["id"] for item in symbols}
+    raw_edges = calls_doc.get("edges")
+    if not isinstance(raw_edges, list):
+        raise ParserAdapterError("mapper_relations_missing")
+    relations: list[dict[str, Any]] = []
+    for edge in raw_edges:
+        if not isinstance(edge, dict):
+            raise ParserAdapterError("mapper_relations_invalid")
+        origin = edge.get("source_symbol")
+        destination = edge.get("target_symbol")
+        if not isinstance(origin, str) or not isinstance(destination, str):
+            raise ParserAdapterError("mapper_relations_invalid")
+        origin_id = symbol_ids.get(origin)
+        destination_id = symbol_ids.get(destination)
+        if origin_id is None or destination_id is None:
+            raise ParserAdapterError("mapper_relation_id_missing")
+        confidence = edge.get("confidence")
+        if not isinstance(confidence, (int, float)) or isinstance(confidence, bool) or not 0 <= confidence <= 1:
+            raise ParserAdapterError("mapper_relation_confidence_invalid")
+        relations.append(
+            {
+                "origin": origin,
+                "destination": destination,
+                "kind": {"calls": "call", "defined_in": "definition", "member_of": "reference"}.get(
+                    edge.get("type"), "reference"
+                ),
+                "confidence": confidence,
+                "origin_id": origin_id,
+                "destination_id": destination_id,
+                "file": edge.get("source_file", ""),
+            }
+        )
+    if len(relations) > selected_limits["max_relations"]:
+        raise ParserAdapterError("relation_limit_exceeded")
+    files.sort(key=lambda item: item["path"])
+    symbols.sort(key=lambda item: (item["file"], item["line"], item["id"]))
+    relations.sort(key=lambda item: (item["file"], item["kind"], item["origin"], item["destination"]))
+    changed_paths = sorted(_safe_relative(path) for path in provenance.get("changed_paths", []))
+    payload: dict[str, Any] = {
+        "schema": SCHEMA,
+        "adapter_version": "1",
+        "mode": "integrated",
+        "producer": "simplicio-fast-python-adapter",
+        "source_adapter": "simplicio-mapper",
+        "repository": str(root),
+        "commit": provenance["commit"],
+        "mapper_generation": provenance["generation"],
+        "config_fingerprint": _digest(project_doc.get("dependencies", {})),
+        "changed_paths": changed_paths,
+        "files": files,
+        "symbols": symbols,
+        "relations": relations,
+        "diagnostics": [],
+        "completeness": "complete",
+        "invalidation": {
+            "schema": "simplicio.fast.parser-invalidation/v1",
+            "requested_paths": changed_paths,
+            "parsed_paths": changed_paths or [item["path"] for item in files],
+            "reused_paths": [] if changed_paths else [item["path"] for item in files],
+            "deleted_paths": [],
+            "reason_codes": ["mapper_delta" if changed_paths else "mapper_full_snapshot"],
+        },
+    }
+    payload["workspace_fingerprints"] = {}
+    payload["payload_sha256"] = _digest(payload)
+    if len(_canonical(payload)) > selected_limits["max_payload_bytes"]:
+        raise ParserAdapterError("payload_limit_exceeded")
+    return payload
 
 
 def _canonical(value: Any) -> bytes:
@@ -600,5 +807,6 @@ __all__ = [
     "SCHEMA",
     "ParserAdapterError",
     "build_payload",
+    "build_payload_from_mapper",
     "validate_payload",
 ]

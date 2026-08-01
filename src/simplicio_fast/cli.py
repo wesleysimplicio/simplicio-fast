@@ -9,7 +9,7 @@ from pathlib import Path
 
 from . import __version__
 from .processor import ProjectProcessor, load_changeset
-from .parser_adapter import adapter_capability
+from .parser_adapter import adapter_capability, build_payload_from_mapper
 from .rollout import RolloutController
 from .snapshot import (
     DEFAULT_BUILD_TIMEOUT_SECONDS,
@@ -593,6 +593,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     commands.add_parser("capabilities", help="report parser capability negotiation")
 
+    mapper_payload = commands.add_parser(
+        "parser-payload",
+        help="compile a validated Mapper handoff into parser-adapter/v1 JSON",
+    )
+    mapper_payload.add_argument("root", nargs="?", default=".")
+    mapper_payload.add_argument("--mapper-handoff", required=True)
+    mapper_payload.add_argument("--output", default=None)
+    json_option(mapper_payload)
+
     pin = commands.add_parser(
         "pin", help="acquire a lease protecting a generation from GC"
     )
@@ -1134,6 +1143,31 @@ def main() -> None:
                     candidates=tuple(candidates),
                 )
             )
+        elif args.command == "parser-payload":
+            root = Path(args.root).resolve()
+            handoff = json.loads(
+                Path(args.mapper_handoff).read_text(encoding="utf-8")
+            )
+            payload = build_payload_from_mapper(root, handoff)
+            if args.output:
+                output = Path(args.output).resolve()
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_text(
+                    json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2) + "\n",
+                    encoding="utf-8",
+                )
+                emit(
+                    {
+                        "schema": "simplicio.fast.parser-payload-receipt/v1",
+                        "output": str(output),
+                        "payload_sha256": payload["payload_sha256"],
+                        "files": len(payload["files"]),
+                        "symbols": len(payload["symbols"]),
+                        "relations": len(payload["relations"]),
+                    }
+                )
+            else:
+                emit(payload)
         elif args.command == "capabilities":
             emit(
                 {

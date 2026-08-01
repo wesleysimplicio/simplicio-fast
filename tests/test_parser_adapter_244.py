@@ -1,17 +1,137 @@
 import copy
+import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from simplicio_fast.parser_adapter import (
     ParserAdapterError,
     adapter_capability,
     build_payload,
+    build_payload_from_mapper,
     validate_payload,
 )
 
 
 class ParserAdapter244Test(unittest.TestCase):
+    def test_mapper_facts_preserve_context_ids_and_validate_payload(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.rs").write_text(
+                "fn resolve() -> i32 { 1 }\n", encoding="utf-8"
+            )
+            digest = hashlib.sha256((root / "service.rs").read_bytes()).hexdigest()
+            artifact_names = {
+                "context_snapshot": {
+                    "schema": "simplicio.context-snapshot/v1",
+                    "graph": {
+                        "nodes": [
+                            {
+                                "id": "symbol:service.rs::resolve",
+                                "source": {"file": "service.rs", "line": 1},
+                            }
+                        ]
+                    },
+                },
+                "project_map": {
+                    "schema": "simplicio.project-map/v1",
+                    "files": [
+                        {"path": "service.rs", "language": "rust", "file_hash": digest}
+                    ],
+                    "dependencies": {"features": ["default"]},
+                },
+                "symbol_index": {
+                    "schema": "simplicio.symbol-index/v1",
+                    "symbols": [
+                        {
+                            "name": "resolve",
+                            "qualified_name": "service.rs::resolve",
+                            "kind": "function",
+                            "language": "rust",
+                            "defined_in": "service.rs",
+                            "line": 1,
+                        }
+                    ],
+                },
+                "call_graph": {
+                    "schema": "simplicio.call-graph/v1",
+                    "edges": [
+                        {
+                            "type": "calls",
+                            "source_file": "service.rs",
+                            "source_symbol": "service.rs::resolve",
+                            "target_symbol": "service.rs::resolve",
+                            "confidence": 0.5,
+                        }
+                    ],
+                },
+            }
+            artifact_paths = []
+            for name, value in artifact_names.items():
+                path = root / ".simplicio" / {
+                    "context_snapshot": "context-snapshot.json",
+                    "project_map": "project-map.json",
+                    "symbol_index": "symbol-index.json",
+                    "call_graph": "call-graph.json",
+                }[name]
+                path.parent.mkdir(exist_ok=True)
+                path.write_text(json.dumps(value), encoding="utf-8")
+                artifact_paths.append({"name": name, "path": str(path.relative_to(root))})
+            provenance = {
+                "commit": "a" * 40,
+                "generation": "generation-1",
+                "artifacts": artifact_paths,
+                "changed_paths": [],
+            }
+            with patch("simplicio_fast.parser_adapter.validate_handoff", return_value=provenance):
+                payload = build_payload_from_mapper(root, {"ignored": True})
+            self.assertEqual("symbol:service.rs::resolve", payload["symbols"][0]["id"])
+            self.assertEqual("call", payload["relations"][0]["kind"])
+            self.assertEqual("valid", validate_payload(payload, root=root)["status"])
+
+    def test_mapper_facts_reject_missing_context_id(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "service.ts"
+            source.write_text("export function run() {}\n", encoding="utf-8")
+            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            (root / ".simplicio").mkdir()
+            docs = {
+                "context_snapshot.json": {
+                    "schema": "simplicio.context-snapshot/v1",
+                    "graph": {"nodes": []},
+                },
+                "project-map.json": {
+                    "schema": "simplicio.project-map/v1",
+                    "files": [{"path": "service.ts", "language": "typescript", "file_hash": digest}],
+                    "dependencies": {},
+                },
+                "symbol-index.json": {
+                    "schema": "simplicio.symbol-index/v1",
+                    "symbols": [{
+                        "name": "run", "qualified_name": "service.ts::run", "kind": "function",
+                        "language": "typescript", "defined_in": "service.ts", "line": 1,
+                    }],
+                },
+                "call-graph.json": {"schema": "simplicio.call-graph/v1", "edges": []},
+            }
+            for name, value in docs.items():
+                (root / ".simplicio" / name).write_text(json.dumps(value), encoding="utf-8")
+            provenance = {
+                "commit": "a" * 40,
+                "generation": "generation-1",
+                "artifacts": [
+                    {"name": key.removesuffix(".json").replace("-", "_"), "path": f".simplicio/{key}"}
+                    for key in docs
+                ],
+                "changed_paths": [],
+            }
+            with patch("simplicio_fast.parser_adapter.validate_handoff", return_value=provenance):
+                with self.assertRaisesRegex(ParserAdapterError, "mapper_id_missing"):
+                    build_payload_from_mapper(root, {"ignored": True})
+
     def test_capability_receipt_is_versioned_and_bounded(self) -> None:
         capability = adapter_capability()
         self.assertEqual("simplicio.fast.parser-adapter/v1", capability["schema"])

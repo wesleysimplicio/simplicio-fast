@@ -330,6 +330,17 @@ simplicio-fast delivery "diagnose locally" --root . --snapshot fast.sfast --mapp
 
 Receipts record the producer, mode, Mapper generation and stable handles; bootstrap output is never labeled as integrated production context.
 
+For parser-adapter/v1 consumers, the same validated handoff can be compiled into a
+canonical JSON payload. Mapper remains the owner of symbols and stable IDs; Fast only
+verifies source hashes and translates the documented facts:
+
+```bash
+simplicio-fast parser-payload . --mapper-handoff mapper-handoff.json --output parser-payload.json
+```
+
+The command fails closed on missing Mapper IDs, unsupported schemas, stale artifact
+digests, missing sources or unknown relation targets.
+
 Version 2.0.18 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
 `query` and the CRUD proof. Internal mapping/editing remain bootstrap fallbacks when integrations
 are absent; `doctor` identifies whether the complete integrated path is ready.
