@@ -296,9 +296,13 @@ def create_delta(
     changed_paths: Iterable[str] | None = None,
     *,
     config_fingerprint: str | None = None,
+    _validated_base: tuple[object, Path, str] | None = None,
 ) -> Delta:
     store._worktree_id(worktree_id)
-    base, _, snapshot_sha256 = _base_snapshot(store, base_generation)
+    if _validated_base is None:
+        base, _, snapshot_sha256 = _base_snapshot(store, base_generation)
+    else:
+        base, _, snapshot_sha256 = _validated_base
     if config_fingerprint is not None and config_fingerprint != base.config_fingerprint:
         raise DeltaError("config_fingerprint_mismatch")
     requested = (
@@ -414,8 +418,12 @@ def compose_delta(
     *,
     config_fingerprint: str | None = None,
     changed_paths: Iterable[str] | None = None,
+    _validated_base: tuple[object, Path, str] | None = None,
 ) -> EffectiveSnapshot:
-    base, snapshot_path, snapshot_sha256 = _base_snapshot(store, base_generation)
+    if _validated_base is None:
+        base, snapshot_path, snapshot_sha256 = _base_snapshot(store, base_generation)
+    else:
+        base, snapshot_path, snapshot_sha256 = _validated_base
     delta = load_delta(store, worktree_id, delta_generation)
     if delta.base_generation != base_generation:
         raise DeltaError("base_generation_mismatch")
@@ -519,6 +527,7 @@ def handoff(
             worktree_id,
             scoped_paths,
             config_fingerprint=config_fingerprint,
+            _validated_base=(base, snapshot_path, snapshot_sha256),
         )
     )
     incremental_ms = (perf_counter() - incremental_start) * 1000
@@ -533,6 +542,7 @@ def handoff(
             delta.delta_generation,
             config_fingerprint=config_fingerprint,
             changed_paths=scoped_paths,
+            _validated_base=(base, snapshot_path, snapshot_sha256),
         ) as composed:
             composed_symbol_count: int | None = len(composed.symbols())
         composed_symbol_count_reason = None
@@ -544,6 +554,7 @@ def handoff(
             delta.delta_generation,
             config_fingerprint=config_fingerprint,
             changed_paths=scoped_paths,
+            _validated_base=(base, snapshot_path, snapshot_sha256),
         ):
             pass
         composed_symbol_count = None

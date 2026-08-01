@@ -444,6 +444,22 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 report["parity_result"]["composed_symbol_count_reason"],
             )
 
+    def test_handoff_validates_base_once_and_reuses_it_for_delta_and_compose(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            with patch(
+                "simplicio_fast.delta._base_snapshot",
+                wraps=__import__("simplicio_fast.delta", fromlist=["_base_snapshot"])._base_snapshot,
+            ) as validate:
+                report = store.handoff(
+                    base.generation_id,
+                    "reuse",
+                    ["one.py"],
+                )
+            self.assertTrue(report["parity"])
+            self.assertEqual(1, validate.call_count)
+
     def test_benchmark_rejects_fewer_than_ten_repetitions(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least 10"):
             run_delta_benchmark(files=4, repetitions=9)
