@@ -181,6 +181,8 @@ class DeliveryEngineTest(unittest.TestCase):
                 str(snapshot),
                 "--fast-engine",
                 "python",
+                "--mapper-mode",
+                "bootstrap",
             ]
             with patch.object(sys, "argv", argv), contextlib.redirect_stdout(output):
                 main()

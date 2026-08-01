@@ -11,6 +11,13 @@ from simplicio_fast.mapper_ingest import MapperIngestError
 from simplicio_fast.snapshot import build_snapshot
 
 
+def test_delivery_cli_defaults_to_integrated_mode() -> None:
+    from simplicio_fast.cli import build_parser
+
+    args = build_parser().parse_args(["delivery", "task"])
+    assert args.mapper_mode == "integrated"
+
+
 def _provenance(path: str = ".simplicio/context-snapshot.json") -> dict[str, object]:
     return {"artifacts": [{"name": "context_snapshot", "path": path}]}
 
