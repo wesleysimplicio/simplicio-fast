@@ -499,14 +499,17 @@ def handoff(
     )
     cold_start = perf_counter()
     cpu_start = time.process_time()
+    base_stage_start = perf_counter()
     base, snapshot_path, snapshot_sha256 = _base_snapshot(store, base_generation)
     if scoped_paths is None:
         with Snapshot(snapshot_path) as canonical:
             canonical_file_count = len(canonical.files())
     else:
         canonical_file_count = len(base.source_hashes)
+    base_stage_ms = (perf_counter() - base_stage_start) * 1000
     cold_ms = (perf_counter() - cold_start) * 1000
     incremental_start = perf_counter()
+    delta_stage_start = perf_counter()
     delta = (
         load_delta(store, worktree_id, delta_generation)
         if delta_generation
@@ -519,7 +522,9 @@ def handoff(
         )
     )
     incremental_ms = (perf_counter() - incremental_start) * 1000
+    delta_stage_ms = (perf_counter() - delta_stage_start) * 1000
     warm_start = perf_counter()
+    compose_stage_start = perf_counter()
     if scoped_paths is None:
         with compose_delta(
             store,
@@ -543,7 +548,9 @@ def handoff(
             pass
         composed_symbol_count = None
         composed_symbol_count_reason = "scoped_query_not_materialized"
+    compose_stage_ms = (perf_counter() - compose_stage_start) * 1000
     warm_ms = (perf_counter() - warm_start) * 1000
+    parity_stage_start = perf_counter()
     merged = _composed_source_hashes(store, base, delta)
     if scoped_paths is None:
         current = {
@@ -571,6 +578,7 @@ def handoff(
             current.get(relative) == merged.get(relative) for relative in scoped_paths
         )
         parity_scope = "explicit_changed_paths"
+    parity_stage_ms = (perf_counter() - parity_stage_start) * 1000
     return {
         "schema": HANDOFF_SCHEMA,
         "status": "pass" if parity else "parity_mismatch",
@@ -602,5 +610,11 @@ def handoff(
             "cold_ms": round(cold_ms, 3),
             "warm_ms": round(warm_ms, 3),
             "incremental_ms": round(incremental_ms, 3),
+        },
+        "stage_timings_ms": {
+            "base_validation_and_open": round(base_stage_ms, 3),
+            "delta_load_or_create": round(delta_stage_ms, 3),
+            "compose_and_validate": round(compose_stage_ms, 3),
+            "source_verification_and_parity": round(parity_stage_ms, 3),
         },
     }
