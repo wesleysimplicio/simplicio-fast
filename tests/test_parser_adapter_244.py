@@ -54,6 +54,19 @@ class ParserAdapter244Test(unittest.TestCase):
             receipt = validate_payload(first)
             self.assertEqual("valid", receipt["status"])
             self.assertEqual(2, receipt["symbols"])
+            self.assertGreaterEqual(receipt["relations"], 2)
+            self.assertIn("definition", {item["kind"] for item in first["relations"]})
+
+    def test_python_relations_preserve_calls_and_tests(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def helper():\n    return True\n\ndef test_helper():\n    return helper()\n",
+                encoding="utf-8",
+            )
+            payload = build_payload(root)
+            kinds = {item["kind"] for item in payload["relations"]}
+            self.assertTrue({"definition", "call", "test"} <= kinds)
 
     def test_changed_paths_are_scoped_and_invalid_payloads_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
