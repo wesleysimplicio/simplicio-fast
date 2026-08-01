@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import __version__
+from .adapters import language_for_path
 from .integrations import run_runtime_effect_transaction
 from .mapper_ingest import MapperIngestError, validate_handoff
 from .processor import ProjectProcessor
@@ -377,7 +378,9 @@ class DeliveryEngine:
                 ],
                 "languages": sorted(
                     {
-                        Path(span.file).suffix.casefold().lstrip(".") or "unknown"
+                        language_for_path(Path(span.file))
+                        or Path(span.file).suffix.casefold().lstrip(".")
+                        or "unknown"
                         for span in spans
                     }
                 ),

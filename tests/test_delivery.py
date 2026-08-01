@@ -78,6 +78,7 @@ class DeliveryEngineTest(unittest.TestCase):
             self.assertEqual(
                 "test-exact-v1", exact["context_request"]["tokenizer_id"]
             )
+            self.assertEqual(["python"], exact["context_request"]["languages"])
             self.assertEqual(
                 ["calls", "imports", "references", "tests"],
                 exact["context_request"]["requested_relations"],
