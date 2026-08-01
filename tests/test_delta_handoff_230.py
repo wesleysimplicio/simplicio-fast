@@ -410,7 +410,11 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             self.assertTrue(summary["parity"])
             for field in (
                 "wall_ms_median",
+                "wall_ms_p95",
+                "wall_ms_p99",
                 "cpu_ms_median",
+                "cpu_ms_p95",
+                "cpu_ms_p99",
                 "rss_kib_median",
                 "page_faults_median",
                 "parsed_files_median",
@@ -426,6 +430,7 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                     self.assertIn(
                         "base_validation_and_open", row["stage_timings_ms"]
                     )
+                    self.assertGreaterEqual(row["stage_coverage"], 0.95)
         self.assertEqual("complete", receipt["environment"]["metrics_status"])
 
     def test_scoped_handoff_does_not_materialize_composed_symbols(self) -> None:
