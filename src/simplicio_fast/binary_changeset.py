@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 import struct
 import subprocess
 from dataclasses import dataclass, field
@@ -711,8 +712,6 @@ class DevCliAdapter:
     schema = ADAPTER_SCHEMA
 
     def materialize(self, changeset: BinaryChangeSet, root: Path) -> dict[str, Any]:
-        from simplicio.mechanical_edit import execute_plan
-
         root = root.resolve()
         operations: list[dict[str, Any]] = []
         for operation in changeset.operations:
@@ -761,24 +760,52 @@ class DevCliAdapter:
                         ),
                     }
                 )
-        result = execute_plan(
-            {
-                "schema": "simplicio.mechanical-edit/v1",
-                "touched_files": sorted(
-                    {
-                        path
-                        for operation in changeset.operations
-                        for path in (operation.path, operation.dest)
-                        if path
-                    }
-                ),
-                "operations": operations,
-                "validation": [],
-            },
-            root=root,
-            apply=True,
-        )
-        if result.get("status") != "ok" or not result.get("applied"):
+        plan = {
+            "schema": "simplicio.mechanical-edit/v1",
+            "touched_files": sorted(
+                {
+                    path
+                    for operation in changeset.operations
+                    for path in (operation.path, operation.dest)
+                    if path
+                }
+            ),
+            "operations": operations,
+            "validation": [],
+        }
+        executable = shutil.which("simplicio-dev-cli") or shutil.which("simplicio-py")
+        if executable is None:
+            raise BinaryChangeSetError("dev_cli_unavailable")
+        try:
+            completed = subprocess.run(
+                [
+                    executable,
+                    "mechanical-edit",
+                    "--root",
+                    str(root),
+                    "--plan",
+                    "-",
+                    "--apply",
+                    "--json",
+                ],
+                input=json.dumps(plan, sort_keys=True),
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,
+            )
+        except (OSError, subprocess.TimeoutExpired) as error:
+            raise BinaryChangeSetError(f"dev_cli_{type(error).__name__}") from error
+        try:
+            result = json.loads(completed.stdout)
+        except json.JSONDecodeError as error:
+            raise BinaryChangeSetError("dev_cli_invalid_receipt") from error
+        if (
+            completed.returncode != 0
+            or not isinstance(result, dict)
+            or result.get("status") != "ok"
+            or not result.get("applied")
+        ):
             raise BinaryChangeSetError(
                 "dev_cli_rejected", json.dumps(result, sort_keys=True)
             )
