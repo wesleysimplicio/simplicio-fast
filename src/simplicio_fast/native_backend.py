@@ -121,15 +121,19 @@ class ResidentRustSession:
         self._lock = threading.Lock()
         self._metrics = {
             "starts": 0,
+            "reconnects": 0,
             "requests": 0,
             "failures": 0,
             "bytes_in": 0,
             "bytes_out": 0,
             "wall_ms": 0.0,
         }
+        self._start()
+
+    def _start(self) -> None:
         try:
             self._process = subprocess.Popen(
-                [str(executable), "--session"],
+                [str(self.executable), "--session"],
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
@@ -138,7 +142,7 @@ class ResidentRustSession:
                 bufsize=1,
             )
             handshake = self._readline()
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, NativeBackendError) as exc:
             self.close()
             raise NativeBackendError(
                 "session_start_failed", type(exc).__name__
@@ -150,7 +154,7 @@ class ResidentRustSession:
         ):
             self.close()
             raise NativeBackendError("session_handshake_invalid")
-        self._metrics["starts"] = 1
+        self._metrics["starts"] += 1
 
     def _readline(self) -> dict[str, Any]:
         line = self._process.stdout.readline() if self._process.stdout else ""
@@ -195,6 +199,13 @@ class ResidentRustSession:
         """Return a snapshot of resident-session health counters."""
         with self._lock:
             return dict(self._metrics)
+
+    def restart(self) -> None:
+        """Restart the verified read-only child without retrying a request."""
+        with self._lock:
+            self.close()
+            self._start()
+            self._metrics["reconnects"] += 1
 
     def close(self) -> None:
         process = getattr(self, "_process", None)
