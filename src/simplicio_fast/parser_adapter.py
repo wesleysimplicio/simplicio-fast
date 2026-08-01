@@ -142,7 +142,8 @@ def build_payload_from_mapper(
         raise ParserAdapterError("mapper_schema_unsupported", "context_snapshot")
     if calls_doc.get("schema") != "simplicio.call-graph/v1":
         raise ParserAdapterError("mapper_schema_unsupported", "call_graph")
-    nodes = context_doc.get("graph", {}).get("nodes")
+    graph = context_doc.get("graph")
+    nodes = graph.get("nodes") if isinstance(graph, dict) else None
     if not isinstance(nodes, list):
         raise ParserAdapterError("mapper_graph_missing")
     mapper_nodes: dict[str, dict[str, Any]] = {}
@@ -206,10 +207,11 @@ def build_payload_from_mapper(
             or not isinstance(relative_value, str)
             or not isinstance(line, int)
             or isinstance(line, bool)
-            or relative not in file_languages
+            or relative_value not in file_languages
             or not isinstance(item.get("name"), str)
             or not isinstance(item.get("kind"), str)
-            or item.get("language", file_languages[relative]) not in set(SUPPORTED_EXTENSIONS.values())
+            or not isinstance(item.get("language", file_languages[relative_value]), str)
+            or item.get("language", file_languages[relative_value]) not in set(SUPPORTED_EXTENSIONS.values())
         ):
             raise ParserAdapterError("mapper_symbols_invalid")
         relative = relative_value

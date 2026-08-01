@@ -13,9 +13,363 @@ from simplicio_fast.parser_adapter import (
     build_payload_from_mapper,
     validate_payload,
 )
+from simplicio_fast.mapper_ingest import MapperIngestError
+
+
+def _mapper_fixture(root: Path) -> tuple[dict[str, object], dict[str, dict[str, object]]]:
+    source = root / "service.rs"
+    source.write_text("fn resolve() -> i32 { 1 }\n", encoding="utf-8")
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    docs: dict[str, dict[str, object]] = {
+        "context_snapshot": {
+            "schema": "simplicio.context-snapshot/v1",
+            "graph": {
+                "nodes": [
+                    {
+                        "id": "symbol:service.rs::resolve",
+                        "source": {"file": "service.rs", "line": 1},
+                    }
+                ]
+            },
+        },
+        "project_map": {
+            "schema": "simplicio.project-map/v1",
+            "files": [
+                {"path": "service.rs", "language": "rust", "file_hash": digest}
+            ],
+            "dependencies": {},
+        },
+        "symbol_index": {
+            "schema": "simplicio.symbol-index/v1",
+            "symbols": [
+                {
+                    "name": "resolve",
+                    "qualified_name": "service.rs::resolve",
+                    "kind": "function",
+                    "language": "rust",
+                    "defined_in": "service.rs",
+                    "line": 1,
+                }
+            ],
+        },
+        "call_graph": {
+            "schema": "simplicio.call-graph/v1",
+            "edges": [
+                {
+                    "type": "calls",
+                    "source_file": "service.rs",
+                    "source_symbol": "service.rs::resolve",
+                    "target_symbol": "service.rs::resolve",
+                    "confidence": 0.5,
+                }
+            ],
+        },
+    }
+    path_names = {
+        "context_snapshot": "context-snapshot.json",
+        "project_map": "project-map.json",
+        "symbol_index": "symbol-index.json",
+        "call_graph": "call-graph.json",
+    }
+    artifact_dir = root / ".simplicio"
+    artifact_dir.mkdir()
+    artifacts: list[dict[str, str]] = []
+    for name, document in docs.items():
+        relative = f".simplicio/{path_names[name]}"
+        (root / relative).write_text(json.dumps(document), encoding="utf-8")
+        artifacts.append({"name": name, "path": relative})
+    return {
+        "commit": "a" * 40,
+        "generation": "generation-1",
+        "artifacts": artifacts,
+        "changed_paths": [],
+    }, docs
 
 
 class ParserAdapter244Test(unittest.TestCase):
+    def test_mapper_payload_rejects_decoder_envelope_relation_and_size_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provenance, docs = _mapper_fixture(root)
+
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                side_effect=MapperIngestError("mapper_incomplete"),
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_incomplete"):
+                build_payload_from_mapper(root, {"ignored": True})
+
+            context_path = root / ".simplicio/context-snapshot.json"
+            context_path.write_text("{not-json", encoding="utf-8")
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_artifact_invalid"):
+                build_payload_from_mapper(root, {"ignored": True})
+            context_path.write_text("[1, 2, 3]", encoding="utf-8")
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_artifact_invalid"):
+                build_payload_from_mapper(root, {"ignored": True})
+            context_path.write_text(json.dumps(docs["context_snapshot"]), encoding="utf-8")
+
+            context_path.unlink()
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_artifact_missing"):
+                build_payload_from_mapper(root, {"ignored": True})
+            context_path.write_text(json.dumps(docs["context_snapshot"]), encoding="utf-8")
+
+            docs["symbol_index"]["symbols"] = [None]
+            (root / ".simplicio/symbol-index.json").write_text(
+                json.dumps(docs["symbol_index"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_symbols_invalid"):
+                build_payload_from_mapper(root, {"ignored": True})
+            docs["symbol_index"]["symbols"] = [
+                {
+                    "name": "resolve",
+                    "qualified_name": "service.rs::resolve",
+                    "kind": "function",
+                    "language": "rust",
+                    "defined_in": "service.rs",
+                    "line": 1,
+                }
+            ]
+            (root / ".simplicio/symbol-index.json").write_text(
+                json.dumps(docs["symbol_index"]), encoding="utf-8"
+            )
+
+            docs["call_graph"]["edges"] = [None]
+            (root / ".simplicio/call-graph.json").write_text(
+                json.dumps(docs["call_graph"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_relations_invalid"):
+                build_payload_from_mapper(root, {"ignored": True})
+            docs["call_graph"]["edges"] = [
+                {
+                    "type": "calls",
+                    "source_file": "service.rs",
+                    "source_symbol": "service.rs::resolve",
+                    "target_symbol": "service.rs::resolve",
+                    "confidence": 2,
+                }
+            ]
+            (root / ".simplicio/call-graph.json").write_text(
+                json.dumps(docs["call_graph"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_relation_confidence_invalid"):
+                build_payload_from_mapper(root, {"ignored": True})
+
+            docs["call_graph"]["edges"][0]["confidence"] = 0.5
+            (root / ".simplicio/call-graph.json").write_text(
+                json.dumps(docs["call_graph"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), self.assertRaisesRegex(ParserAdapterError, "payload_limit_exceeded"):
+                build_payload_from_mapper(
+                    root, {"ignored": True}, limits={"max_payload_bytes": 1}
+                )
+
+    def test_mapper_payload_rejects_source_encoding_and_bounds(self) -> None:
+        cases = (
+            ("source_missing", lambda root, docs: docs["project_map"]["files"].__setitem__(0, {
+                "path": "missing.rs", "language": "rust", "file_hash": "0" * 64
+            })),
+            ("source_digest_mismatch", lambda root, docs: docs["project_map"]["files"][0].__setitem__("file_hash", "0" * 64)),
+            ("encoding_invalid", lambda root, docs: (root / "service.rs").write_bytes(b"fn bad() { \xff }\n")),
+            ("mapper_symbols_missing", lambda root, docs: docs["symbol_index"].__setitem__("symbols", None)),
+            ("mapper_graph_missing", lambda root, docs: docs["context_snapshot"].__setitem__("graph", None)),
+            ("mapper_relations_missing", lambda root, docs: docs["call_graph"].__setitem__("edges", None)),
+        )
+        for expected, mutate in cases:
+            with self.subTest(expected=expected), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                provenance, docs = _mapper_fixture(root)
+                mutate(root, docs)
+                for name, document in docs.items():
+                    artifact = next(item for item in provenance["artifacts"] if item["name"] == name)
+                    (root / artifact["path"]).write_text(json.dumps(document), encoding="utf-8")
+                if expected == "encoding_invalid":
+                    digest = hashlib.sha256((root / "service.rs").read_bytes()).hexdigest()
+                    docs["project_map"]["files"][0]["file_hash"] = digest
+                    (root / ".simplicio/project-map.json").write_text(
+                        json.dumps(docs["project_map"]), encoding="utf-8"
+                    )
+                with patch(
+                    "simplicio_fast.parser_adapter.validate_handoff",
+                    return_value=provenance,
+                ), self.assertRaisesRegex(ParserAdapterError, expected):
+                    build_payload_from_mapper(root, {"ignored": True})
+
+    def test_mapper_payload_enforces_file_symbol_and_relation_limits(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provenance, docs = _mapper_fixture(root)
+            second = root / "second.rs"
+            second.write_text("fn second() -> i32 { 2 }\n", encoding="utf-8")
+            docs["project_map"]["files"].append(
+                {
+                    "path": "second.rs",
+                    "language": "rust",
+                    "file_hash": hashlib.sha256(second.read_bytes()).hexdigest(),
+                }
+            )
+            (root / ".simplicio/project-map.json").write_text(
+                json.dumps(docs["project_map"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ):
+                with self.assertRaisesRegex(ParserAdapterError, "file_limit_exceeded"):
+                    build_payload_from_mapper(root, {"ignored": True}, limits={"max_files": 1})
+            docs["project_map"]["files"].pop()
+            docs["symbol_index"]["symbols"].append(
+                {
+                    "name": "second",
+                    "qualified_name": "service.rs::second",
+                    "kind": "function",
+                    "language": "rust",
+                    "defined_in": "service.rs",
+                    "line": 1,
+                }
+            )
+            docs["context_snapshot"]["graph"]["nodes"].append(
+                {
+                    "id": "symbol:service.rs::second",
+                    "source": {"file": "service.rs", "line": 1},
+                }
+            )
+            (root / ".simplicio/symbol-index.json").write_text(
+                json.dumps(docs["symbol_index"]), encoding="utf-8"
+            )
+            (root / ".simplicio/context-snapshot.json").write_text(
+                json.dumps(docs["context_snapshot"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ):
+                with self.assertRaisesRegex(ParserAdapterError, "symbol_limit_exceeded"):
+                    build_payload_from_mapper(root, {"ignored": True}, limits={"max_symbols": 1})
+            docs["symbol_index"]["symbols"].pop()
+            docs["call_graph"]["edges"].append(dict(docs["call_graph"]["edges"][0]))
+            (root / ".simplicio/call-graph.json").write_text(
+                json.dumps(docs["call_graph"]), encoding="utf-8"
+            )
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ):
+                with self.assertRaisesRegex(ParserAdapterError, "relation_limit_exceeded"):
+                    build_payload_from_mapper(root, {"ignored": True}, limits={"max_relations": 1})
+
+    def test_mapper_payload_rejects_schema_source_and_relation_failures(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provenance, docs = _mapper_fixture(root)
+
+            def build() -> dict[str, object]:
+                with patch(
+                    "simplicio_fast.parser_adapter.validate_handoff",
+                    return_value=provenance,
+                ):
+                    return build_payload_from_mapper(root, {"ignored": True})
+
+            broken_artifacts = {
+                **provenance,
+                "artifacts": [
+                    item
+                    for item in provenance["artifacts"]
+                    if item["name"] != "call_graph"
+                ],
+            }
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=broken_artifacts,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_artifact_missing"):
+                build_payload_from_mapper(root, {"ignored": True})
+
+            for name, expected in (
+                ("symbol_index", "mapper_schema_unsupported"),
+                ("project_map", "mapper_schema_unsupported"),
+                ("context_snapshot", "mapper_schema_unsupported"),
+                ("call_graph", "mapper_schema_unsupported"),
+            ):
+                original = docs[name]["schema"]
+                docs[name]["schema"] = "future.schema/v99"
+                (root / provenance["artifacts"][[x["name"] for x in provenance["artifacts"]].index(name)]["path"]).write_text(
+                    json.dumps(docs[name]), encoding="utf-8"
+                )
+                with self.assertRaisesRegex(ParserAdapterError, expected):
+                    build()
+                docs[name]["schema"] = original
+                (root / provenance["artifacts"][[x["name"] for x in provenance["artifacts"]].index(name)]["path"]).write_text(
+                    json.dumps(docs[name]), encoding="utf-8"
+                )
+
+            project = docs["project_map"]
+            project["files"] = None
+            (root / ".simplicio/project-map.json").write_text(json.dumps(project), encoding="utf-8")
+            with self.assertRaisesRegex(ParserAdapterError, "mapper_files_missing"):
+                build()
+
+    def test_mapper_payload_reports_partial_relations_and_skips_ignored_files(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            provenance, docs = _mapper_fixture(root)
+            ignored = root / ".pytest-basetemp-case" / "ignored.py"
+            ignored.parent.mkdir()
+            ignored.write_text("def ignored():\n    return True\n", encoding="utf-8")
+            project = docs["project_map"]
+            project["files"].append(
+                {
+                    "path": ".pytest-basetemp-case/ignored.py",
+                    "language": "python",
+                    "file_hash": hashlib.sha256(ignored.read_bytes()).hexdigest(),
+                }
+            )
+            (root / ".gitignore").write_text(".pytest-basetemp-*/\n", encoding="utf-8")
+            (root / ".simplicio/project-map.json").write_text(json.dumps(project), encoding="utf-8")
+            calls = docs["call_graph"]
+            calls["edges"].append(
+                {
+                    "type": "calls",
+                    "source_file": "service.rs",
+                    "source_symbol": "service.rs::missing",
+                    "target_symbol": "service.rs::resolve",
+                    "confidence": 0.5,
+                }
+            )
+            (root / ".simplicio/call-graph.json").write_text(json.dumps(calls), encoding="utf-8")
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=provenance,
+            ), patch(
+                "simplicio_fast.parser_adapter._git_ignored",
+                return_value={".pytest-basetemp-case/ignored.py"},
+            ):
+                payload = build_payload_from_mapper(root, {"ignored": True})
+            self.assertEqual("partial", payload["completeness"])
+            self.assertTrue(any(item["code"] == "mapper_relation_id_missing" for item in payload["diagnostics"]))
+            self.assertNotIn(
+                ".pytest-basetemp-case/ignored.py",
+                [item["path"] for item in payload["files"]],
+            )
+            self.assertEqual("valid", validate_payload(payload, root=root)["status"])
     def test_mapper_facts_preserve_context_ids_and_validate_payload(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
