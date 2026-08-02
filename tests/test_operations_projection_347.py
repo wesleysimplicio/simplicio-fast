@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from simplicio_fast.operations_projection import OperationReceipt, OperationsProjection, OperationsProjectionError
@@ -67,3 +69,20 @@ def test_operations_projection_rejects_same_sequence_fork_but_allows_duplicate()
     projection.ingest([item, item])
     with pytest.raises(OperationsProjectionError, match="receipt_fork_detected"):
         projection.ingest([OperationReceipt("a", "attempt", "failed", "g1", 1, "loop/v1", {})])
+
+
+def test_operations_projection_supports_twenty_concurrent_readers() -> None:
+    projection = OperationsProjection("repo", "g1")
+    projection.ingest([receipt(f"attempt:{index}", index) for index in range(1, 21)])
+
+    def read(index: int) -> tuple[int, int, int, str]:
+        return (
+            len(projection.query(max_results=1000)),
+            len(projection.query_slots(max_results=1000)),
+            projection.stats()["receipts"],
+            projection.snapshot()["schema"],
+        )
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        results = list(pool.map(read, range(20)))
+    assert results == [(20, 20, 20, "simplicio.fast.operations-projection/v1")] * 20
