@@ -10,10 +10,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path, PurePosixPath
 import re
 import subprocess
-from typing import Any, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from pathlib import Path, PurePosixPath
+from typing import Any
 
 from .adapters import (
     SUPPORTED_EXTENSIONS,
@@ -24,9 +25,9 @@ from .adapters import (
     rust_workspace_fingerprint,
     typescript_workspace_fingerprint,
 )
-from .snapshot import _parse_file, stable_id
 from .mapper_ingest import MapperIngestError, validate_handoff
 from .projection import ProjectionEnvelope
+from .snapshot import _parse_file, stable_id
 
 SCHEMA = "simplicio.fast.parser-adapter/v1"
 SUPPORTED_MODES = {"bootstrap", "integrated"}
@@ -622,8 +623,17 @@ def build_payload(
             if len(symbols) >= selected_limits["max_symbols"]:
                 raise ParserAdapterError("symbol_limit_exceeded")
             signature = item.signature or item.kind
-            symbol_id = stable_id(
-                str(root), relative, language, item.qualified_name, signature
+            # The Python path is the legacy Mapper-compatible extractor.  Its
+            # Symbol already carries the historical ID, including the exact
+            # signature treatment for classes and symbols without a
+            # signature.  Reusing it is required for adapter/legacy parity;
+            # lexical adapters still derive their bounded fallback IDs below.
+            symbol_id = (
+                item.symbol_id
+                if language == "python" and item.symbol_id
+                else stable_id(
+                    str(root), relative, language, item.qualified_name, signature
+                )
             )
             if symbol_id in seen_ids:
                 # Lexical adapters cannot always recover overload signatures.
