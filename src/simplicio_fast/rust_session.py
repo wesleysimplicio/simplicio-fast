@@ -39,6 +39,7 @@ class RustCoreSession:
         self.executable = str(executable)
         self._expected_manifest = dict(expected_manifest or {})
         self._lock = threading.Lock()
+        self._closed = False
         self._metrics: dict[str, int | float] = {
             "starts": 1,
             "reconnects": 0,
@@ -151,6 +152,8 @@ class RustCoreSession:
         return value
 
     def call(self, operation: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        if self.closed:
+            raise RustSessionError("session_closed")
         if not isinstance(operation, str) or operation not in READ_ONLY_OPERATIONS:
             raise RustSessionError("session_operation_invalid")
         if not isinstance(payload, Mapping):
@@ -220,6 +223,7 @@ class RustCoreSession:
 
     def _restart_locked(self) -> None:
         self.close()
+        self._closed = False
         try:
             self._process = subprocess.Popen(
                 [self.executable, "--session"],
@@ -245,6 +249,7 @@ class RustCoreSession:
         self._metrics["reconnects"] += 1
 
     def close(self) -> None:
+        self._closed = True
         process = getattr(self, "_process", None)
         if process is None or process.poll() is not None:
             return
@@ -255,6 +260,10 @@ class RustCoreSession:
         except (OSError, subprocess.TimeoutExpired):
             process.kill()
             process.wait(timeout=2)
+
+    @property
+    def closed(self) -> bool:
+        return bool(getattr(self, "_closed", False))
 
     def __enter__(self) -> "RustCoreSession":
         return self
