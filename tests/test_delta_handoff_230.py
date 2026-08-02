@@ -18,7 +18,7 @@ from benchmarks.changed_path_delta_230 import (
 )
 from simplicio_fast.delta import DELTA_SCHEMA, Delta, DeltaError
 from simplicio_fast.snapshot import build_snapshot
-from simplicio_fast.workspace import Manifest, WorkspaceStore
+from simplicio_fast.workspace import MANIFEST_SCHEMA, Manifest, WorkspaceStore
 
 
 def test_symbol_target_respects_explicit_file_distribution() -> None:
@@ -46,6 +46,32 @@ def test_delta_direct_constructor_rejects_invalid_contract_types() -> None:
         Delta(**{**values, "base_commit": None})
     with pytest.raises(DeltaError, match="delta_shape_invalid"):
         Delta(**{**values, "changed": []})
+
+
+def test_delta_constructor_detaches_nested_changed_records() -> None:
+    changed = {
+        "one.py": {
+            "sha256": "a" * 64,
+            "tombstone": False,
+            "symbols": [],
+        }
+    }
+    values = {
+        "schema": DELTA_SCHEMA,
+        "delta_generation": "a" * 64,
+        "base_generation": "b" * 64,
+        "base_commit": "commit",
+        "base_config_fingerprint": "config",
+        "base_schema": MANIFEST_SCHEMA,
+        "base_snapshot_sha256": "c" * 64,
+        "worktree_id": "worktree",
+        "changed": changed,
+        "created_at": "2026-01-01T00:00:00Z",
+        "delta_sha256": "d" * 64,
+    }
+    delta = Delta(**values)
+    changed["one.py"]["symbols"].append({"name": "mutated"})
+    assert delta.changed["one.py"]["symbols"] == []
 
 
 def _shell_command(arguments: list[str]) -> str:

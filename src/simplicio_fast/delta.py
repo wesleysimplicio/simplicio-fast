@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -84,6 +85,7 @@ class Delta:
                 raise DeltaError("delta_digest_invalid")
         for path, record in self.changed.items():
             _validate_record(path, record)
+        object.__setattr__(self, "changed", deepcopy(self.changed))
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
