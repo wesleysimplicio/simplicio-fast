@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.22 - 2026-08-02
+
+- Synchronize the Fast release train with Mapper 0.26.10, Dev CLI 0.18.5,
+  and Loop 3.38.29 after the merged semantic-compute delivery and release
+  evidence slices.
+
 ## 2.0.21 - 2026-08-02
 
 - Publish the latest semantic-compute delivery line with Python/Rust parity
