@@ -26,14 +26,21 @@ fn print_help() {
 fn session_snapshot<'a>(
     snapshots: &'a mut HashMap<String, SnapshotReader>,
     path: &str,
+    expected_generation: Option<&str>,
 ) -> Result<&'a SnapshotReader, String> {
     if !snapshots.contains_key(path) {
         let reader = SnapshotReader::open(path).map_err(|error| error.to_string())?;
         snapshots.insert(path.to_owned(), reader);
     }
-    snapshots
+    let snapshot = snapshots
         .get(path)
-        .ok_or_else(|| "session_snapshot_missing".to_owned())
+        .ok_or_else(|| "session_snapshot_missing".to_owned())?;
+    if let Some(expected) = expected_generation {
+        if expected != snapshot.stats().generation {
+            return Err("generation_mismatch".to_owned());
+        }
+    }
+    Ok(snapshot)
 }
 
 fn session_execute(
@@ -53,7 +60,10 @@ fn session_execute(
                 .get("snapshot")
                 .and_then(Value::as_str)
                 .ok_or_else(|| "snapshot_missing".to_owned())?;
-            Ok(serde_json::json!({"stats": session_snapshot(snapshots, snapshot)?.stats()}))
+            let expected_generation = payload.get("generation").and_then(Value::as_str);
+            Ok(
+                serde_json::json!({"stats": session_snapshot(snapshots, snapshot, expected_generation)?.stats()}),
+            )
         }
         "query" => {
             let snapshot = payload
@@ -71,7 +81,8 @@ fn session_execute(
                 .get("cursor")
                 .and_then(Value::as_u64)
                 .map(|value| value as usize);
-            let receipt = session_snapshot(snapshots, snapshot)?
+            let expected_generation = payload.get("generation").and_then(Value::as_str);
+            let receipt = session_snapshot(snapshots, snapshot, expected_generation)?
                 .query_filtered_after(term, path, kind, limit, cursor)
                 .map_err(|error| error.to_string())?;
             Ok(serde_json::json!({
@@ -103,7 +114,8 @@ fn session_execute(
                     .and_then(Value::as_u64)
                     .unwrap_or(default as u64) as usize
             };
-            let receipt = session_snapshot(snapshots, snapshot)?
+            let expected_generation = payload.get("generation").and_then(Value::as_str);
+            let receipt = session_snapshot(snapshots, snapshot, expected_generation)?
                 .context_with_receipt(
                     std::path::Path::new(root),
                     term,

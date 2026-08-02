@@ -173,10 +173,20 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
                 "payload": {"snapshot": str(snapshot), "term": "help", "limit": 1},
             },
             {"operation": "session_cache_stats", "payload": {}},
+            {
+                "operation": "query",
+                "payload": {
+                    "snapshot": str(snapshot),
+                    "term": "helper",
+                    "limit": 1,
+                    "generation": "SFAST001:" + "0" * 64,
+                },
+            },
         ],
     )
     assert session_responses[0]["ok"] and session_responses[1]["ok"]
     assert session_responses[2] == {"ok": True, "result": {"snapshots": 1}}
+    assert session_responses[3] == {"ok": False, "reason": "generation_mismatch"}
 
     with RustCoreSession(executable) as session:
         result = session.call(
