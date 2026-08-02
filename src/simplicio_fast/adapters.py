@@ -196,6 +196,9 @@ def discover_csharp_projects(root: Path) -> list[Path]:
         "Directory.Build.props",
         "Directory.Build.targets",
         "Directory.Packages.props",
+        "global.json",
+        "NuGet.config",
+        "packages.lock.json",
     }
     return sorted(
         path
