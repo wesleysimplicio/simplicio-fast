@@ -68,6 +68,22 @@ def test_universal_context_exposes_boundaries_and_wrapper_accounting() -> None:
     assert item["projection_generation"] == "g2"
 
 
+def test_universal_context_receipt_pins_source_and_projection_generations() -> None:
+    item = ProjectionEnvelope.create(
+        "knowledge",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="projection-g2",
+        source_generation="source-g1",
+        projection_generation="projection-g2",
+        stable_handle="versioned",
+        payload={"repository": "repo", "value": "versioned"},
+    )
+    result = compile_context([item], repository_scope="repo")
+    assert result["source_generations"] == ["source-g1"]
+    assert result["projection_generations"] == ["projection-g2"]
+
+
 def test_universal_context_rejects_conflicting_duplicate_and_impossible_wrapper() -> None:
     first = projection("knowledge", "same")
     second = ProjectionEnvelope.create(

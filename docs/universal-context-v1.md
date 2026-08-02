@@ -9,5 +9,7 @@ estimated-token budgets. Truncation reasons are explicit.
 The packet contains derived facts with producer provenance and marks
 `authority=facts_only` and `instructions=false`. It does not execute an LLM,
 convert retrieved content into trusted instructions, authorize tools, or
-replace the existing Code context hot path. Trust/authority policy, Runtime
-admission and external adapters remain outside Fast.
+replace the existing Code context hot path. Its receipt separately lists the
+selected `source_generations` and `projection_generations`, so a consumer can
+pin both producer inputs and the derived projection generation. Trust/authority
+policy, Runtime admission and external adapters remain outside Fast.

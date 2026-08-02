@@ -161,7 +161,10 @@ def compile_context(
         "wrapper_bytes": wrapper_bytes,
         "wrapper_tokens": wrapper_tokens,
         "trust_floor": trust_floor,
-        "source_generations": sorted({item["generation"] for item in selected}),
+        "source_generations": sorted({item["source_generation"] for item in selected}),
+        "projection_generations": sorted(
+            {item["projection_generation"] for item in selected}
+        ),
         "selection": {
             "candidate_count": len(ordered),
             "selected_count": len(selected),
