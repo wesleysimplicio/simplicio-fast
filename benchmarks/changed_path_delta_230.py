@@ -21,6 +21,19 @@ SCHEMA = "simplicio.fast.changed-path-delta-benchmark/v2"
 MIN_REPETITIONS = 10
 
 
+def workload_shape(symbols: int, files: int | None = None) -> tuple[int, int]:
+    """Return the requested file/function distribution for a symbol target."""
+    if symbols < 1:
+        raise ValueError("symbols must be positive")
+    if files is None:
+        files = max(1, int(symbols**0.5))
+        while files * files < symbols:
+            files += 1
+    if files < 2:
+        raise ValueError("files must be at least two")
+    return files, (symbols + files - 1) // files
+
+
 def _process_metrics() -> tuple[int | None, int | None, str | None]:
     if os.name == "nt":
         try:
@@ -416,7 +429,12 @@ def run(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--files", type=int, default=24)
+    parser.add_argument(
+        "--files",
+        type=int,
+        default=None,
+        help="source-file count; when omitted with --symbols, use a square-root shape",
+    )
     parser.add_argument(
         "--symbols",
         type=int,
@@ -425,15 +443,13 @@ def main() -> None:
     parser.add_argument("--repetitions", type=int, default=MIN_REPETITIONS)
     parser.add_argument("--json-out", type=Path)
     args = parser.parse_args()
-    files = args.files
+    files = args.files if args.files is not None else 24
     functions_per_file = 1
     if args.symbols is not None:
-        if args.symbols < 1:
-            parser.error("--symbols must be positive")
-        files = max(1, int(args.symbols**0.5))
-        while files * files < args.symbols:
-            files += 1
-        functions_per_file = (args.symbols + files - 1) // files
+        try:
+            files, functions_per_file = workload_shape(args.symbols, args.files)
+        except ValueError as error:
+            parser.error(str(error))
     receipt = run(
         files=files,
         repetitions=args.repetitions,

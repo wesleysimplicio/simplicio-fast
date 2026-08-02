@@ -10,10 +10,22 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from benchmarks.changed_path_delta_230 import run as run_delta_benchmark
+import pytest
+
+from benchmarks.changed_path_delta_230 import (
+    run as run_delta_benchmark,
+    workload_shape,
+)
 from simplicio_fast.delta import DeltaError
 from simplicio_fast.snapshot import build_snapshot
 from simplicio_fast.workspace import WorkspaceStore
+
+
+def test_symbol_target_respects_explicit_file_distribution() -> None:
+    assert workload_shape(1_000_000, 2) == (2, 500_000)
+    assert workload_shape(1_000_000) == (1_000, 1_000)
+    with pytest.raises(ValueError):
+        workload_shape(1_000_000, 1)
 
 
 def _shell_command(arguments: list[str]) -> str:
