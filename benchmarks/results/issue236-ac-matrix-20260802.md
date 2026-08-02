@@ -10,7 +10,7 @@ and release-integrity passes all checks.
 | Issue | Current state | Current evidence | Remaining authoritative gate |
 | --- | --- | --- | --- |
 | #236 | PARTIAL | Full suite: 603 tests + 67 subtests; release-integrity pass; receipts below | Final AC matrix, full coverage, Linux/Windows assets, 10 worktrees/20 readers, installed S3/S4/S5 delivery |
-| #237 | PARTIAL | `766387c`, `c340cd1`; Mapper 0.26.9 installed E2E, Mapper→SFAST sidecar, 20 concurrent readers | Linux/Windows compatibility, physical worktree isolation, final coverage and installed package matrix |
+| #237 | PARTIAL | `829a911`; Mapper 0.26.9 installed E2E, Mapper→SFAST sidecar, 20 concurrent readers, validated changed/deleted delta paths and scoped invalidation tests | Linux/Windows compatibility, physical worktree isolation, final coverage and installed package matrix |
 | #238 | PARTIAL | `aa3ba71`; resident session now verifies manifest version, source commit, conformance digest and executable digest; focused session tests | Unix/Windows transport matrix, 30-run resident-vs-one-shot receipt, crash/concurrency/installed package and final coverage |
 | #239 | PARTIAL | `issue239-windows-20260801.json`; 30-run indexed receipts at 10k/100k/1M; `c06f34a` 20 readers | Cross-platform receipts, physical worktrees, installed package and final coverage |
 | #240 | PARTIAL | `6de3eed`; identifier-boundary normalization, confidence pruning, frozen corpus recall@20=1.0, 32-to-4 token regression, exact tokenizer receipt | Provider tokenizer matrix, real-task recall/token matrix, warm latency and coverage |
