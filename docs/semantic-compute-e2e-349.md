@@ -9,4 +9,6 @@ mmap layout fields.
 This is a local synthetic fixture and is intentionally not a rollout claim. A
 real #349 receipt still requires Mapper/Runtime/Loop/Dev CLI sources, installed
 Rust paths, cross-repository contract breakage, security/adversarial cases and
-cold/warm/resource measurements.
+cold/warm/resource measurements. Rollout state is fail-closed: invalid modes,
+generations, rollback requests without a reason, and forged/corrupt state files
+are rejected with typed reason codes.
