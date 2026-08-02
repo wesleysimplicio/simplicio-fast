@@ -40,6 +40,7 @@ def _task_result(
     task: dict[str, Any],
     engine: DeliveryEngine,
     engine_receipt: dict[str, Any],
+    source_root: Path,
     repetitions: int,
 ) -> dict[str, Any]:
     cold: list[float] = []
@@ -47,6 +48,7 @@ def _task_result(
     selected: list[str] = []
     recall: list[float] = []
     precision: list[float] = []
+    downstream: list[dict[str, Any]] = []
     expected = set(task["expected_files"])
     for repetition in range(repetitions):
         started = time.perf_counter_ns()
@@ -76,6 +78,7 @@ def _task_result(
         selected = unique
         recall.append(hit_count / len(expected) if expected else 1.0)
         precision.append(hit_count / len(unique) if unique else 0.0)
+        downstream.append(_consume_selected(source_root, task, unique))
     return {
         "id": task["id"],
         "text": task["text"],
@@ -83,6 +86,11 @@ def _task_result(
         "selected_files": selected,
         "recall": statistics.median(recall),
         "precision": statistics.median(precision),
+        "downstream": {
+            "consumer": "bounded-source-reader/v1",
+            "success": all(item["success"] for item in downstream),
+            "runs": downstream,
+        },
         "cold_median_ms": statistics.median(cold),
         "cold_p95_ms": _percentile(cold, 0.95),
         "warm_median_ms": statistics.median(warm),
@@ -94,6 +102,39 @@ def _task_result(
             "recall": recall,
             "precision": precision,
         },
+    }
+
+
+def _consume_selected(
+    source_root: Path, task: dict[str, Any], selected_files: list[str]
+) -> dict[str, Any]:
+    """Run the frozen fixture's bounded downstream source consumer."""
+    expected = set(task["expected_files"])
+    read_bytes = 0
+    failures: list[str] = []
+    for relative in selected_files:
+        candidate = (source_root / relative).resolve()
+        try:
+            candidate.relative_to(source_root)
+        except ValueError:
+            failures.append(f"path_outside_root:{relative}")
+            continue
+        if not candidate.is_file():
+            failures.append(f"missing_file:{relative}")
+            continue
+        data = candidate.read_bytes()
+        if len(data) > 8 * 1024 * 1024:
+            failures.append(f"file_size_limit:{relative}")
+            continue
+        read_bytes += len(data)
+    missing_expected = sorted(expected.difference(selected_files))
+    if missing_expected:
+        failures.extend(f"missing_expected:{relative}" for relative in missing_expected)
+    return {
+        "success": not failures,
+        "selected_count": len(selected_files),
+        "read_bytes": read_bytes,
+        "failures": failures,
     }
 
 
@@ -115,6 +156,7 @@ def run(root: Path | None = None, *, repetitions: int = 10) -> dict[str, Any]:
                     task,
                     DeliveryEngine(source_root, snapshot, Path(directory) / task["id"]),
                     engine_receipt,
+                    source_root,
                     repetitions,
                 )
             )
@@ -130,10 +172,11 @@ def run(root: Path | None = None, *, repetitions: int = 10) -> dict[str, Any]:
             "recall_median": statistics.median(item["recall"] for item in results),
             "precision_median": statistics.median(item["precision"] for item in results),
             "warm_p95_max_ms": max(item["warm_p95_ms"] for item in results),
-            "downstream_success": None,
-            "downstream_success_reason": "consumer_not_present_in_frozen_source_fixture",
+            "downstream_success": all(item["downstream"]["success"] for item in results),
+            "downstream_consumer": "bounded-source-reader/v1",
+            "downstream_success_scope": "frozen-source-task-fixture",
         },
-        "unverified": ["real_historical_task_recall", "downstream_consumer_success", "installed_cross_platform"],
+        "unverified": ["real_historical_task_recall", "installed_cross_platform"],
     }
 
 

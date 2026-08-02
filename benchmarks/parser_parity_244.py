@@ -332,7 +332,8 @@ def main() -> int:
     if args.json_out:
         args.json_out.write_text(rendered, encoding="utf-8")
     print(rendered, end="")
-    return 0
+    # A partial receipt is evidence of an incomplete contract, not a successful gate.
+    return 0 if receipt["status"] == "complete" else 1
 
 
 if __name__ == "__main__":

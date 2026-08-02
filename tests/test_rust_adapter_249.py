@@ -162,3 +162,43 @@ def test_rust_multi_crate_workspace_discovers_and_parses_each_member(
     app_symbols = parse_path(app / "src" / "main.rs", "crates/app/src/main.rs")
     assert {symbol.name for symbol in core_symbols} >= {"Render", "Item", "render"}
     assert {symbol.name for symbol in app_symbols} >= {"core::Item", "main"}
+
+
+def test_rust_macro_and_cfg_limitations_are_explicit_diagnostics(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "Cargo.toml").write_text(
+        "[package]\nname='app'\nversion='0.1.0'\n",
+        encoding="utf-8",
+    )
+    source = tmp_path / "src" / "lib.rs"
+    source.parent.mkdir()
+    source.write_text(
+        '#[cfg(feature = "serde")]\n'
+        "macro_rules! make_item { () => {} }\n"
+        "pub fn run() { make_item!(); }\n",
+        encoding="utf-8",
+    )
+
+    payload = build_payload(tmp_path)
+    assert payload == build_payload(tmp_path)
+    assert payload["completeness"] == "partial"
+    diagnostics = {
+        item["code"]: item
+        for item in payload["diagnostics"]
+        if item["path"] == "src/lib.rs"
+    }
+    assert {
+        "native_parser_unavailable",
+        "rust_cfg_unresolved",
+        "rust_macro_unexpanded",
+    } <= diagnostics.keys()
+    assert diagnostics["rust_cfg_unresolved"]["detail"] == (
+        "cfg/cfg_attr branches are not evaluated by the bounded lexical adapter"
+    )
+    assert diagnostics["rust_cfg_unresolved"]["fallback"] == (
+        "use Mapper-native or rust-analyzer parsing with selected Cargo features and toolchain"
+    )
+    assert diagnostics["rust_macro_unexpanded"]["detail"] == (
+        "Rust macro definitions and invocations are not expanded by the bounded lexical adapter"
+    )
