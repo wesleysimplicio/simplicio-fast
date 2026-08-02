@@ -1,7 +1,9 @@
+from types import SimpleNamespace
+
 import pytest
 
 from simplicio_fast.federation import FederatedEdge, FederationMember, compile_federation
-from simplicio_fast.semantic_diff import SemanticDiffError, diff_generations
+from simplicio_fast.semantic_diff import DiffRecord, SemanticDiff, SemanticDiffError, WhatIfOverlay, _canonical, diff_generations
 
 
 def test_diff_and_overlay_are_deterministic_without_mutating_inputs() -> None:
@@ -59,3 +61,50 @@ def test_federated_impact_requires_and_records_pinned_manifest() -> None:
     assert impact["nodes"] == ["repo-a:schema", "repo-b:consumer"]
     assert impact["reasons"]["repo-b:consumer"] == "federated_consumer"
     assert impact["federation_generation"] == federation.generation
+
+
+def test_diff_contract_rejects_invalid_identity_generation_confidence_and_reason() -> None:
+    cases = [
+        ({"handle": "", "kind": "add", "before": None, "after": {}, "reason_code": "add"}, "stable_handle_invalid"),
+        ({"handle": "h", "kind": "other", "before": None, "after": {}, "reason_code": "add"}, "diff_kind_invalid"),
+        ({"handle": "h", "kind": "add", "before": None, "after": {}, "source_generation": "", "reason_code": "add"}, "generation_invalid"),
+        ({"handle": "h", "kind": "add", "before": None, "after": {}, "confidence": True, "reason_code": "add"}, "confidence_invalid"),
+        ({"handle": "h", "kind": "add", "before": None, "after": {}, "reason_code": ""}, "reason_code_invalid"),
+    ]
+    for values, reason in cases:
+        values = {"source_generation": "g1", "proposed_generation": "g2", **values}
+        with pytest.raises(SemanticDiffError, match=reason):
+            DiffRecord(**values)
+    with pytest.raises(SemanticDiffError, match="derived_confidence_invalid"):
+        DiffRecord("h", "add", None, {}, "g1", "g2", "add", derived=True)
+    with pytest.raises(SemanticDiffError, match="diff_not_json"):
+        _canonical({"bad": object()})
+
+
+def test_diff_overlay_impact_budget_and_duplicate_walk_edges() -> None:
+    record = DiffRecord("a", "update", {}, {"x": 1}, "g1", "g2", "update")
+    with pytest.raises(SemanticDiffError, match="generation_invalid"):
+        WhatIfOverlay("", [])
+    with pytest.raises(SemanticDiffError, match="generation_invalid"):
+        SemanticDiff("", "g2", [])
+    result = SemanticDiff("g1", "g2", [record], complete=False, truncation_reasons=("budget",))
+    overlay = result.overlay()
+    assert overlay.to_dict()["schema"] == "simplicio.fast.what-if-overlay/v1"
+    assert overlay.digest.startswith("sha256:")
+    assert overlay.encode().endswith(b"\n")
+    with pytest.raises(SemanticDiffError, match="impact_budget_invalid"):
+        result.impact({}, max_nodes=0)
+    with pytest.raises(SemanticDiffError, match="impact_budget_invalid"):
+        result.impact_federated(SimpleNamespace(generation="g1", dependencies=lambda _: []), max_nodes=0)
+    impact = SemanticDiff("g1", "g2", [record, record]).impact({"a": ["a", "b"], "b": ["a"]}, max_nodes=10)
+    assert impact["complete"] is True
+    federation = SimpleNamespace(
+        generation="g1",
+        dependencies=lambda handle: (
+            [{"target_handle": "b"}, {"target_handle": "b"}] if handle == "a" else []
+        ),
+    )
+    federated = SemanticDiff("g1", "g2", [record, record], complete=False, truncation_reasons=("budget",)).impact_federated(federation)
+    assert federated["complete"] is False
+    assert federated["truncation_reasons"] == ["budget"]
+    assert diff_generations({"same": {"x": 1}}, {"same": {"x": 1}}, source_generation="g1", proposed_generation="g2").records == ()

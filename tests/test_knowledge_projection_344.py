@@ -2,7 +2,7 @@ import hashlib
 
 import pytest
 
-from simplicio_fast.knowledge_projection import KnowledgeFact, KnowledgeProjection, KnowledgeProjectionError
+from simplicio_fast.knowledge_projection import KnowledgeFact, KnowledgeProjection, KnowledgeProjectionError, _digest
 
 
 def fact(handle: str, text: str, *, state: str = "active") -> KnowledgeFact:
@@ -67,3 +67,63 @@ def test_knowledge_projection_applies_same_version_revocation() -> None:
     assert delta["changed_handles"] == ["revocable"]
     assert delta["conflicts"] == []
     assert projection.query("parser contract")["handles"] == []
+
+
+def test_knowledge_fact_and_projection_contracts_fail_closed() -> None:
+    base = {
+        "source_type": "adr",
+        "producer": "mapper",
+        "stable_handle": "h",
+        "version": "v1",
+        "provenance": ("p",),
+        "trust": "verified",
+        "digest": "sha256:x",
+        "text": "contract",
+        "repository": "repo",
+        "scope": "tenant",
+    }
+    with pytest.raises(KnowledgeProjectionError, match="fact_identity_invalid"):
+        KnowledgeFact(**{**base, "repository": ""})
+    with pytest.raises(KnowledgeProjectionError, match="fact_provenance_invalid"):
+        KnowledgeFact(**{**base, "provenance": ("",)})
+    with pytest.raises(KnowledgeProjectionError, match="fact_text_invalid"):
+        KnowledgeFact(**{**base, "text": 1})
+    with pytest.raises(KnowledgeProjectionError, match="fact_state_invalid"):
+        KnowledgeFact(**{**base, "state": "unknown"})
+    with pytest.raises(KnowledgeProjectionError, match="fact_temporal_bounds_invalid"):
+        KnowledgeFact(**{**base, "valid_from": 2, "valid_until": 1})
+    assert KnowledgeFact(**base).to_dict()["schema"] == "simplicio.fast.knowledge-fact/v1"
+    assert _digest({"fact": "stable"}).startswith("sha256:")
+    with pytest.raises(KnowledgeProjectionError, match="projection_scope_invalid"):
+        KnowledgeProjection("", "tenant", "g1")
+
+
+def test_knowledge_projection_idempotence_and_query_boundaries() -> None:
+    projection = KnowledgeProjection("repo", "tenant", "g1")
+    bounded = fact("bounded", "contract parser",)
+    projection.apply_delta([bounded])
+    unchanged = projection.apply_delta([bounded])
+    assert unchanged["changed_handles"] == []
+    for kwargs in ({"max_results": 0}, {"max_bytes": 0}, {"max_tokens": 0}):
+        with pytest.raises(KnowledgeProjectionError, match="query_budget_invalid"):
+            projection.query("contract", **kwargs)
+    assert projection.query("unmatched")["handles"] == []
+    assert projection.query("contract", source_types=("other",))["handles"] == []
+    temporal = KnowledgeFact(
+        bounded.source_type,
+        bounded.producer,
+        "temporal",
+        bounded.version,
+        bounded.provenance,
+        bounded.trust,
+        bounded.digest,
+        "contract",
+        bounded.repository,
+        bounded.scope,
+        valid_from=10,
+        valid_until=20,
+    )
+    projection.apply_delta([temporal])
+    assert "temporal" not in projection.query("contract", as_of=5)["handles"]
+    assert "temporal" not in projection.query("contract", as_of=25)["handles"]
+    assert projection.query("contract", max_tokens=1)["truncation_reasons"] == ["token_budget"]
