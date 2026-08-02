@@ -71,6 +71,11 @@ class ValidationKey:
             )
         ) or not isinstance(self.command, (tuple, list)) or not self.command or any(not isinstance(item, str) or not item for item in self.command):
             raise ValidationCacheError("cache_key_required_missing")
+        if any(
+            not isinstance(value, str)
+            for value in (self.config_digest, self.fixture_digest, self.generation)
+        ):
+            raise ValidationCacheError("cache_key_optional_field_invalid")
         if not isinstance(self.environment, (tuple, list)) or any(
             not isinstance(item, (tuple, list))
             or len(item) != 2
@@ -115,6 +120,8 @@ class ValidationResult:
         if not isinstance(self.key_digest, str) or not self.key_digest or not isinstance(self.result_digest, str) or not self.result_digest:
             raise ValidationCacheError("result_digest_invalid")
         _validate_string_sequence(self.command, "result_command_invalid")
+        if not self.command:
+            raise ValidationCacheError("result_command_invalid")
         _validate_string_sequence(self.evidence, "result_evidence_invalid")
         _validate_string_sequence(self.provenance, "result_provenance_invalid")
         if not isinstance(self.fresh, bool) or not isinstance(self.verified, bool) or not isinstance(self.nondeterministic, bool):
@@ -233,23 +240,34 @@ class ValidationCache:
     ) -> ValidationResult:
         result_digest = _digest(result)
         key_digest = key.digest
+        command_values = (
+            tuple(key.command)
+            if command is None
+            else _validate_string_sequence(command, "result_command_invalid")
+        )
+        evidence_values = _validate_string_sequence(evidence, "result_evidence_invalid")
+        provenance_values = _validate_string_sequence(
+            provenance, "result_provenance_invalid"
+        )
         with self._lock:
             previous = self._entries.get(key_digest)
             if previous is not None and previous.result_digest != result_digest:
-                evidence = tuple(sorted(set(evidence).union(previous.evidence, {"nondeterministic"})))
+                evidence_values = tuple(
+                    sorted(set(evidence_values).union(previous.evidence, {"nondeterministic"}))
+                )
                 verified = False
-                provenance = ()
+                provenance_values = ()
                 entry = ValidationResult(
-                    key_digest, "partial", result_digest, tuple(command or key.command), False,
-                    tuple(evidence), False, (), True, key.generation,
+                    key_digest, "partial", result_digest, command_values, False,
+                    evidence_values, False, provenance_values, True, key.generation,
                 )
                 self._entries[key_digest] = entry
                 return entry
-            if verified and not provenance:
+            if verified and not provenance_values:
                 raise ValidationCacheError("result_provenance_required")
             entry = ValidationResult(
-                key_digest, status, result_digest, tuple(command or key.command), fresh,
-                tuple(evidence), verified, tuple(provenance), False, key.generation,
+                key_digest, status, result_digest, command_values, fresh,
+                evidence_values, verified, provenance_values, False, key.generation,
             )
             self._entries[key_digest] = entry
             return entry
