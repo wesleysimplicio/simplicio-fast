@@ -191,10 +191,13 @@ class KnowledgeProjection:
                 item = {
                     "stable_handle": fact.stable_handle,
                     "source_type": fact.source_type,
+                    "producer": fact.producer,
                     "version": fact.version,
                     "provenance": list(fact.provenance),
                     "trust": fact.trust,
                     "digest": fact.digest,
+                    "repository": fact.repository,
+                    "scope": fact.scope,
                     "explain": {"relevance": relevance, "trust": fact.trust, "freshness": "as_of" if as_of is not None else "current", "applicability": list(fact.applicability), "matched_terms": matched, "ranking": "lexical-fallback"},
                 }
                 item["_sort"] = (-relevance, fact.stable_handle, fact.version)

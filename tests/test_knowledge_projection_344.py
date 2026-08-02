@@ -18,6 +18,9 @@ def test_knowledge_projection_preserves_provenance_and_separates_explain_dimensi
     result = projection.query("parser contract")
     assert result["handles"] == ["h1"]
     assert result["results"][0]["provenance"] == ["mapper:fixture:1"]
+    assert result["results"][0]["producer"] == "mapper"
+    assert result["results"][0]["repository"] == "repo"
+    assert result["results"][0]["scope"] == "tenant"
     assert set(result["results"][0]["explain"]) >= {"relevance", "trust", "freshness", "applicability"}
     assert result["results"][0]["explain"]["ranking"] == "lexical-fallback"
 
