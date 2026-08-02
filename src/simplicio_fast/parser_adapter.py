@@ -66,8 +66,15 @@ class ParserAdapterError(ValueError):
 
 
 def _mapper_artifact_path(root: Path, provenance: Mapping[str, Any], name: str) -> Path:
+    artifacts = provenance.get("artifacts")
+    if not isinstance(artifacts, (tuple, list)):
+        raise ParserAdapterError("mapper_artifact_missing", name)
     artifact = next(
-        (item for item in provenance.get("artifacts", []) if item.get("name") == name),
+        (
+            item
+            for item in artifacts
+            if isinstance(item, Mapping) and item.get("name") == name
+        ),
         None,
     )
     if not isinstance(artifact, Mapping) or not isinstance(artifact.get("path"), str):

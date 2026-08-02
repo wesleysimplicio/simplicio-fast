@@ -340,6 +340,13 @@ class ParserAdapter244Test(unittest.TestCase):
             ), self.assertRaisesRegex(ParserAdapterError, "mapper_artifact_missing"):
                 build_payload_from_mapper(root, {"ignored": True})
 
+            malformed_artifacts = {**provenance, "artifacts": [1]}
+            with patch(
+                "simplicio_fast.parser_adapter.validate_handoff",
+                return_value=malformed_artifacts,
+            ), self.assertRaisesRegex(ParserAdapterError, "mapper_artifact_missing"):
+                build_payload_from_mapper(root, {"ignored": True})
+
             for name, expected in (
                 ("symbol_index", "mapper_schema_unsupported"),
                 ("project_map", "mapper_schema_unsupported"),
