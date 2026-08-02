@@ -53,7 +53,7 @@ class OperationsProjection:
     """Derived view fed by explicit exports; it does not own operational state."""
 
     def __init__(self, repository: str, generation: str) -> None:
-        if not repository or not generation:
+        if any(not isinstance(value, str) or not value.strip() for value in (repository, generation)):
             raise OperationsProjectionError("projection_scope_invalid")
         self.repository = repository
         self.generation = generation
@@ -89,6 +89,12 @@ class OperationsProjection:
         return item
 
     def ingest(self, receipts: Iterable[OperationReceipt]) -> dict[str, Any]:
+        try:
+            receipts = tuple(receipts)
+        except TypeError as error:
+            raise OperationsProjectionError("receipt_input_invalid") from error
+        if any(not isinstance(receipt, OperationReceipt) for receipt in receipts):
+            raise OperationsProjectionError("receipt_type_invalid")
         with self._lock:
             changed: list[str] = []
             for receipt in receipts:
@@ -136,6 +142,11 @@ class OperationsProjection:
         as_of_sequence: int | None = None,
     ) -> list[dict[str, Any]]:
         self._validate_query_budget(max_results, as_of_sequence)
+        if any(
+            value is not None and (not isinstance(value, str) or not value.strip())
+            for value in (status, kind)
+        ):
+            raise OperationsProjectionError("query_filter_invalid")
         with self._lock:
             values = [
                 item for item in self._receipts.values()
@@ -159,7 +170,14 @@ class OperationsProjection:
 
     def query_leases(self, observed_at: int, *, max_results: int = 1000) -> list[dict[str, Any]]:
         """Return producer-reported lease facts with derived temporal status."""
-        if isinstance(observed_at, bool) or not isinstance(observed_at, int) or observed_at < 0 or max_results <= 0:
+        if (
+            isinstance(observed_at, bool)
+            or not isinstance(observed_at, int)
+            or observed_at < 0
+            or isinstance(max_results, bool)
+            or not isinstance(max_results, int)
+            or not 0 < max_results <= MAX_QUERY_RESULTS
+        ):
             raise OperationsProjectionError("lease_query_invalid")
         with self._lock:
             result: list[dict[str, Any]] = []
