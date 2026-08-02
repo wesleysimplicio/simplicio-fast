@@ -3,7 +3,7 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. The latest source evidence baseline is `2bc150a` (with child receipts `0750adc`, `c31ca88`, `b22de77`, `6dd1bfc`, `820efbd` and `d1fd31a`);
+owned by an external capability or service. The latest source evidence baseline is `b3cf784` (with child receipts `0750adc`, `c31ca88`, `b22de77`, `6dd1bfc`, `820efbd` and `d1fd31a`);
 release-integrity passes all checks. The full-suite subprocess failures in
 this Windows shell are recorded separately and are not treated as functional
 passes.
