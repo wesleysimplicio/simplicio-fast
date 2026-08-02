@@ -12,7 +12,9 @@ def resolve_tokenizer(tokenizer_id: str | None) -> Callable[[str], int] | None:
     A missing optional dependency or unknown model returns ``None`` so callers
     retain the explicit estimated-token receipt rather than claiming precision.
     """
-    if not tokenizer_id:
+    if tokenizer_id is None:
+        return None
+    if not isinstance(tokenizer_id, str):
         return None
     value = tokenizer_id.strip()
     if not value.startswith("tiktoken:"):
@@ -26,7 +28,10 @@ def resolve_tokenizer(tokenizer_id: str | None) -> Callable[[str], int] | None:
         return None
     try:
         if target.startswith("model:"):
-            encoding = tiktoken.encoding_for_model(target.removeprefix("model:"))
+            model = target.removeprefix("model:").strip()
+            if not model:
+                return None
+            encoding = tiktoken.encoding_for_model(model)
         else:
             encoding = tiktoken.get_encoding(target)
     except (AttributeError, KeyError, TypeError, ValueError):
