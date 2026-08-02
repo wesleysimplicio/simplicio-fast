@@ -155,8 +155,8 @@ class ProjectionEnvelope:
         _validate_sha256_digest(self.payload_sha256, "payload_sha256")
         if self.payload_sha256 != _digest(self.payload):
             raise ProjectionError("payload_digest_mismatch")
-        _validate_sequence(self.stable_handles, "stable_handles")
-        if not self.stable_handles or self.stable_handle not in self.stable_handles:
+        stable_handles = _validate_sequence(self.stable_handles, "stable_handles")
+        if not stable_handles or self.stable_handle not in stable_handles:
             raise ProjectionError("stable_handles_invalid")
         for value, name in (
             (self.config_fingerprint, "config_fingerprint"),
@@ -173,9 +173,9 @@ class ProjectionEnvelope:
         ):
             if value is not None:
                 _validate_optional_text(value, name)
-        _validate_sequence(self.capabilities_required, "capabilities_required")
-        _validate_sequence(self.truncation_reasons, "truncation_reasons")
-        _validate_sequence(self.tombstones, "tombstones")
+        capabilities_required = _validate_sequence(self.capabilities_required, "capabilities_required")
+        truncation_reasons = _validate_sequence(self.truncation_reasons, "truncation_reasons")
+        tombstones = _validate_sequence(self.tombstones, "tombstones")
         if self.budgets is not None and (
             not isinstance(self.budgets, Mapping)
             or any(
@@ -187,6 +187,13 @@ class ProjectionEnvelope:
             )
         ):
             raise ProjectionError("budgets_invalid")
+        object.__setattr__(self, "payload", dict(self.payload))
+        object.__setattr__(self, "stable_handles", stable_handles)
+        object.__setattr__(self, "capabilities_required", capabilities_required)
+        object.__setattr__(self, "truncation_reasons", truncation_reasons)
+        object.__setattr__(self, "tombstones", tombstones)
+        if self.budgets is not None:
+            object.__setattr__(self, "budgets", dict(self.budgets))
 
     @classmethod
     def create(
@@ -669,11 +676,12 @@ def _validate_sha256_digest(value: object, field: str) -> None:
         raise ProjectionError(f"{field}_invalid")
 
 
-def _validate_sequence(value: object, field: str) -> None:
+def _validate_sequence(value: object, field: str) -> tuple[str, ...]:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ProjectionError(f"{field}_invalid")
     if len(value) > _MAX_ITEMS or any(not isinstance(item, str) or not item.strip() for item in value):
         raise ProjectionError(f"{field}_invalid")
+    return tuple(value)
 
 
 def _validate_projection_sequence(value: object, field: str) -> None:
