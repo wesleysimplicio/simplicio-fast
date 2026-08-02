@@ -3,7 +3,7 @@ import pytest
 from simplicio_fast.knowledge import KnowledgeFacade
 from simplicio_fast.prism_arena import PrismArena
 from simplicio_fast.parser_adapter import build_projection
-from simplicio_fast.projection import ProjectionEnvelope, ProjectionError
+from simplicio_fast.projection import ProjectionEnvelope, ProjectionError, ProjectionStore
 from simplicio_fast.skills import SkillCatalog
 
 
@@ -86,3 +86,56 @@ def test_code_parser_producer_uses_the_same_abi(tmp_path) -> None:
     assert projection.projection_type == "code"
     assert projection.producer_schema == "simplicio.fast.parser-adapter/v1"
     assert ProjectionEnvelope.decode(projection.encode()) == projection
+
+
+def test_projection_store_applies_bounded_delta_and_reports_closure() -> None:
+    store = ProjectionStore("repo-a")
+    first = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper.context/v1",
+        generation="g1",
+        stable_handle="symbol:a",
+        payload={"repository": "repo-a", "name": "a"},
+    )
+    second = ProjectionEnvelope.create(
+        "knowledge",
+        producer="skills",
+        producer_schema="skills/v1",
+        generation="g1",
+        stable_handle="skill:b",
+        payload={"repository": "repo-a", "name": "b"},
+    )
+    store.publish(first)
+    receipt = store.apply_delta(
+        "g1", changed=(second,), deleted_handles=("symbol:a",), closure_handles=("symbol:c",)
+    )
+    assert receipt["changed_handles"] == ["skill:b"]
+    assert receipt["deleted_handles"] == ["symbol:a"]
+    assert receipt["closure_handles"] == ["skill:b", "symbol:a", "symbol:c"]
+    assert [item["stable_handle"] for item in store.snapshot()] == ["skill:b"]
+
+
+def test_projection_store_rejects_stale_and_cross_repository_data() -> None:
+    store = ProjectionStore("repo-a")
+    foreign = ProjectionEnvelope.create(
+        "operations",
+        producer="runtime",
+        producer_schema="runtime/v1",
+        generation="g2",
+        stable_handle="slot:1",
+        payload={"repository": "repo-b"},
+    )
+    with pytest.raises(ProjectionError, match="projection_repository_mismatch"):
+        store.publish(foreign)
+    local = ProjectionEnvelope.create(
+        "operations",
+        producer="runtime",
+        producer_schema="runtime/v1",
+        generation="g1",
+        stable_handle="slot:1",
+        payload={"repository": "repo-a"},
+    )
+    store.publish(local)
+    with pytest.raises(ProjectionError, match="projection_generation_stale"):
+        store.apply_delta("g2", changed=())

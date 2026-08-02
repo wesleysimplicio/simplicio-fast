@@ -139,9 +139,84 @@ class ProjectionEnvelope:
         return result
 
 
+class ProjectionStore:
+    """In-memory derived projection index with explicit incremental receipts.
+
+    The store is intentionally not a source database: callers supply complete
+    envelopes from an authoritative producer, and the store only keeps the
+    latest read model for one repository scope.
+    """
+
+    def __init__(self, repository: str) -> None:
+        _validate_text(repository, "repository")
+        self.repository = repository
+        self._records: dict[str, ProjectionEnvelope] = {}
+        self._generation: str | None = None
+
+    @property
+    def generation(self) -> str | None:
+        return self._generation
+
+    def publish(self, envelope: ProjectionEnvelope) -> None:
+        declared_repository = envelope.payload.get("repository")
+        if declared_repository is not None and declared_repository != self.repository:
+            raise ProjectionError("projection_repository_mismatch")
+        if self._generation is not None and envelope.generation != self._generation:
+            raise ProjectionError("projection_generation_stale")
+        previous = self._records.get(envelope.stable_handle)
+        if previous is not None and previous.payload_sha256 != envelope.payload_sha256:
+            raise ProjectionError("projection_handle_conflict")
+        self._generation = envelope.generation
+        self._records[envelope.stable_handle] = envelope
+
+    def apply_delta(
+        self,
+        generation: str,
+        *,
+        changed: tuple[ProjectionEnvelope, ...] = (),
+        deleted_handles: tuple[str, ...] = (),
+        closure_handles: tuple[str, ...] = (),
+    ) -> dict[str, Any]:
+        _validate_text(generation, "generation")
+        if self._generation is not None and generation != self._generation:
+            raise ProjectionError("projection_generation_stale")
+        changed_handles = sorted({item.stable_handle for item in changed})
+        deleted = sorted(set(deleted_handles))
+        if set(changed_handles).intersection(deleted):
+            raise ProjectionError("projection_delta_conflict")
+        for item in changed:
+            if item.generation != generation:
+                raise ProjectionError("projection_generation_stale")
+            self.publish(item)
+        for handle in deleted:
+            self._records.pop(handle, None)
+        self._generation = generation
+        closure = sorted(set(closure_handles).union(changed_handles, deleted))
+        return {
+            "schema": "simplicio.fast.projection-delta/v1",
+            "repository": self.repository,
+            "generation": generation,
+            "changed_handles": changed_handles,
+            "deleted_handles": deleted,
+            "closure_handles": closure,
+            "projection_digest": _digest(self.snapshot()),
+        }
+
+    def snapshot(self) -> list[dict[str, Any]]:
+        return [
+            self._records[key].to_dict() for key in sorted(self._records)
+        ]
+
+
 def _validate_text(value: object, field: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ProjectionError(f"{field}_invalid")
 
 
-__all__ = ["PROJECTION_TYPES", "ProjectionEnvelope", "ProjectionError", "SCHEMA"]
+__all__ = [
+    "PROJECTION_TYPES",
+    "ProjectionEnvelope",
+    "ProjectionError",
+    "ProjectionStore",
+    "SCHEMA",
+]

@@ -30,6 +30,7 @@ _EXPORTS = {
     "PrismWorkDelta": (".prism_arena", "PrismWorkDelta"),
     "ProjectionEnvelope": (".projection", "ProjectionEnvelope"),
     "ProjectionError": (".projection", "ProjectionError"),
+    "ProjectionStore": (".projection", "ProjectionStore"),
     "RequestKey": (".pager", "RequestKey"),
     "RuntimeArtifact": (".runtime_backend", "RuntimeArtifact"),
     "RuntimeBackendError": (".runtime_backend", "RuntimeBackendError"),
