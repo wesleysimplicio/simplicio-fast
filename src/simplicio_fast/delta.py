@@ -574,7 +574,7 @@ def handoff(
     warm_ms = (perf_counter() - warm_start) * 1000
     parity_stage_start = perf_counter()
     if unchanged_delta:
-        merged = dict(base.source_hashes)
+        merged = base.source_hashes
         current = {relative: base.source_hashes[relative] for relative in scoped_paths}
     else:
         merged = _composed_source_hashes(store, base, delta)
@@ -609,6 +609,14 @@ def handoff(
         )
         parity_scope = "explicit_changed_paths"
     parity_stage_ms = (perf_counter() - parity_stage_start) * 1000
+    source_tree_sha256 = (
+        base.source_tree_sha256 if unchanged_delta else _digest(merged)
+    )
+    cache_reuse = (
+        len(base.source_hashes)
+        if unchanged_delta
+        else len(set(base.source_hashes) - set(delta.changed))
+    )
     return {
         "schema": HANDOFF_SCHEMA,
         "status": "pass" if parity else "parity_mismatch",
@@ -624,7 +632,7 @@ def handoff(
         "parity_snapshot_hash": parity_snapshot_hash,
         "parity": parity,
         "parity_result": {
-            "source_tree_sha256": _digest(merged),
+            "source_tree_sha256": source_tree_sha256,
             "target_tree_sha256": _digest(target),
             "scope": parity_scope,
             "canonical_file_count": canonical_file_count,
@@ -635,7 +643,7 @@ def handoff(
         "files_parsed": sum(
             1 for record in delta.changed.values() if not bool(record.get("tombstone"))
         ),
-        "cache_reuse": len(set(base.source_hashes) - set(delta.changed)),
+        "cache_reuse": cache_reuse,
         "timings_ms": {
             "cold_ms": round(cold_ms, 3),
             "warm_ms": round(warm_ms, 3),
