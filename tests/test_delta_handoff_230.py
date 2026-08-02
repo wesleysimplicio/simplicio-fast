@@ -499,6 +499,29 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             self.assertTrue(report["parity"])
             self.assertEqual(1, validate.call_count)
 
+    def test_reuses_artifact_digest_after_first_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            delta = store.create_delta(base.generation_id, "cache", ["one.py"])
+            store.handoff(
+                base.generation_id,
+                "cache",
+                ["one.py"],
+                delta_generation=delta.delta_generation,
+            )
+            with patch(
+                "simplicio_fast.delta._hash_source",
+                side_effect=AssertionError("validated artifact was rehashed"),
+            ):
+                report = store.handoff(
+                    base.generation_id,
+                    "cache",
+                    ["one.py"],
+                    delta_generation=delta.delta_generation,
+                )
+            self.assertTrue(report["parity"])
+
     def test_unchanged_scoped_handoff_skips_compose(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root, store = self._store(directory)

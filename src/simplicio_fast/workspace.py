@@ -199,6 +199,88 @@ class WorkspaceStore:
         self.lease_dir = self.storage / "leases"
         self.receipt_dir = self.storage / "receipts"
         self.delta_dir = self.storage / DELTA_STORAGE
+        self._validated_base_cache: dict[
+            tuple[str, str, int, int, int, int], tuple[Manifest, str]
+        ] = {}
+        self._delta_cache: dict[
+            tuple[str, str, str, int, int, int, int], object
+        ] = {}
+
+    def cached_validated_base(
+        self, generation: str, base: Manifest, snapshot: Path
+    ) -> str | None:
+        """Return a digest previously verified for an unchanged artifact identity."""
+        try:
+            stat = snapshot.stat()
+        except OSError:
+            return None
+        key = (
+            generation,
+            str(snapshot),
+            int(stat.st_size),
+            int(stat.st_mtime_ns),
+            int(stat.st_ctime_ns),
+            int(getattr(stat, "st_ino", 0)),
+        )
+        cached = self._validated_base_cache.get(key)
+        if cached is None or cached[0] != base:
+            return None
+        return cached[1]
+
+    def remember_validated_base(
+        self, generation: str, base: Manifest, snapshot: Path, digest: str
+    ) -> None:
+        try:
+            stat = snapshot.stat()
+        except OSError:
+            return
+        key = (
+            generation,
+            str(snapshot),
+            int(stat.st_size),
+            int(stat.st_mtime_ns),
+            int(stat.st_ctime_ns),
+            int(getattr(stat, "st_ino", 0)),
+        )
+        self._validated_base_cache[key] = (base, digest)
+        while len(self._validated_base_cache) > 8:
+            self._validated_base_cache.pop(next(iter(self._validated_base_cache)))
+
+    def cached_delta(self, worktree_id: str, generation: str, path: Path) -> object | None:
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+        key = (
+            worktree_id,
+            generation,
+            str(path),
+            int(stat.st_size),
+            int(stat.st_mtime_ns),
+            int(stat.st_ctime_ns),
+            int(getattr(stat, "st_ino", 0)),
+        )
+        return self._delta_cache.get(key)
+
+    def remember_delta(
+        self, worktree_id: str, generation: str, path: Path, delta: object
+    ) -> None:
+        try:
+            stat = path.stat()
+        except OSError:
+            return
+        key = (
+            worktree_id,
+            generation,
+            str(path),
+            int(stat.st_size),
+            int(stat.st_mtime_ns),
+            int(stat.st_ctime_ns),
+            int(getattr(stat, "st_ino", 0)),
+        )
+        self._delta_cache[key] = delta
+        while len(self._delta_cache) > 16:
+            self._delta_cache.pop(next(iter(self._delta_cache)))
 
     def _manifest_path(self, generation: str) -> Path:
         return self.base_dir / generation / "manifest.json"

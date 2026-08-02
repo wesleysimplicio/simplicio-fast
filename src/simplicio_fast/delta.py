@@ -264,7 +264,10 @@ def _base_snapshot(
         raise DeltaError("base_snapshot_path_invalid")
     if not snapshot_path.is_file():
         raise DeltaError("base_artifact_missing")
-    actual = _hash_source(snapshot_path)
+    actual = store.cached_validated_base(base_generation, base, snapshot_path)
+    if actual is None:
+        actual = _hash_source(snapshot_path)
+        store.remember_validated_base(base_generation, base, snapshot_path, actual)
     if actual != base.snapshot_sha256:
         raise DeltaError("base_artifact_digest_mismatch")
     return base, snapshot_path, actual
@@ -399,6 +402,9 @@ def load_delta(store: WorkspaceStore, worktree_id: str, generation: str) -> Delt
     store._worktree_id(worktree_id)
     GenerationId(generation)
     path = store.delta_dir / worktree_id / f"{generation}.json"
+    cached = store.cached_delta(worktree_id, generation, path)
+    if isinstance(cached, Delta):
+        return cached
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
@@ -407,6 +413,7 @@ def load_delta(store: WorkspaceStore, worktree_id: str, generation: str) -> Delt
     if delta.delta_generation != generation or delta.worktree_id != worktree_id:
         raise DeltaError("delta_identity_mismatch")
     _verify_delta(delta)
+    store.remember_delta(worktree_id, generation, path, delta)
     return delta
 
 
