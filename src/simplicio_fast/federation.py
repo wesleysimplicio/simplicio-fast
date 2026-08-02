@@ -147,6 +147,10 @@ class Federation:
     """Immutable member/edge view with bounded read-only indexes."""
 
     def __init__(self, members: Sequence[FederationMember], edges: Sequence[FederatedEdge] = ()) -> None:
+        if not isinstance(members, Sequence) or isinstance(members, (str, bytes)):
+            raise FederationError("member_type_invalid")
+        if not isinstance(edges, Sequence) or isinstance(edges, (str, bytes)):
+            raise FederationError("edge_type_invalid")
         if not members or len(members) > MAX_MEMBERS:
             raise FederationError("member_count_limit")
         if len(edges) > MAX_EDGES:
