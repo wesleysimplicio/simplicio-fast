@@ -240,6 +240,12 @@ class ContextProvenanceTest(unittest.TestCase):
             self.assertEqual(
                 64, len(capabilities["parser_adapter"]["fingerprints"]["contract_sha256"])
             )
+            self.assertEqual("simplicio.fast.sdk-capabilities/v1", capabilities["sdk"]["schema"])
+            matrix = {item["surface"]: item for item in capabilities["sdk"]["support_matrix"]}
+            self.assertEqual("supported", matrix["python"]["status"])
+            self.assertEqual("reject", capabilities["sdk"]["compatibility"]["rules"]["future_major"])
+            self.assertEqual("simplicio.fast.context-source-adapters/v1", capabilities["sdk"]["source_adapters"]["schema"])
+            self.assertEqual("facts_only", capabilities["sdk"]["context_security"]["checks"]["authority"])
 
         with patch(
             "simplicio_fast.cli.subprocess.run", side_effect=OSError("git unavailable")

@@ -35,6 +35,10 @@ from .tokenizers import resolve_tokenizer
 from .users.http import serve
 from .users.repository import JsonUserRepository
 from .users.service import UserService
+from .compatibility import compatibility_manifest
+from .context_adapters import adapter_manifest
+from .context_security import security_manifest
+from .sdk import SDK_SCHEMA, SDK_SUPPORT_MATRIX
 
 DEFAULT_STATE_DIR = ".simplicio/fast"
 DEFAULT_SNAPSHOT = f"{DEFAULT_STATE_DIR}/project.sfast"
@@ -1206,6 +1210,23 @@ def main() -> None:
                     "capabilities": [asdict(item) for item in capability_report()],
                     "parser_adapter": adapter_capability(),
                     "semantic_scoring": semantic_capabilities(),
+                    "sdk": {
+                        "schema": "simplicio.fast.sdk-capabilities/v1",
+                        "sdk": SDK_SCHEMA,
+                        "operations": [
+                            "publish", "compile_delta", "query", "query_async",
+                            "snapshot", "save", "open", "close", "context",
+                            "context_async",
+                        ],
+                        "support_matrix": [
+                            {**item, "operations": list(item["operations"])}
+                            for item in SDK_SUPPORT_MATRIX
+                        ],
+                        "compatibility": compatibility_manifest(),
+                        "source_adapters": adapter_manifest(),
+                        "context_security": security_manifest(),
+                        "authority": "derived_read_only",
+                    },
                 }
             )
         elif args.command == "pin":
