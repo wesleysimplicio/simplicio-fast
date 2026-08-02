@@ -66,6 +66,7 @@ def source_commit(root: Path) -> tuple[str | None, str | None]:
     try:
         result = subprocess.run(
             ["git", "-C", str(root), "rev-parse", "--verify", "HEAD^{commit}"],
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             check=False,

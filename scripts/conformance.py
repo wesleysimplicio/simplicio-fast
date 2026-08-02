@@ -65,7 +65,12 @@ def _corpus_digest(corpus: Path) -> str:
 
 def _json_command(command: list[str]) -> dict[str, Any]:
     completed = subprocess.run(
-        command, capture_output=True, text=True, check=False, close_fds=False
+        command,
+        stdin=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
+        check=False,
+        close_fds=False,
     )
     if completed.returncode != 0:
         raise RuntimeError(

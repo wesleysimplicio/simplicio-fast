@@ -103,6 +103,7 @@ def run_mapper(root: Path) -> dict[str, Any] | None:
         return None
     completed = subprocess.run(
         [executable, "index", str(root), "--json"],
+        stdin=subprocess.DEVNULL,
         text=True,
         capture_output=True,
         check=False,

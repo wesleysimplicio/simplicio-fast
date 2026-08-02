@@ -17,6 +17,7 @@ def _probe(expression: str) -> dict[str, object]:
     result = subprocess.run(
         [sys.executable, "-c", expression],
         cwd=ROOT,
+        stdin=subprocess.DEVNULL,
         capture_output=True,
         text=True,
         check=True,

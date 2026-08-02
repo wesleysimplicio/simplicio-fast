@@ -160,18 +160,28 @@ class ChangesetCli241Test(unittest.TestCase):
             self.skipTest("simplicio-fast console entrypoint is not installed")
         environment = dict(os.environ)
         environment["PYTHONPATH"] = str(ROOT / "src")
-        result = subprocess.run(
-            [executable, "changeset", "--help"],
-            cwd=ROOT,
-            env=environment,
-            stdin=subprocess.DEVNULL,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        self.assertEqual(0, result.returncode, result.stderr)
-        self.assertIn("materialize", result.stdout)
-        self.assertIn("recover", result.stdout)
+        with tempfile.TemporaryDirectory() as directory:
+            stdout_path = Path(directory) / "stdout.txt"
+            stderr_path = Path(directory) / "stderr.txt"
+            with (
+                stdout_path.open("w", encoding="utf-8") as stdout,
+                stderr_path.open("w", encoding="utf-8") as stderr,
+            ):
+                result = subprocess.run(
+                    [executable, "changeset", "--help"],
+                    cwd=ROOT,
+                    env=environment,
+                    stdin=subprocess.DEVNULL,
+                    stdout=stdout,
+                    stderr=stderr,
+                    text=True,
+                    check=False,
+                )
+            error = stderr_path.read_text(encoding="utf-8")
+            output = stdout_path.read_text(encoding="utf-8")
+        self.assertEqual(0, result.returncode, error)
+        self.assertIn("materialize", output)
+        self.assertIn("recover", output)
 
     def test_installed_console_materializes_a_real_changeset(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
