@@ -72,6 +72,9 @@ def run(binary: Path, *, repetitions: int = 30) -> dict[str, Any]:
                 started = time.perf_counter()
                 session.call(OPERATION, payload)
                 resident.append((time.perf_counter() - started) * 1000)
+            cache_stats = session.call("session_cache_stats", {})
+            if cache_stats.get("snapshots") != 1:
+                raise RuntimeError("resident session did not retain one mapped generation")
             metrics = session.metrics()
     return {
         "schema": SCHEMA,
