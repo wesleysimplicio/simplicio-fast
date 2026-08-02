@@ -19,6 +19,7 @@ passes.
 | #242 | PARTIAL | `b095cba`; 30-run 10k/100k receipts; `fb55789` 1M/10 receipt; `issue242-windows-20260802-1m-30.json` with 30 repetitions, parity, complete resources and passing gates | Linux receipt, CI regression gate and final coverage |
 | #243 | BLOCKED | Local workflow contract/verifier pass; run `30723612138` has `startup_failure` and no jobs | GitHub Actions administrative/runner availability, then four native target builds and downloadable verification |
 | #244 | PARTIAL | `3e89acf`, `b1b4f89`; parser contract, fuzz corpus, 91% line / 88.2% branch receipt | Frozen real-corpus parity, installed cross-platform matrix and final coverage |
+| #347 | PARTIAL | Operations projection now detects causal gaps/forks, preserves read-only authority, blocks inconsistent `complete` queries, and passes 8 focused tests | Canonical Mapper/Loop/Runtime streams, as-of/restart/replay E2E, Python/Rust parity, installed consumers, coverage and measured concurrency |
 | #246 | BLOCKED | Rust matrix receipts at 10k/100k/1M; Full cell reports `runtime_authorization_required` | Runtime-authorized Full, Loop standalone, real delivery tasks, concurrency and final regression gate |
 | #247 | PARTIAL | `3515bb5`; C# multi-project/partial/test-symbol E2E, 4 tests | Roslyn/native relations, affected-project invalidation, installed Linux/Windows E2E and coverage |
 | #248 | PARTIAL | `dffc0b1`; TS monorepo/project refs/aliases/TSX E2E, 4 tests | Native compiler relations, bounded invalidation, Node/React installed E2E and coverage |

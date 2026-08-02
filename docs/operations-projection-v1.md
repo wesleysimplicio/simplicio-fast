@@ -14,3 +14,10 @@ The projection also exposes bounded slot/attempt queries, producer-reported
 lease facts with derived `active` status at an explicit observation time, and
 read-only status/kind statistics. It never acquires, renews, fences or releases
 a lease; the producer remains authoritative.
+
+Receipts may carry a `payload.causal_parent` handle. A missing predecessor or
+non-increasing predecessor sequence is surfaced as `consistency: causal_gap`;
+the projection never returns that receipt from a `status=complete` query.
+Replaying the exact same sequence/payload is idempotent, while a different
+payload at the same handle and sequence fails closed with
+`receipt_fork_detected`.

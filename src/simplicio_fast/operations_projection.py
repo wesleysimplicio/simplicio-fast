@@ -56,6 +56,32 @@ class OperationsProjection:
         self.repository = repository
         self.generation = generation
         self._receipts: dict[str, OperationReceipt] = {}
+        self._causal_gaps: set[str] = set()
+        self._forks: set[str] = set()
+
+    def _refresh_consistency(self) -> None:
+        gaps: set[str] = set()
+        for receipt in self._receipts.values():
+            parent = receipt.payload.get("causal_parent")
+            if parent is None:
+                continue
+            if not isinstance(parent, str) or not parent.strip():
+                gaps.add(receipt.handle)
+                continue
+            predecessor = self._receipts.get(parent)
+            if predecessor is None or predecessor.sequence >= receipt.sequence:
+                gaps.add(receipt.handle)
+        self._causal_gaps = gaps
+
+    def _item(self, receipt: OperationReceipt) -> dict[str, Any]:
+        item = receipt.to_dict()
+        if receipt.handle in self._forks:
+            item["consistency"] = "fork"
+        elif receipt.handle in self._causal_gaps:
+            item["consistency"] = "causal_gap"
+        else:
+            item["consistency"] = "consistent"
+        return item
 
     def ingest(self, receipts: Iterable[OperationReceipt]) -> dict[str, Any]:
         changed: list[str] = []
@@ -65,15 +91,26 @@ class OperationsProjection:
             previous = self._receipts.get(receipt.handle)
             if previous is not None and receipt.sequence < previous.sequence:
                 raise OperationsProjectionError("receipt_sequence_regression")
+            if previous is not None and receipt.sequence == previous.sequence:
+                if receipt.to_dict() == previous.to_dict():
+                    continue
+                self._forks.add(receipt.handle)
+                raise OperationsProjectionError("receipt_fork_detected")
             self._receipts[receipt.handle] = receipt
             changed.append(receipt.handle)
+        self._refresh_consistency()
         return {"schema": "simplicio.fast.operations-delta/v1", "repository": self.repository, "generation": self.generation, "changed_handles": sorted(set(changed))}
 
     def query(self, *, status: str | None = None, kind: str | None = None, max_results: int = 1000) -> list[dict[str, Any]]:
         if max_results <= 0:
             raise OperationsProjectionError("query_budget_invalid")
-        values = [item for item in self._receipts.values() if (status is None or item.status == status) and (kind is None or item.kind == kind)]
-        return [item.to_dict() for item in sorted(values, key=lambda item: (item.sequence, item.handle), reverse=True)[:max_results]]
+        values = [
+            item for item in self._receipts.values()
+            if (status is None or item.status == status)
+            and (kind is None or item.kind == kind)
+            and not (status == "complete" and item.handle in self._causal_gaps)
+        ]
+        return [self._item(item) for item in sorted(values, key=lambda item: (item.sequence, item.handle), reverse=True)[:max_results]]
 
     def query_slots(self, *, status: str | None = None, max_results: int = 1000) -> list[dict[str, Any]]:
         """Read slot/attempt facts without accepting or mutating leases."""
@@ -84,7 +121,7 @@ class OperationsProjection:
         ]
         if max_results <= 0:
             raise OperationsProjectionError("query_budget_invalid")
-        return [item.to_dict() for item in sorted(values, key=lambda item: (item.sequence, item.handle), reverse=True)[:max_results]]
+        return [self._item(item) for item in sorted(values, key=lambda item: (item.sequence, item.handle), reverse=True)[:max_results]]
 
     def query_leases(self, observed_at: int, *, max_results: int = 1000) -> list[dict[str, Any]]:
         """Return producer-reported lease facts with derived temporal status."""
@@ -99,7 +136,7 @@ class OperationsProjection:
             expires_at = lease.get("expires_at")
             if isinstance(expires_at, bool) or not isinstance(expires_at, int):
                 raise OperationsProjectionError("lease_expiry_invalid")
-            item = receipt.to_dict()
+            item = self._item(receipt)
             item["lease"] = {
                 "owner": lease.get("owner"),
                 "fence": lease.get("fence"),
@@ -118,10 +155,10 @@ class OperationsProjection:
         for receipt in self._receipts.values():
             statuses[receipt.status] = statuses.get(receipt.status, 0) + 1
             kinds[receipt.kind] = kinds.get(receipt.kind, 0) + 1
-        return {"schema": "simplicio.fast.operations-stats/v1", "repository": self.repository, "generation": self.generation, "receipts": len(self._receipts), "statuses": dict(sorted(statuses.items())), "kinds": dict(sorted(kinds.items())), "authority": "derived_read_only"}
+        return {"schema": "simplicio.fast.operations-stats/v1", "repository": self.repository, "generation": self.generation, "receipts": len(self._receipts), "statuses": dict(sorted(statuses.items())), "kinds": dict(sorted(kinds.items())), "consistency": {"causal_gaps": len(self._causal_gaps), "forks": len(self._forks)}, "authority": "derived_read_only"}
 
     def snapshot(self) -> dict[str, Any]:
-        return {"schema": PROJECTION_SCHEMA, "repository": self.repository, "generation": self.generation, "receipts": self.query()}
+        return {"schema": PROJECTION_SCHEMA, "repository": self.repository, "generation": self.generation, "consistency": {"causal_gaps": sorted(self._causal_gaps), "forks": sorted(self._forks)}, "receipts": self.query()}
 
 
 __all__ = ["OperationReceipt", "OperationsProjection", "OperationsProjectionError", "PROJECTION_SCHEMA", "RECEIPT_SCHEMA"]
