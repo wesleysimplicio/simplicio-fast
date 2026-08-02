@@ -143,6 +143,35 @@ class SemanticDiff:
             queue.extend(sorted(adjacency.get(node, ())))
         return {"schema": "simplicio.fast.impact-explanation/v1", "nodes": sorted(included), "reasons": reasons, "complete": not queue}
 
+    def impact_federated(self, federation: Any, *, max_nodes: int = 1000) -> dict[str, Any]:
+        """Traverse pinned federation consumers; implicit latest is impossible."""
+        if max_nodes <= 0:
+            raise SemanticDiffError("impact_budget_invalid")
+        queue = sorted(item.handle for item in self.records)
+        included: set[str] = set()
+        reasons: dict[str, str] = {}
+        paths: dict[str, list[str]] = {handle: [handle] for handle in queue}
+        while queue and len(included) < max_nodes:
+            current = queue.pop(0)
+            if current in included:
+                continue
+            included.add(current)
+            reasons[current] = "direct_change" if current in paths and len(paths[current]) == 1 else "federated_consumer"
+            for edge in federation.dependencies(current):
+                target = edge["target_handle"]
+                if target not in paths:
+                    paths[target] = paths[current] + [target]
+                    queue.append(target)
+        return {
+            "schema": "simplicio.fast.impact-explanation/v1",
+            "federation_generation": federation.generation,
+            "nodes": sorted(included),
+            "reasons": reasons,
+            "paths": paths,
+            "complete": not queue and self.complete,
+            "truncation_reasons": list(self.truncation_reasons) if not self.complete else [],
+        }
+
 
 def diff_generations(source: Mapping[str, Mapping[str, Any]], proposed: Mapping[str, Mapping[str, Any]], *, source_generation: str, proposed_generation: str) -> SemanticDiff:
     records: list[DiffRecord] = []
