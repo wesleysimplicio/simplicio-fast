@@ -16,7 +16,7 @@ from benchmarks.changed_path_delta_230 import (
     run as run_delta_benchmark,
     workload_shape,
 )
-from simplicio_fast.delta import DeltaError
+from simplicio_fast.delta import DELTA_SCHEMA, Delta, DeltaError
 from simplicio_fast.snapshot import build_snapshot
 from simplicio_fast.workspace import Manifest, WorkspaceStore
 
@@ -26,6 +26,26 @@ def test_symbol_target_respects_explicit_file_distribution() -> None:
     assert workload_shape(1_000_000) == (1_000, 1_000)
     with pytest.raises(ValueError):
         workload_shape(1_000_000, 1)
+
+
+def test_delta_direct_constructor_rejects_invalid_contract_types() -> None:
+    values = {
+        "schema": DELTA_SCHEMA,
+        "delta_generation": "a" * 64,
+        "base_generation": "b" * 64,
+        "base_commit": "commit",
+        "base_config_fingerprint": "config",
+        "base_schema": "manifest/v1",
+        "base_snapshot_sha256": "c" * 64,
+        "worktree_id": "worktree",
+        "changed": {},
+        "created_at": "2026-01-01T00:00:00Z",
+        "delta_sha256": "d" * 64,
+    }
+    with pytest.raises(DeltaError, match="delta_field_invalid"):
+        Delta(**{**values, "base_commit": None})
+    with pytest.raises(DeltaError, match="delta_shape_invalid"):
+        Delta(**{**values, "changed": []})
 
 
 def _shell_command(arguments: list[str]) -> str:

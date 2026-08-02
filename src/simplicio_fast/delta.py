@@ -52,6 +52,24 @@ class Delta:
     delta_sha256: str
 
     def __post_init__(self) -> None:
+        if any(
+            not isinstance(value, str) or not value.strip()
+            for value in (
+                self.schema,
+                self.delta_generation,
+                self.base_generation,
+                self.base_commit,
+                self.base_config_fingerprint,
+                self.base_schema,
+                self.base_snapshot_sha256,
+                self.worktree_id,
+                self.created_at,
+                self.delta_sha256,
+            )
+        ):
+            raise DeltaError("delta_field_invalid")
+        if not isinstance(self.changed, dict):
+            raise DeltaError("delta_shape_invalid")
         try:
             GenerationId(self.delta_generation)
             GenerationId(self.base_generation)
