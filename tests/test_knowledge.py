@@ -90,6 +90,32 @@ class KnowledgeFacadeTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "sources"):
             self.knowledge.resolve("pytest", sources=("neural",))
 
+    def test_expand_handles_labels_exact_and_unavailable_tokenizers(self) -> None:
+        handle = self.knowledge.register(skill("exact", "one two"))
+        exact = self.knowledge.expand_handles(
+            (handle,), tokenizer_id="test-exact-v1", tokenizer=lambda text: len(text)
+        )
+        self.assertEqual(
+            {"mode": "exact", "id": "test-exact-v1", "reason": None},
+            exact["tokenizer"],
+        )
+        self.assertIsNone(exact["estimated_tokens"])
+        self.assertEqual(7, exact["tokens"])
+        unavailable = self.knowledge.expand_handles(
+            (handle,), tokenizer_id="tiktoken:missing-for-test"
+        )
+        self.assertEqual("estimated", unavailable["tokenizer"]["mode"])
+        self.assertEqual("provider_tokenizer_unavailable", unavailable["tokenizer"]["reason"])
+
+    def test_expand_handles_rejects_invalid_tokenizer_contract(self) -> None:
+        handle = self.knowledge.register(skill("invalid", "body"))
+        with self.assertRaisesRegex(ValueError, "knowledge_tokenizer_invalid"):
+            self.knowledge.expand_handles((handle,), tokenizer=lambda text: 1)
+        with self.assertRaisesRegex(ValueError, "knowledge_tokenizer_invalid"):
+            self.knowledge.expand_handles(
+                (handle,), tokenizer_id="test", tokenizer=lambda text: True
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
