@@ -32,6 +32,16 @@ def test_derived_changes_require_uncertainty_and_invalid_budget_fails() -> None:
         result.impact({}, max_nodes=0)
 
 
+def test_diff_rejects_incoherent_shapes_and_duplicate_overlay_records() -> None:
+    from simplicio_fast.semantic_diff import DiffRecord, WhatIfOverlay
+
+    with pytest.raises(SemanticDiffError, match="diff_shape_invalid"):
+        DiffRecord("a", "add", {"old": 1}, {"new": 1}, "g1", "g2", "bad")
+    record = DiffRecord("a", "add", None, {"new": 1}, "g1", "g2", "handle_added")
+    with pytest.raises(SemanticDiffError, match="duplicate_diff_record"):
+        WhatIfOverlay("g1", [record, record])
+
+
 def test_federated_impact_requires_and_records_pinned_manifest() -> None:
     result = diff_generations({"repo-a:schema": {}}, {"repo-a:schema": {"v": 2}}, source_generation="g1", proposed_generation="g2")
     federation = compile_federation(

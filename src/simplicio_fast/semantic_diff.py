@@ -48,6 +48,12 @@ class DiffRecord:
             raise SemanticDiffError("stable_handle_invalid")
         if self.kind not in _KINDS:
             raise SemanticDiffError("diff_kind_invalid")
+        if (
+            (self.kind == "add" and (self.before is not None or self.after is None))
+            or (self.kind == "remove" and (self.before is None or self.after is not None))
+            or (self.kind == "update" and (self.before is None or self.after is None))
+        ):
+            raise SemanticDiffError("diff_shape_invalid")
         if not self.source_generation or not self.proposed_generation:
             raise SemanticDiffError("generation_invalid")
         if not 0.0 <= self.confidence <= 1.0:
@@ -75,6 +81,9 @@ class WhatIfOverlay:
     def __init__(self, base_generation: str, records: Sequence[DiffRecord]) -> None:
         if not base_generation:
             raise SemanticDiffError("generation_invalid")
+        keys = [(item.handle, item.kind) for item in records]
+        if len(keys) != len(set(keys)):
+            raise SemanticDiffError("duplicate_diff_record")
         self.base_generation = base_generation
         self.records = tuple(sorted(records, key=lambda item: (item.handle, item.kind)))
 
