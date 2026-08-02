@@ -66,3 +66,27 @@ def test_validation_cache_demotes_conflicting_result_and_explains_affected_tests
     assert cache.get(key(), reusable=True) is None
     affected = cache.affected(("h1",), {"h1": ("test/a", "test/a")})
     assert affected["reason_paths"] == [{"handle": "h1", "tests": ["test/a"], "reason": "changed_handle"}]
+
+
+def test_validation_cache_gc_is_bounded_and_respects_leases() -> None:
+    cache = ValidationCache()
+    retained = key()
+    evictable = ValidationKey(
+        "sha256:other", "sha256:lock", "python-3.14", ("pytest",), generation="g2"
+    )
+    cache.put(retained, status="pass", result={"ok": True})
+    cache.put(evictable, status="pass", result={"ok": True})
+    cache.acquire_lease(retained, "lease-1")
+    plan = cache.gc(keep_generations=("g1",), dry_run=True)
+    assert plan["status"] == "planned"
+    assert evictable.digest in plan["candidates"]
+    assert retained.digest not in plan["candidates"]
+    applied = cache.gc(keep_generations=("g1",), dry_run=False)
+    assert applied["removed"] == [evictable.digest]
+    assert cache.get(retained) is not None
+    assert cache.get(evictable) is None
+    cache.release_lease(retained, "lease-1")
+    with pytest.raises(ValidationCacheError, match="lease_id_invalid"):
+        cache.acquire_lease(retained, "bad/lease")
+    with pytest.raises(ValidationCacheError, match="gc_budget_invalid"):
+        cache.gc(max_entries=0)
