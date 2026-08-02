@@ -161,6 +161,7 @@ class ProjectionEnvelope:
             not isinstance(self.budgets, Mapping)
             or any(
                 not isinstance(key, str)
+                or isinstance(value, bool)
                 or not isinstance(value, int)
                 or value < 0
                 for key, value in self.budgets.items()
@@ -258,7 +259,13 @@ class ProjectionEnvelope:
         _validate_sequence(resolved_stable_handles, "stable_handles")
         if budgets is not None and (
             not isinstance(budgets, Mapping)
-            or any(not isinstance(key, str) or not isinstance(value, int) or value < 0 for key, value in budgets.items())
+            or any(
+                not isinstance(key, str)
+                or isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 0
+                for key, value in budgets.items()
+            )
         ):
             raise ProjectionError("budgets_invalid")
         for value, name in ((capabilities_required, "capabilities_required"), (truncation_reasons, "truncation_reasons"), (tombstones, "tombstones")):

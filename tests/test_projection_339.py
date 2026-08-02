@@ -12,6 +12,8 @@ from simplicio_fast.projection import (
     ProjectionError,
     ProjectionStore,
     contract_manifest,
+    _canonical,
+    _reject_private_fields,
 )
 from simplicio_fast.skills import SkillCatalog
 
@@ -276,3 +278,156 @@ def test_projection_store_save_load_is_atomic_and_tamper_evident(tmp_path) -> No
         ProjectionStore.load(path, "repo-a")
     with pytest.raises(ProjectionError, match="projection_repository_mismatch"):
         ProjectionStore.load(tmp_path / "derived" / "projection.json", "repo-b")
+
+
+def test_projection_envelope_rejects_budget_and_payload_contract_edges() -> None:
+    envelope = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="code:a",
+        payload={"name": "a"},
+    )
+    with pytest.raises(ProjectionError, match="projection_type_unsupported"):
+        ProjectionEnvelope.create(
+            "other",
+            producer="mapper",
+            producer_schema="mapper/v1",
+            generation="g1",
+            stable_handle="x",
+            payload={},
+        )
+    with pytest.raises(ProjectionError, match="projection_type_unsupported"):
+        replace(envelope, projection_type="other")
+    with pytest.raises(ProjectionError, match="payload_invalid"):
+        replace(envelope, payload=[])
+    with pytest.raises(ProjectionError, match="payload_not_json"):
+        ProjectionEnvelope.create(
+            "code",
+            producer="mapper",
+            producer_schema="mapper/v1",
+            generation="g1",
+            stable_handle="x",
+            payload={"bad": object()},
+        )
+    with pytest.raises(ProjectionError, match="stable_handles_invalid"):
+        replace(envelope, stable_handles=())
+    with pytest.raises(ProjectionError, match="budgets_invalid"):
+        replace(envelope, budgets={"bytes": True})
+    with pytest.raises(ProjectionError, match="parent_generation_invalid"):
+        replace(envelope, parent_generation=1)
+    with pytest.raises(ProjectionError, match="capabilities_required_invalid"):
+        replace(envelope, capabilities_required=("",))
+    with pytest.raises(ProjectionError, match="config_fingerprint_invalid"):
+        replace(envelope, config_fingerprint=1)
+    with pytest.raises(ProjectionError, match="payload_invalid"):
+        ProjectionEnvelope.create(
+            "code",
+            producer="mapper",
+            producer_schema="mapper/v1",
+            generation="g1",
+            stable_handle="x",
+            payload=[],
+        )
+    with pytest.raises(ProjectionError, match="projection_size_limit"):
+        _canonical("x" * (8 * 1024 * 1024 + 1))
+    with pytest.raises(ProjectionError, match="projection_item_limit"):
+        _reject_private_fields(list(range(100_001)))
+    with pytest.raises(ProjectionError, match="budgets_invalid"):
+        ProjectionEnvelope.create(
+            "code",
+            producer="mapper",
+            producer_schema="mapper/v1",
+            generation="g1",
+            stable_handle="x",
+            payload={},
+            budgets={"bytes": True},
+        )
+    with pytest.raises(ProjectionError, match="producer_invalid"):
+        replace(envelope, producer="")
+    with pytest.raises(ProjectionError, match="projection_text_limit"):
+        ProjectionEnvelope.create(
+            "code",
+            producer="mapper",
+            producer_schema="mapper/v1",
+            generation="g1",
+            stable_handle="x",
+            payload={"text": "x" * 4097},
+        )
+    with pytest.raises(ProjectionError, match="capabilities_required_invalid"):
+        replace(envelope, capabilities_required="bad")
+    with pytest.raises(ProjectionError, match="truncation_reasons_invalid"):
+        replace(envelope, truncation_reasons=("",))
+    with pytest.raises(ProjectionError, match="projection_invalid_json"):
+        ProjectionEnvelope.decode(b"{")
+    missing_digest = json.loads(envelope.encode())
+    missing_digest.pop("payload_sha256")
+    with pytest.raises(ProjectionError, match="payload_digest_missing"):
+        ProjectionEnvelope.decode(json.dumps(missing_digest).encode())
+    invalid_payload = json.loads(envelope.encode())
+    invalid_payload["payload"] = []
+    with pytest.raises(ProjectionError, match="payload_invalid"):
+        ProjectionEnvelope.decode(json.dumps(invalid_payload).encode())
+
+
+def test_projection_store_rejects_conflicts_invalid_deltas_and_loads(tmp_path) -> None:
+    store = ProjectionStore("repo-a")
+    first = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="code:a",
+        payload={"repository": "repo-a", "name": "a"},
+    )
+    store.publish(first)
+    conflict = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="code:a",
+        payload={"repository": "repo-a", "name": "different"},
+    )
+    with pytest.raises(ProjectionError, match="projection_handle_conflict"):
+        store.publish(conflict)
+    with pytest.raises(ProjectionError, match="projection_delta_conflict"):
+        store.apply_delta("g1", changed=(first,), deleted_handles=("code:a",))
+    changed_generation = ProjectionEnvelope.create(
+        "knowledge",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g2",
+        stable_handle="knowledge:b",
+        payload={"repository": "repo-a"},
+    )
+    with pytest.raises(ProjectionError, match="projection_generation_stale"):
+        store.apply_delta("g1", changed=(changed_generation,))
+    with pytest.raises(ProjectionError, match="projection_generation_stale"):
+        store.publish(changed_generation)
+    path = tmp_path / "store.json"
+    store.save(path)
+    invalid_cases = [
+        ("{", "projection_store_invalid"),
+        ("[]", "projection_store_invalid"),
+        (json.dumps({"body": {"schema": "wrong"}, "store_sha256": "x"}), "projection_store_schema_unsupported"),
+    ]
+    for index, (content, reason) in enumerate(invalid_cases):
+        candidate = tmp_path / f"invalid-{index}.json"
+        candidate.write_text(content, encoding="utf-8")
+        with pytest.raises(ProjectionError, match=reason):
+            ProjectionStore.load(candidate, "repo-a")
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["body"]["records"] = "not-a-list"
+    document["store_sha256"] = __import__("simplicio_fast.projection", fromlist=["_digest"])._digest(document["body"])
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ProjectionError, match="projection_store_invalid"):
+        ProjectionStore.load(path, "repo-a")
+    store.save(path)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["body"]["generation"] = "g2"
+    document["store_sha256"] = __import__("simplicio_fast.projection", fromlist=["_digest"])._digest(document["body"])
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ProjectionError, match="projection_generation_mismatch"):
+        ProjectionStore.load(path, "repo-a")
