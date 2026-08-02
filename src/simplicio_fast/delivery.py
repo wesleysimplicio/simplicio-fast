@@ -108,6 +108,16 @@ def _terms(task: str) -> list[str]:
     return list(dict.fromkeys(values))[:8]
 
 
+def _token_count(text: str, tokenizer: Callable[[str], int] | None) -> int:
+    try:
+        value = tokenizer(text) if tokenizer is not None else max(1, len(text.split()))
+    except (TypeError, ValueError) as error:
+        raise ValueError("tokenizer must return a non-negative integer") from error
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError("tokenizer must return a non-negative integer")
+    return value
+
+
 def _deduplicate_spans(spans: list[Any]) -> tuple[list[Any], list[str]]:
     """Remove repeated source ranges before ranking or token accounting."""
 
@@ -367,6 +377,28 @@ class DeliveryEngine:
                         structural_score=1.0 / max(1, span.start_line),
                     )
                 )
+            wrapper_material = {
+                "schema": CONTEXT_REQUEST_SCHEMA,
+                "task_sha256": hashlib.sha256(task.encode("utf-8")).hexdigest(),
+                "generation": snapshot.generation,
+                "languages": sorted(
+                    {
+                        language_for_path(Path(span.file))
+                        or Path(span.file).suffix.casefold().lstrip(".")
+                        or "unknown"
+                        for span in spans
+                    }
+                ),
+                "requested_relations": ["calls", "imports", "references", "tests"],
+                "tokenizer_id": effective_tokenizer_id,
+            }
+            wrapper_tokens = _token_count(
+                json.dumps(wrapper_material, sort_keys=True, separators=(",", ":")),
+                tokenizer,
+            )
+            if wrapper_tokens >= 8_000:
+                raise ValueError("context wrapper exceeds token budget")
+            source_token_budget = 8_000 - wrapper_tokens
             if selection_mode == "legacy-regex":
                 ranking = {
                     "schema": "simplicio.fast.semantic-ranking-receipt/v1",
@@ -397,7 +429,7 @@ class DeliveryEngine:
                             max_candidates=max(1, min(64, len(documents) or 1)),
                             max_selected=max(1, min(8, len(documents) or 1)),
                             max_request_bytes=32_000,
-                            max_selected_tokens=8_000,
+                            max_selected_tokens=source_token_budget,
                         )
                     ).score(
                         generation=snapshot.generation,
@@ -445,23 +477,8 @@ class DeliveryEngine:
                 ):
                     rejected_quality.append(str(handle))
                     continue
-                try:
-                    token_count = (
-                        tokenizer(span.content)
-                        if tokenizer is not None
-                        else max(1, len(span.content.split()))
-                    )
-                except (TypeError, ValueError) as error:
-                    raise ValueError(
-                        "tokenizer must return a non-negative integer"
-                    ) from error
-                if (
-                    isinstance(token_count, bool)
-                    or not isinstance(token_count, int)
-                    or token_count < 0
-                ):
-                    raise ValueError("tokenizer must return a non-negative integer")
-                if selected_tokens + token_count > 8_000:
+                token_count = _token_count(span.content, tokenizer)
+                if selected_tokens + token_count > source_token_budget:
                     rejected_budget.append(str(handle))
                     continue
                 selected_spans.append(span)
@@ -510,7 +527,8 @@ class DeliveryEngine:
                     "max_candidates": 64,
                     "max_selected": 8,
                     "max_request_bytes": 32_000,
-                    "max_selected_tokens": 8_000,
+                    "max_selected_tokens": source_token_budget,
+                    "max_context_tokens": 8_000,
                     "max_source_bytes": 32_000,
                 },
             }
@@ -541,7 +559,12 @@ class DeliveryEngine:
                     ),
                     "selected_handles": selected_mapper_handles,
                 },
-                "budgets": {"context_bytes": 32_000, "context_tokens": 8_000},
+                "budgets": {
+                    "context_bytes": 32_000,
+                    "context_tokens": 8_000,
+                    "source_tokens": source_token_budget,
+                    "wrapper_tokens": wrapper_tokens,
+                },
                 "context": {
                     "terms": terms,
                     "spans": len(selected_spans),
@@ -549,7 +572,8 @@ class DeliveryEngine:
                     "tokens": context_tokens,
                     "estimated_tokens": context_tokens if tokenizer is None else None,
                     "source_tokens": context_tokens,
-                    "wrapper_tokens": 0,
+                    "wrapper_tokens": wrapper_tokens,
+                    "total_tokens": context_tokens + wrapper_tokens,
                     "digest": hashlib.sha256(
                         "\n".join(span.content for span in selected_spans).encode(
                             "utf-8"

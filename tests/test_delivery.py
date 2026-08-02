@@ -144,6 +144,15 @@ class DeliveryEngineTest(unittest.TestCase):
             self.assertEqual("semantic-ranking-v2", changed_scoring["context"]["scoring_config"])
             self.assertEqual("miss", changed_scoring["cache"]["L0_attempt"])
             self.assertGreater(exact["context"]["tokens"], 0)
+            self.assertGreater(exact["context"]["wrapper_tokens"], 0)
+            self.assertEqual(
+                exact["context"]["tokens"] + exact["context"]["wrapper_tokens"],
+                exact["context"]["total_tokens"],
+            )
+            self.assertEqual(
+                8_000 - exact["context"]["wrapper_tokens"],
+                exact["context_request"]["budgets"]["max_selected_tokens"],
+            )
 
     def test_prepare_requires_identity_for_exact_tokenizer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
