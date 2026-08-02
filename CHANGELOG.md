@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.21 - 2026-08-02
+
+- Publish the latest semantic-compute delivery line with Python/Rust parity
+  receipts, bounded SDK transport evidence, parser parity coverage, and
+  resource/rollout verification artifacts.
+
 ## 2.0.20 - 2026-07-30
 
 - Publish the executable Rust snapshot core alongside the legacy compatibility

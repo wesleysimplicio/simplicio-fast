@@ -12,8 +12,8 @@ Run from a clean checkout and keep the source commit explicit for a release rece
 
 ```powershell
 python scripts/manual_native_release.py run `
-  --version 2.0.20 `
-  --tag v2.0.20 `
+  --version 2.0.21 `
+  --tag v2.0.21 `
   --source-commit $(git rev-parse HEAD) `
   --repo wesleysimplicio/simplicio-fast `
   --json
@@ -23,4 +23,4 @@ The command is idempotent. A previously verified platform is reused, archives ar
 
 The runner continues when a target cannot be built. It records that target as `UNVERIFIED` and never creates a placeholder binary. On Windows, Linux targets require a compatible Rust target/linker or `zig`; macOS ARM64 normally requires an Apple SDK/host and is expected to remain `UNVERIFIED` on a Windows-only host. Cross-target Rust-core manifests are source manifests probed by the host; the target executable is not claimed to have run locally.
 
-Before publication, inspect `dist/manual-native/2.0.20/manual-native-release.json`, `manual-native-archives.json`, and `manual-native-publish.json`. Every uploaded archive has a SHA-256 receipt, and the release view is re-read after upload.
+Before publication, inspect `dist/manual-native/2.0.21/manual-native-release.json`, `manual-native-archives.json`, and `manual-native-publish.json`. Every uploaded archive has a SHA-256 receipt, and the release view is re-read after upload.
