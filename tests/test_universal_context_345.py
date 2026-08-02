@@ -105,6 +105,15 @@ def test_universal_context_rejects_boolean_budget_values() -> None:
         compile_context([], wrapper_bytes=False)
 
 
+def test_universal_context_rejects_untyped_projection_and_scope_inputs() -> None:
+    with pytest.raises(UniversalContextError, match="context_projections_invalid"):
+        compile_context([object()])
+    with pytest.raises(UniversalContextError, match="context_scope_invalid"):
+        compile_context([], repository_scope=1)
+    with pytest.raises(UniversalContextError, match="context_domain_budget_invalid"):
+        compile_context([], domain_caps=[("knowledge", 1)])
+
+
 def test_universal_context_rejects_invalid_domain_caps_and_records_duplicate() -> None:
     for caps in ({"": 1}, {"knowledge": True}, {"knowledge": -1}, {1: 1}):
         with pytest.raises(UniversalContextError, match="context_domain_budget_invalid"):

@@ -42,6 +42,15 @@ def compile_context(
     trust_floor: str | None = None,
 ) -> dict[str, Any]:
     """Compile a deterministic context packet; inputs remain immutable."""
+    if not isinstance(projections, (tuple, list)) or any(
+        not isinstance(item, ProjectionEnvelope) for item in projections
+    ):
+        raise UniversalContextError("context_projections_invalid")
+    for value in (repository_scope, tenant_scope):
+        if value is not None and (not isinstance(value, str) or not value.strip()):
+            raise UniversalContextError("context_scope_invalid")
+    if domain_caps is not None and not isinstance(domain_caps, Mapping):
+        raise UniversalContextError("context_domain_budget_invalid")
     if (
         isinstance(max_bytes, bool)
         or not isinstance(max_bytes, int)
