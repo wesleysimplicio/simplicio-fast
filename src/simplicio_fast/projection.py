@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+from threading import RLock
 from typing import Any, Mapping, Sequence
 
 
@@ -464,22 +465,25 @@ class ProjectionStore:
         self.repository = repository
         self._records: dict[str, ProjectionEnvelope] = {}
         self._generation: str | None = None
+        self._lock = RLock()
 
     @property
     def generation(self) -> str | None:
-        return self._generation
+        with self._lock:
+            return self._generation
 
     def publish(self, envelope: ProjectionEnvelope) -> None:
-        declared_repository = envelope.payload.get("repository")
-        if declared_repository is not None and declared_repository != self.repository:
-            raise ProjectionError("projection_repository_mismatch")
-        if self._generation is not None and envelope.generation != self._generation:
-            raise ProjectionError("projection_generation_stale")
-        previous = self._records.get(envelope.stable_handle)
-        if previous is not None and previous.payload_sha256 != envelope.payload_sha256:
-            raise ProjectionError("projection_handle_conflict")
-        self._generation = envelope.generation
-        self._records[envelope.stable_handle] = envelope
+        with self._lock:
+            declared_repository = envelope.payload.get("repository")
+            if declared_repository is not None and declared_repository != self.repository:
+                raise ProjectionError("projection_repository_mismatch")
+            if self._generation is not None and envelope.generation != self._generation:
+                raise ProjectionError("projection_generation_stale")
+            previous = self._records.get(envelope.stable_handle)
+            if previous is not None and previous.payload_sha256 != envelope.payload_sha256:
+                raise ProjectionError("projection_handle_conflict")
+            self._generation = envelope.generation
+            self._records[envelope.stable_handle] = envelope
 
     def apply_delta(
         self,
@@ -490,70 +494,73 @@ class ProjectionStore:
         closure_handles: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         _validate_text(generation, "generation")
-        if self._generation is not None and generation != self._generation:
-            raise ProjectionError("projection_generation_stale")
-        changed_handles = sorted({item.stable_handle for item in changed})
-        deleted = sorted(set(deleted_handles))
-        if set(changed_handles).intersection(deleted):
-            raise ProjectionError("projection_delta_conflict")
-        for item in changed:
-            if item.generation != generation:
+        with self._lock:
+            if self._generation is not None and generation != self._generation:
                 raise ProjectionError("projection_generation_stale")
-            self.publish(item)
-        for handle in deleted:
-            self._records.pop(handle, None)
-        self._generation = generation
-        closure = sorted(set(closure_handles).union(changed_handles, deleted))
-        return {
-            "schema": "simplicio.fast.projection-delta/v1",
-            "repository": self.repository,
-            "generation": generation,
-            "changed_handles": changed_handles,
-            "deleted_handles": deleted,
-            "closure_handles": closure,
-            "projection_digest": _digest(self.snapshot()),
-        }
+            changed_handles = sorted({item.stable_handle for item in changed})
+            deleted = sorted(set(deleted_handles))
+            if set(changed_handles).intersection(deleted):
+                raise ProjectionError("projection_delta_conflict")
+            for item in changed:
+                if item.generation != generation:
+                    raise ProjectionError("projection_generation_stale")
+                self.publish(item)
+            for handle in deleted:
+                self._records.pop(handle, None)
+            self._generation = generation
+            closure = sorted(set(closure_handles).union(changed_handles, deleted))
+            return {
+                "schema": "simplicio.fast.projection-delta/v1",
+                "repository": self.repository,
+                "generation": generation,
+                "changed_handles": changed_handles,
+                "deleted_handles": deleted,
+                "closure_handles": closure,
+                "projection_digest": _digest(self.snapshot()),
+            }
 
     def snapshot(self) -> list[dict[str, Any]]:
-        return [
-            self._records[key].to_dict() for key in sorted(self._records)
-        ]
+        with self._lock:
+            return [
+                self._records[key].to_dict() for key in sorted(self._records)
+            ]
 
     def save(self, path: Path) -> dict[str, Any]:
         """Atomically persist this derived store without becoming an authority."""
-        body = {
-            "schema": STORE_SCHEMA,
-            "repository": self.repository,
-            "generation": self._generation,
-            "records": self.snapshot(),
-        }
-        document = {"body": body, "store_sha256": _digest(body)}
-        encoded = _canonical(document) + b"\n"
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary: str | None = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
-            ) as handle:
-                temporary = handle.name
-                handle.write(encoded)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-            temporary = None
-        finally:
-            if temporary is not None:
-                Path(temporary).unlink(missing_ok=True)
-        return {
-            "schema": "simplicio.fast.projection-store-receipt/v1",
-            "status": "saved",
-            "repository": self.repository,
-            "generation": self._generation,
-            "path": str(path),
-            "store_sha256": document["store_sha256"],
-            "records": len(self._records),
-        }
+        with self._lock:
+            body = {
+                "schema": STORE_SCHEMA,
+                "repository": self.repository,
+                "generation": self._generation,
+                "records": self.snapshot(),
+            }
+            document = {"body": body, "store_sha256": _digest(body)}
+            encoded = _canonical(document) + b"\n"
+            path = Path(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary: str | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="wb", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+                ) as handle:
+                    temporary = handle.name
+                    handle.write(encoded)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(temporary, path)
+                temporary = None
+            finally:
+                if temporary is not None:
+                    Path(temporary).unlink(missing_ok=True)
+            return {
+                "schema": "simplicio.fast.projection-store-receipt/v1",
+                "status": "saved",
+                "repository": self.repository,
+                "generation": self._generation,
+                "path": str(path),
+                "store_sha256": document["store_sha256"],
+                "records": len(self._records),
+            }
 
     @classmethod
     def load(cls, path: Path, repository: str) -> "ProjectionStore":

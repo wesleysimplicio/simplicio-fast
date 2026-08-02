@@ -29,3 +29,17 @@ def test_sdk_async_surface_is_read_only_and_matches_sync() -> None:
         assert await sdk.context_async() == sdk.context()
 
     asyncio.run(run())
+
+
+def test_sdk_supports_twenty_concurrent_async_queries(tmp_path) -> None:
+    sdk = ProjectionSDK("repo")
+    sdk.publish(envelope("symbol:a"))
+
+    async def run() -> None:
+        results = await asyncio.gather(*(sdk.query_async("symbol:a") for _ in range(20)))
+        assert results == [sdk.query("symbol:a")] * 20
+        path = tmp_path / "projection.json"
+        receipt = await asyncio.to_thread(sdk.save, path)
+        assert receipt["records"] == 1
+
+    asyncio.run(run())
