@@ -33,6 +33,16 @@ def _tokens(value: str) -> set[str]:
     return set(_TOKEN.findall(value.casefold()))
 
 
+def _string_sequence(value: object, reason: str, *, required: bool = False) -> tuple[str, ...]:
+    if not isinstance(value, (tuple, list)):
+        raise KnowledgeProjectionError(reason)
+    if required and not value:
+        raise KnowledgeProjectionError(reason)
+    if any(not isinstance(item, str) or not item.strip() for item in value):
+        raise KnowledgeProjectionError(reason)
+    return tuple(value)
+
+
 def _digest(value: Any) -> str:
     encoded = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
@@ -59,10 +69,13 @@ class KnowledgeFact:
         values = (self.source_type, self.producer, self.stable_handle, self.version, self.trust, self.digest, self.repository, self.scope)
         if any(not isinstance(value, str) or not value.strip() for value in values):
             raise KnowledgeProjectionError("fact_identity_invalid")
-        if not self.provenance or any(not item.strip() for item in self.provenance):
-            raise KnowledgeProjectionError("fact_provenance_invalid")
+        _string_sequence(self.provenance, "fact_provenance_invalid", required=True)
+        _string_sequence(self.applicability, "fact_applicability_invalid")
         if not isinstance(self.text, str):
             raise KnowledgeProjectionError("fact_text_invalid")
+        for value in (self.valid_from, self.valid_until):
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+                raise KnowledgeProjectionError("fact_temporal_bounds_invalid")
         if self.state not in {_ACTIVE, *_INACTIVE}:
             raise KnowledgeProjectionError("fact_state_invalid")
         if self.valid_from is not None and self.valid_until is not None and self.valid_from > self.valid_until:
@@ -92,7 +105,7 @@ class KnowledgeProjection:
     """Derived index fed by producer adapters; no direct database access."""
 
     def __init__(self, repository: str, scope: str, generation: str) -> None:
-        if not repository or not scope or not generation:
+        if any(not isinstance(value, str) or not value.strip() for value in (repository, scope, generation)):
             raise KnowledgeProjectionError("projection_scope_invalid")
         self.repository = repository
         self.scope = scope
@@ -103,8 +116,13 @@ class KnowledgeProjection:
         self._lock = RLock()
 
     def apply_delta(self, facts: Iterable[KnowledgeFact] = (), tombstones: Iterable[str] = ()) -> dict[str, Any]:
-        incoming = tuple(facts)
-        deleted = sorted(set(tombstones))
+        try:
+            incoming = tuple(facts)
+            deleted = sorted(_string_sequence(tuple(tombstones), "tombstone_invalid"))
+        except TypeError as error:
+            raise KnowledgeProjectionError("delta_input_invalid") from error
+        if any(not isinstance(fact, KnowledgeFact) for fact in incoming):
+            raise KnowledgeProjectionError("fact_type_invalid")
         with self._lock:
             if any(fact.repository != self.repository or fact.scope != self.scope for fact in incoming):
                 raise KnowledgeProjectionError("fact_scope_mismatch")
@@ -138,6 +156,10 @@ class KnowledgeProjection:
             return {"schema": "simplicio.fast.knowledge-delta/v1", "generation": self.generation, "changed_handles": sorted(set(changed)), "tombstones": deleted, "conflicts": sorted(self._conflicts)}
 
     def query(self, task: str, *, max_results: int = 32, max_bytes: int = 256 * 1024, max_tokens: int = 4096, source_types: Sequence[str] = (), as_of: int | None = None) -> dict[str, Any]:
+        if not isinstance(task, str):
+            raise KnowledgeProjectionError("query_task_invalid")
+        if source_types:
+            _string_sequence(source_types, "query_source_types_invalid")
         if (
             not task
             or isinstance(max_results, bool)
