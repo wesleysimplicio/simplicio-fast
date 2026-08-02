@@ -1,6 +1,16 @@
+import json
+from pathlib import Path
+import shutil
+import subprocess
+
 import pytest
 
-from simplicio_fast.capability_ranking import CapabilityCandidate, CapabilityRankingError, rank_capabilities
+from simplicio_fast.capability_ranking import (
+    CapabilityCandidate,
+    CapabilityRankingError,
+    candidates_from_manifest,
+    rank_capabilities,
+)
 
 
 def test_capability_ranking_is_explainable_and_advisory() -> None:
@@ -214,3 +224,52 @@ def test_capability_ranking_bounds_candidate_stream(monkeypatch: pytest.MonkeyPa
     ]
     with pytest.raises(CapabilityRankingError, match="candidate_count_limit"):
         rank_capabilities(candidates, ("query",))
+
+
+def _installed_json(command: list[str]) -> dict[str, object]:
+    assert shutil.which(command[0]) is not None
+    result = subprocess.run(command, capture_output=True, text=True, check=False)
+    assert result.returncode == 0, result.stderr
+    value = json.loads(result.stdout)
+    assert isinstance(value, dict)
+    return value
+
+
+def test_capability_ranking_adapts_real_loop_fast_and_runtime_manifests() -> None:
+    preflight = _installed_json(
+        ["simplicio-loop", "preflight", "--repo", str(Path.cwd()), "--json"]
+    )
+    fast = _installed_json(["simplicio-py", "fast", "capabilities", "--json"])
+    runtime = _installed_json(
+        [
+            "simplicio-runtime",
+            "contracts",
+            "smoke",
+            "--json",
+            "--repo",
+            str(Path.cwd()),
+        ]
+    )
+    candidates = [
+        *candidates_from_manifest(preflight),
+        *candidates_from_manifest(fast),
+        *candidates_from_manifest(runtime),
+    ]
+    handles = {candidate.handle for candidate in candidates}
+    assert "operator:simplicio-mapper" in handles
+    assert "operator:simplicio-runtime" in handles
+    assert "operator:simplicio-fast" in handles
+    assert "runtime:simplicio-runtime" in handles
+    ranked = rank_capabilities(candidates, ("runtime:runtime:simplicio-runtime",))
+    assert ranked["authority"] == "advisory_only"
+    assert all(item["policy_eligibility"] == "unknown" for item in ranked["candidates"])
+    assert all(item["eligible"] is False for item in ranked["candidates"])
+
+
+def test_capability_manifest_adapter_rejects_unknown_schema_and_malformed_operator() -> None:
+    with pytest.raises(CapabilityRankingError, match="manifest_schema_invalid"):
+        candidates_from_manifest({"schema": "unknown/v1"})
+    with pytest.raises(CapabilityRankingError, match="manifest_operator_invalid"):
+        candidates_from_manifest(
+            {"schema": "simplicio.preflight/v1", "operators": [{"name": "loop"}]}
+        )
