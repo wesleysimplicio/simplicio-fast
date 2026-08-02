@@ -358,6 +358,8 @@ def test_resident_handshake_rejects_empty_identity_and_invalid_call_frames() -> 
         session.call("query", [])
     with pytest.raises(RustSessionError, match="session_payload_invalid"):
         _canonical({"invalid": object()})
+    with pytest.raises(RustSessionError, match="session_payload_invalid"):
+        _canonical({"invalid": float("nan")})
 
 
 def test_resident_handshake_rejects_non_object_root() -> None:
