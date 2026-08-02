@@ -47,11 +47,14 @@ def changeset(root, operation: ChangeOperation) -> BinaryChangeSet:
     ("value", "reason"),
     [
         ({"op": "unknown", "path": "item.txt"}, "operation_type_invalid"),
+        ({"op": True, "path": "item.txt"}, "operation_type_invalid"),
+        ({"op": "delete", "path": 1, "before_sha256": "a" * 64}, "path_invalid"),
         ({"op": "delete", "path": "../item.txt", "before_sha256": "a" * 64}, "path_outside_repository"),
         ({"op": "delete", "path": "item.txt", "before_sha256": "bad"}, "sha256_invalid"),
         ({"op": "create", "path": "item.txt"}, "create_payload_missing"),
         ({"op": "rename", "path": "item.txt", "before_sha256": "a" * 64, "after_sha256": "a" * 64}, "rename_payload_missing"),
         ({"op": "delete", "path": "item.txt", "before_sha256": "a" * 64, "content_b64": "%%%"}, "content_encoding_invalid"),
+        ({"op": "delete", "path": "item.txt", "before_sha256": "a" * 64, "content_b64": True}, "content_encoding_invalid"),
     ],
 )
 def test_change_operation_rejects_invalid_contracts(value, reason) -> None:
@@ -74,6 +77,10 @@ def test_replace_range_rejects_ambiguous_or_invalid_line_contracts() -> None:
         ChangeOperation.from_dict({key: value for key, value in base.items() if key != "content"})
     with pytest.raises(BinaryChangeSetError, match="line_map_invalid"):
         ChangeOperation.from_dict({**base, "line_map": {"start_line": 0, "end_line": 1}})
+    with pytest.raises(BinaryChangeSetError, match="line_map_invalid"):
+        ChangeOperation.from_dict({**base, "line_map": {"start_line": True, "end_line": 1}})
+    with pytest.raises(BinaryChangeSetError, match="line_map_invalid"):
+        ChangeOperation.from_dict({**base, "line_map": {"start_line": "1", "end_line": 1}})
     with pytest.raises(BinaryChangeSetError, match="line_map_hash_mismatch"):
         ChangeOperation.from_dict({**base, "line_map": {"start_line": 1, "end_line": 1}, "line_map_sha256": "bad"})
     with pytest.raises(BinaryChangeSetError, match="replace_payload_missing"):
@@ -188,6 +195,24 @@ def test_operation_and_changeset_contract_edges(tmp_path) -> None:
         BinaryChangeSet(str(tmp_path), "b", "o", "a", "w", "l", "f", ("x",), ())
     with pytest.raises(BinaryChangeSetError, match="schema_invalid"):
         BinaryChangeSet.from_dict({"schema": "wrong"})
+    with pytest.raises(BinaryChangeSetError, match="changeset_invalid"):
+        BinaryChangeSet.from_dict([])
+    exported = changeset(tmp_path, delete_operation()).to_dict()
+    exported["repository"] = 1
+    with pytest.raises(BinaryChangeSetError, match="binding_missing"):
+        BinaryChangeSet.from_dict(exported)
+    exported = changeset(tmp_path, delete_operation()).to_dict()
+    exported["worktree_id"] = 1
+    with pytest.raises(BinaryChangeSetError, match="worktree_invalid"):
+        BinaryChangeSet.from_dict(exported)
+    exported = changeset(tmp_path, delete_operation()).to_dict()
+    exported["verification_commands"] = "pytest"
+    with pytest.raises(BinaryChangeSetError, match="verification_commands_invalid"):
+        BinaryChangeSet.from_dict(exported)
+    exported = changeset(tmp_path, delete_operation()).to_dict()
+    exported["allowed_paths"] = "item.txt"
+    with pytest.raises(BinaryChangeSetError, match="allowed_paths_invalid"):
+        BinaryChangeSet.from_dict(exported)
 
 
 def test_validation_covers_missing_sources_hashes_and_newlines(tmp_path) -> None:

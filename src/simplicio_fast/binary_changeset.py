@@ -86,6 +86,12 @@ def _path(value: str) -> str:
     return normalized
 
 
+def _text(value: object, reason: str) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise BinaryChangeSetError(reason)
+    return value
+
+
 def _safe_path(root: Path, relative: str) -> Path:
     """Resolve a changeset path without following a repository symlink."""
     root = root.resolve()
@@ -155,11 +161,18 @@ class ChangeOperation:
     def from_dict(cls, value: Mapping[str, Any]) -> "ChangeOperation":
         if not isinstance(value, Mapping):
             raise BinaryChangeSetError("operation_invalid")
-        op = str(value.get("op", "")).replace("_", "-")
+        raw_op = value.get("op", "")
+        if not isinstance(raw_op, str):
+            raise BinaryChangeSetError("operation_type_invalid")
+        op = raw_op.replace("_", "-")
         if op not in OP_TYPES:
             raise BinaryChangeSetError("operation_type_invalid", op)
-        path = _path(str(value.get("path", "")))
-        dest = _path(str(value["dest"])) if value.get("dest") is not None else None
+        path = _path(_text(value.get("path", ""), "path_invalid"))
+        dest = (
+            _path(_text(value["dest"], "path_invalid"))
+            if value.get("dest") is not None
+            else None
+        )
         before = _sha(value.get("before_sha256"))
         after = _sha(value.get("after_sha256"))
         content_b64 = value.get("content_b64")
@@ -169,8 +182,9 @@ class ChangeOperation:
                 raise BinaryChangeSetError("content_invalid")
             content_b64 = _b64(content.encode("utf-8"))
         if content_b64 is not None:
-            _unb64(str(content_b64))
-            content_b64 = str(content_b64)
+            if not isinstance(content_b64, str):
+                raise BinaryChangeSetError("content_encoding_invalid")
+            _unb64(content_b64)
         line_map = None
         line_map_sha256 = None
         line_map: dict[str, int] | None = None
@@ -181,21 +195,33 @@ class ChangeOperation:
                 for key in ("byte_start", "byte_end", "offset", "byte_offset")
             ):
                 raise BinaryChangeSetError("ambiguous_byte_offset")
-            encoding = str(value.get("encoding", "utf-8"))
-            if not encoding:
-                raise BinaryChangeSetError("encoding_required")
+            encoding = _text(value.get("encoding", "utf-8"), "encoding_required")
             line_map = value.get("line_map")
             if line_map is None:
                 start = value.get("start_line", value.get("line_start"))
                 end = value.get("end_line", value.get("line_end"))
-                if not isinstance(start, int) or not isinstance(end, int):
+                if (
+                    isinstance(start, bool)
+                    or not isinstance(start, int)
+                    or isinstance(end, bool)
+                    or not isinstance(end, int)
+                ):
                     raise BinaryChangeSetError("line_map_required")
                 line_map = {"start_line": start, "end_line": end}
             if not isinstance(line_map, Mapping):
                 raise BinaryChangeSetError("line_map_invalid")
+            start_line = line_map.get("start_line")
+            end_line = line_map.get("end_line")
+            if (
+                isinstance(start_line, bool)
+                or not isinstance(start_line, int)
+                or isinstance(end_line, bool)
+                or not isinstance(end_line, int)
+            ):
+                raise BinaryChangeSetError("line_map_invalid")
             line_map = {
-                "start_line": int(line_map["start_line"]),
-                "end_line": int(line_map["end_line"]),
+                "start_line": start_line,
+                "end_line": end_line,
             }
             if (
                 line_map["start_line"] < 1
@@ -204,17 +230,20 @@ class ChangeOperation:
                 raise BinaryChangeSetError("line_map_invalid")
             supplied_map_hash = value.get("line_map_sha256")
             expected_map_hash = sha256(canonical(line_map))
+            if supplied_map_hash is not None and not isinstance(supplied_map_hash, str):
+                raise BinaryChangeSetError("line_map_hash_invalid")
             if supplied_map_hash is not None and supplied_map_hash != expected_map_hash:
                 raise BinaryChangeSetError("line_map_hash_mismatch")
             line_map_sha256 = expected_map_hash
         else:
             encoding = (
-                str(value["encoding"]) if value.get("encoding") is not None else None
+                _text(value["encoding"], "encoding_invalid")
+                if value.get("encoding") is not None
+                else None
             )
             line_map = None
-            line_map_sha256 = (
-                str(value["line_map_sha256"]) if value.get("line_map_sha256") else None
-            )
+            if value.get("line_map_sha256") is not None:
+                line_map_sha256 = _text(value["line_map_sha256"], "line_map_hash_invalid")
         if op == "create" and (content_b64 is None or after is None):
             raise BinaryChangeSetError("create_payload_missing")
         if op == "replace-range" and (
@@ -310,33 +339,53 @@ class BinaryChangeSet:
 
     @classmethod
     def from_dict(cls, value: Mapping[str, Any]) -> "BinaryChangeSet":
+        if not isinstance(value, Mapping):
+            raise BinaryChangeSetError("changeset_invalid")
         if value.get("schema") != SCHEMA:
             raise BinaryChangeSetError("schema_invalid")
+        raw_operations = value.get("operations", ())
+        if not isinstance(raw_operations, (tuple, list)):
+            raise BinaryChangeSetError("operations_invalid")
         operations = tuple(
-            ChangeOperation.from_dict(item) for item in value.get("operations", ())
+            ChangeOperation.from_dict(item) for item in raw_operations
         )
-        allowed = tuple(
-            value.get("allowed_paths")
-            or sorted(
-                {
-                    path
-                    for operation in operations
-                    for path in (operation.path, operation.dest)
-                    if path
-                }
+        raw_allowed = value.get("allowed_paths")
+        if raw_allowed is not None and not isinstance(raw_allowed, (tuple, list)):
+            raise BinaryChangeSetError("allowed_paths_invalid")
+        allowed = (
+            tuple(_text(item, "allowed_paths_invalid") for item in raw_allowed)
+            if raw_allowed is not None and raw_allowed
+            else tuple(
+                sorted(
+                    {
+                        path
+                        for operation in operations
+                        for path in (operation.path, operation.dest)
+                        if path
+                    }
+                )
             )
         )
+        fields = (
+            ("repository", "binding_missing"),
+            ("base_generation", "binding_missing"),
+            ("overlay_generation", "binding_missing"),
+            ("attempt", "binding_missing"),
+            ("worktree_id", "worktree_invalid"),
+            ("lease_id", "authority_missing"),
+            ("fencing_token", "authority_missing"),
+        )
+        identity = {name: _text(value.get(name, ""), reason) for name, reason in fields}
+        raw_commands = value.get("verification_commands", ())
+        if not isinstance(raw_commands, (tuple, list)) or any(
+            not isinstance(item, str) or not item.strip() for item in raw_commands
+        ):
+            raise BinaryChangeSetError("verification_commands_invalid")
         result = cls(
-            repository=str(value.get("repository", "")),
-            base_generation=str(value.get("base_generation", "")),
-            overlay_generation=str(value.get("overlay_generation", "")),
-            attempt=str(value.get("attempt", "")),
-            worktree_id=str(value.get("worktree_id", "")),
-            lease_id=str(value.get("lease_id", "")),
-            fencing_token=str(value.get("fencing_token", "")),
-            allowed_paths=tuple(str(item) for item in allowed),
+            **identity,
+            allowed_paths=allowed,
             operations=operations,
-            verification_commands=tuple(value.get("verification_commands") or ()),
+            verification_commands=tuple(raw_commands),
         )
         supplied = value.get("changeset_id")
         if supplied is not None and supplied != result.changeset_id:
