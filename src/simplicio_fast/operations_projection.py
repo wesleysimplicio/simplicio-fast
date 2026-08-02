@@ -142,11 +142,8 @@ class OperationsProjection:
         as_of_sequence: int | None = None,
     ) -> list[dict[str, Any]]:
         self._validate_query_budget(max_results, as_of_sequence)
-        if any(
-            value is not None and (not isinstance(value, str) or not value.strip())
-            for value in (status, kind)
-        ):
-            raise OperationsProjectionError("query_filter_invalid")
+        self._validate_status_filter(status)
+        self._validate_kind_filter(kind)
         with self._lock:
             values = [
                 item for item in self._receipts.values()
@@ -157,9 +154,20 @@ class OperationsProjection:
             ]
             return [self._item(item) for item in sorted(values, key=lambda item: (item.sequence, item.handle), reverse=True)[:max_results]]
 
+    @staticmethod
+    def _validate_status_filter(status: str | None) -> None:
+        if status is not None and (not isinstance(status, str) or not status.strip()):
+            raise OperationsProjectionError("query_filter_invalid")
+
+    @staticmethod
+    def _validate_kind_filter(kind: str | None) -> None:
+        if kind is not None and (not isinstance(kind, str) or not kind.strip()):
+            raise OperationsProjectionError("query_filter_invalid")
+
     def query_slots(self, *, status: str | None = None, max_results: int = 1000) -> list[dict[str, Any]]:
         """Read slot/attempt facts without accepting or mutating leases."""
         self._validate_query_budget(max_results, None)
+        self._validate_status_filter(status)
         with self._lock:
             values = [
                 item for item in self._receipts.values()
