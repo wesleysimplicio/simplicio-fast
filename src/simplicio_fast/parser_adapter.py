@@ -608,6 +608,18 @@ def build_payload(
                 str(root), relative, language, item.qualified_name, signature
             )
             if symbol_id in seen_ids:
+                # Lexical adapters cannot always recover overload signatures.
+                # Keep the first historical ID stable and disambiguate later
+                # declarations with their source span instead of rejecting a
+                # valid overloaded corpus.
+                symbol_id = stable_id(
+                    str(root),
+                    relative,
+                    language,
+                    item.qualified_name,
+                    f"{signature}@{item.line}:{item.end_line}",
+                )
+            if symbol_id in seen_ids:
                 raise ParserAdapterError("symbol_id_collision", symbol_id)
             seen_ids.add(symbol_id)
             symbols.append(
