@@ -120,6 +120,9 @@ def test_operations_projection_rejects_untyped_ingest_filters_and_lease_limits()
         projection.query_leases(0, max_results=True)
     with pytest.raises(OperationsProjectionError, match="lease_query_invalid"):
         projection.query_leases(0, max_results=1.5)
+    for status in (1, True, ""):
+        with pytest.raises(OperationsProjectionError, match="query_filter_invalid"):
+            projection.query_slots(status=status)
 
 
 def test_operations_projection_causal_and_lease_boundaries() -> None:
