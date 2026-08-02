@@ -3,7 +3,7 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. Current master is `1a78822`;
+owned by an external capability or service. Current master is `d39344a`;
 release-integrity passes all checks. The full-suite subprocess failures in
 this Windows shell are recorded separately and are not treated as functional
 passes.
@@ -19,7 +19,7 @@ passes.
 | #242 | PARTIAL | `issue242-windows-20260802-100k-cache2-10.json`; artifact/delta validation caches are bounded and corruption-aware; 25 focused tests pass; fresh 100k/10 receipt keeps parity and relative gates, but unchanged median is 37.14 ms (p95 85.18 ms), above the 5 ms AC | Linux receipt, unchanged <=5 ms at required scales, CI regression gate and final coverage |
 | #243 | BLOCKED | Local workflow contract/verifier pass; run `30723612138` has `startup_failure` and no jobs | GitHub Actions administrative/runner availability, then four native target builds and downloadable verification |
 | #244 | PARTIAL | `2bd7ac9`; frozen conformance corpus now builds deterministically with 4 files, 25 unique symbols and explicit native-parser fallback diagnostics; lexical overload IDs are disambiguated by source span; parser/Mapper/fuzz/corpus block passes 28 tests + 16 subtests, Ruff passes, and focused coverage remains above 90% line/85% branch | Native legacy-parser parity, installed cross-platform matrix, native C#/TypeScript/Rust implementations and final installed evidence |
-| #347 | PARTIAL | `a511814`; Operations projection serializes ingest/read paths with process-local `RLock`, preserves read-only authority, detects causal gaps/forks, blocks inconsistent `complete` queries, and passes 6 focused tests including 20 concurrent readers; focused module report is 87% with branch coverage enabled | Canonical Mapper/Loop/Runtime streams, as-of/restart/replay E2E, Python/Rust parity, installed consumers, cross-process/crash evidence, coverage threshold and measured latency |
+| #347 | PARTIAL | `d39344a`; Operations projection serializes ingest/read paths with process-local `RLock`, preserves read-only authority, detects causal gaps/forks, blocks inconsistent `complete` queries, and covers filters/leases/expiry/causal ordering; focused block passes 30 tests including 20 concurrent readers, Ruff passes and `operations_projection.py` measures 100% line/branch coverage | Canonical Mapper/Loop/Runtime streams, as-of/restart/replay E2E, Python/Rust parity, installed consumers, cross-process/crash evidence and measured latency |
 | #246 | BLOCKED | Rust matrix receipts at 10k/100k/1M; Full cell reports `runtime_authorization_required` | Runtime-authorized Full, Loop standalone, real delivery tasks, concurrency and final regression gate |
 | #247 | PARTIAL | `3515bb5`; current C# adapter suite passes 13 combined language tests; multi-project/partial/test-symbol E2E present | Roslyn/native relations, affected-project invalidation, installed Linux/Windows E2E and coverage |
 | #248 | PARTIAL | `dffc0b1`; current TypeScript adapter suite passes 13 combined language tests; monorepo/project refs/aliases/TSX E2E present | Native compiler relations, bounded invalidation, Node/React installed E2E and coverage |
