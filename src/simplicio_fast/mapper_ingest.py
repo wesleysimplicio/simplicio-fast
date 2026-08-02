@@ -112,6 +112,32 @@ def validate_handoff(root: Path, envelope: dict[str, Any]) -> dict[str, Any]:
         fidelity = {"gate": "ready", "source": "receipt-counters"}
     if fidelity.get("gate") != "ready":
         raise MapperIngestError("mapper_incomplete")
+    delta = handoff.get("delta", {})
+    if not isinstance(delta, dict):
+        raise MapperIngestError("mapper_schema_unsupported")
+
+    def validated_paths(value: object) -> list[str]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise MapperIngestError("mapper_schema_unsupported")
+        result: list[str] = []
+        for item in value:
+            if (
+                not isinstance(item, str)
+                or not item
+                or Path(item).is_absolute()
+                or ".." in Path(item).parts
+            ):
+                raise MapperIngestError("mapper_schema_unsupported")
+            result.append(Path(item).as_posix())
+        return sorted(set(result))
+
+    changed_paths = validated_paths(delta.get("changed_paths", []))
+    deleted_paths = validated_paths(delta.get("deleted_paths", []))
+    if set(changed_paths).intersection(deleted_paths):
+        raise MapperIngestError("mapper_schema_unsupported")
+
     artifacts = handoff.get("artifacts")
     if not isinstance(artifacts, list) or not artifacts:
         raise MapperIngestError("mapper_incomplete")
@@ -153,7 +179,8 @@ def validate_handoff(root: Path, envelope: dict[str, Any]) -> dict[str, Any]:
         "fidelity": fidelity,
         "handoff_sha256": receipt["handoff_sha256"],
         "artifacts": checked,
-        "changed_paths": handoff.get("delta", {}).get("changed_paths", []),
+        "changed_paths": changed_paths,
+        "deleted_paths": deleted_paths,
     }
 
 

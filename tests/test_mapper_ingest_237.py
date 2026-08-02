@@ -105,6 +105,25 @@ def test_accepts_complete_reused_mapper_handoff(tmp_path: Path) -> None:
     assert provenance["mode"] == "integrated"
 
 
+def test_preserves_and_validates_mapper_deleted_paths(tmp_path: Path) -> None:
+    root = tmp_path / "repo"
+    root.mkdir()
+    envelope = _envelope(root, "a" * 40)
+    envelope["handoff"]["delta"] = {
+        "changed_paths": ["src/changed.py"],
+        "deleted_paths": ["src/removed.py"],
+    }
+    with patch("simplicio_fast.mapper_ingest._head", return_value="a" * 40):
+        provenance = validate_handoff(root, envelope)
+    assert provenance["changed_paths"] == ["src/changed.py"]
+    assert provenance["deleted_paths"] == ["src/removed.py"]
+
+    envelope["handoff"]["delta"]["deleted_paths"] = ["../outside.py"]
+    with patch("simplicio_fast.mapper_ingest._head", return_value="a" * 40):
+        with pytest.raises(MapperIngestError, match="mapper_schema_unsupported"):
+            validate_handoff(root, envelope)
+
+
 def test_tampered_mapper_artifact_fails_closed(tmp_path: Path) -> None:
     root = tmp_path / "repo"
     root.mkdir()

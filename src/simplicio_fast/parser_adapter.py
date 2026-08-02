@@ -333,7 +333,14 @@ def build_payload_from_mapper(
     files.sort(key=lambda item: item["path"])
     symbols.sort(key=lambda item: (item["file"], item["line"], item["id"]))
     relations.sort(key=lambda item: (item["file"], item["kind"], item["origin"], item["destination"]))
-    changed_paths = sorted(_safe_relative(path) for path in provenance.get("changed_paths", []))
+    changed_paths = sorted(
+        _safe_relative(path) for path in provenance.get("changed_paths", [])
+    )
+    deleted_paths = sorted(
+        _safe_relative(path) for path in provenance.get("deleted_paths", [])
+    )
+    if set(changed_paths).intersection(deleted_paths):
+        raise ParserAdapterError("mapper_delta_invalid")
     payload: dict[str, Any] = {
         "schema": SCHEMA,
         "adapter_version": "1",
@@ -353,12 +360,18 @@ def build_payload_from_mapper(
         "invalidation": {
             "schema": "simplicio.fast.parser-invalidation/v1",
             "requested_paths": changed_paths,
-            "parsed_paths": changed_paths or [item["path"] for item in files],
+            "parsed_paths": [
+                item["path"] for item in files if item["path"] in changed_paths
+            ]
+            if changed_paths
+            else [item["path"] for item in files],
             "reused_paths": [item["path"] for item in files if item["path"] not in changed_paths]
             if changed_paths
             else [],
-            "deleted_paths": [],
-            "reason_codes": ["mapper_delta" if changed_paths else "mapper_full_snapshot"],
+            "deleted_paths": deleted_paths,
+            "reason_codes": [
+                "mapper_delta" if changed_paths or deleted_paths else "mapper_full_snapshot"
+            ],
         },
     }
     payload["workspace_fingerprints"] = {}
