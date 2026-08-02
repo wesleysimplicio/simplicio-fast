@@ -114,6 +114,29 @@ def test_universal_context_rejects_tenant_scope_mismatch() -> None:
         compile_context([item], repository_scope="repo", tenant_scope="tenant-b")
 
 
+def test_universal_context_rejects_foreign_or_unbound_tenant_payload() -> None:
+    foreign = ProjectionEnvelope.create(
+        "knowledge",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="foreign-tenant",
+        payload={"repository": "repo", "tenant": "tenant-b", "value": "foreign"},
+    )
+    unbound = ProjectionEnvelope.create(
+        "knowledge",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="unbound-tenant",
+        payload={"repository": "repo", "value": "unbound"},
+    )
+    with pytest.raises(UniversalContextError, match="context_scope_mismatch"):
+        compile_context([foreign], repository_scope="repo", tenant_scope="tenant-a")
+    with pytest.raises(UniversalContextError, match="context_scope_mismatch"):
+        compile_context([unbound], repository_scope="repo", tenant_scope="tenant-a")
+
+
 def test_universal_context_rejects_unbound_or_foreign_repository_metadata() -> None:
     foreign = ProjectionEnvelope.create(
         "knowledge",
