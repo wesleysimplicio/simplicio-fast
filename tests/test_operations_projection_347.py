@@ -153,6 +153,10 @@ def test_operations_projection_causal_and_lease_boundaries() -> None:
     invalid_expiry.ingest([OperationReceipt("lease", "lease", "held", "g1", 1, "runtime/v1", {"expires_at": True})])
     with pytest.raises(OperationsProjectionError, match="lease_expiry_invalid"):
         invalid_expiry.query_leases(0)
+    negative_expiry = OperationsProjection("repo", "g1")
+    negative_expiry.ingest([OperationReceipt("lease", "lease", "held", "g1", 1, "runtime/v1", {"expires_at": -1})])
+    with pytest.raises(OperationsProjectionError, match="lease_expiry_invalid"):
+        negative_expiry.query_leases(0)
     with pytest.raises(OperationsProjectionError, match="query_budget_invalid"):
         projection.query_slots(max_results=0)
     ordered = OperationsProjection("repo", "g1")
