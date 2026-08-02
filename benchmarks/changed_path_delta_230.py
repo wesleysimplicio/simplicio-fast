@@ -169,10 +169,18 @@ def _performance_gates(categories: dict[str, list[dict[str, object]]]) -> dict[s
             and isinstance(cold, (int, float))
             and one_file < cold
         ),
+        "one_file_within_half_cold": (
+            isinstance(one_file, (int, float))
+            and isinstance(cold, (int, float))
+            and one_file <= cold * 0.5
+        ),
         "unchanged_within_two_times_warm": (
             isinstance(unchanged, (int, float))
             and isinstance(warm, (int, float))
             and unchanged <= warm * 2
+        ),
+        "unchanged_under_reference_budget": (
+            isinstance(unchanged, (int, float)) and unchanged <= 5.0
         ),
     }
     return {
