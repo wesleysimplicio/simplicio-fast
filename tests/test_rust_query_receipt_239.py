@@ -274,6 +274,10 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         assert metrics["wall_ms"] >= 0
         assert metrics["mapped_generations"] == 1
         assert metrics["cache_hits"] == 2
+    assert session.closed
+    with pytest.raises(RustSessionError, match="session_closed"):
+        session.call("stats", {})
+    session.close()
 
     with RustCoreSession(executable) as non_read_only_session:
         non_read_only_session.restart()
