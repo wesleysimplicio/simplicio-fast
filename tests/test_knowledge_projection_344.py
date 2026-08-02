@@ -100,6 +100,25 @@ def test_knowledge_fact_and_projection_contracts_fail_closed() -> None:
         KnowledgeProjection("", "tenant", "g1")
 
 
+def test_knowledge_fact_normalizes_mutable_provenance_sequences() -> None:
+    item = fact("normalized", "contract",)
+    normalized = KnowledgeFact(
+        item.source_type,
+        item.producer,
+        item.stable_handle,
+        item.version,
+        ["mapper:fixture:1"],
+        item.trust,
+        item.digest,
+        item.text,
+        item.repository,
+        item.scope,
+        applicability=["python"],
+    )
+    assert normalized.provenance == ("mapper:fixture:1",)
+    assert normalized.applicability == ("python",)
+
+
 def test_knowledge_projection_idempotence_and_query_boundaries() -> None:
     projection = KnowledgeProjection("repo", "tenant", "g1")
     bounded = fact("bounded", "contract parser",)
