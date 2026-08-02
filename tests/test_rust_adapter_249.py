@@ -94,3 +94,40 @@ def test_rust_workspace_fingerprint_binds_toolchain_and_cargo_config(
     cargo_config.write_text("[build]\nrustflags=[\"-Ctarget-cpu=native\"]\n", encoding="utf-8")
     changed_config = rust_workspace_fingerprint(tmp_path)
     assert changed_config != changed_toolchain
+
+
+def test_rust_multi_crate_workspace_discovers_and_parses_each_member(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "Cargo.toml").write_text(
+        "[workspace]\nmembers=['crates/core','crates/app']\n",
+        encoding="utf-8",
+    )
+    core = tmp_path / "crates" / "core"
+    app = tmp_path / "crates" / "app"
+    for crate in (core, app):
+        (crate / "src").mkdir(parents=True)
+        (crate / "Cargo.toml").write_text(
+            f"[package]\nname='{crate.name}'\nversion='0.1.0'\n",
+            encoding="utf-8",
+        )
+    (core / "src" / "lib.rs").write_text(
+        "pub trait Render { fn render(&self); }\n"
+        "pub struct Item;\n"
+        "impl Render for Item {\n"
+        "    fn render(&self) {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    (app / "src" / "main.rs").write_text(
+        "use core::Item;\n"
+        "fn main() { let _item = Item; }\n",
+        encoding="utf-8",
+    )
+
+    manifests = [path.relative_to(tmp_path).as_posix() for path in discover_rust_projects(tmp_path)]
+    assert manifests == ["Cargo.toml", "crates/app/Cargo.toml", "crates/core/Cargo.toml"]
+    core_symbols = parse_path(core / "src" / "lib.rs", "crates/core/src/lib.rs")
+    app_symbols = parse_path(app / "src" / "main.rs", "crates/app/src/main.rs")
+    assert {symbol.name for symbol in core_symbols} >= {"Render", "Item", "render"}
+    assert {symbol.name for symbol in app_symbols} >= {"core::Item", "main"}
