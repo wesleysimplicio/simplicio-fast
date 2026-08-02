@@ -5,6 +5,8 @@
 //! exposing statistics to a caller. It intentionally has no Python runtime
 //! dependency and maps validated snapshots read-only when opened from disk.
 
+pub mod capability_ranking;
+
 use memmap2::{Mmap, MmapOptions};
 use serde::{
     de::{self, Deserializer, SeqAccess, Visitor},
