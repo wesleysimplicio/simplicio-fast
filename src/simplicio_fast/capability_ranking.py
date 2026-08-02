@@ -39,6 +39,8 @@ class CapabilityCandidate:
     policy_eligible: bool | None = None
     scope: str = "*"
     metric_class: str = "unknown"
+    freshness_seconds: int | None = None
+    health: str = "unknown"
 
     def __post_init__(self) -> None:
         if any(
@@ -83,6 +85,22 @@ class CapabilityCandidate:
             raise CapabilityRankingError("candidate_cost_invalid")
         if not isinstance(self.metric_class, str) or self.metric_class not in {"unknown", "estimated", "measured", "simulated"}:
             raise CapabilityRankingError("candidate_metric_class_invalid")
+        if (
+            self.freshness_seconds is not None
+            and (
+                isinstance(self.freshness_seconds, bool)
+                or not isinstance(self.freshness_seconds, int)
+                or self.freshness_seconds < 0
+            )
+        ):
+            raise CapabilityRankingError("candidate_freshness_invalid")
+        if not isinstance(self.health, str) or self.health not in {
+            "unknown",
+            "healthy",
+            "degraded",
+            "unhealthy",
+        }:
+            raise CapabilityRankingError("candidate_health_invalid")
 
 
 def rank_capabilities(
@@ -92,7 +110,19 @@ def rank_capabilities(
     max_results: int = 32,
     required_scope: str | None = None,
     required_trust: str | None = None,
+    max_freshness_seconds: int | None = None,
 ) -> dict[str, Any]:
+    invalid_required_trust = (
+        required_trust is not None and required_trust not in _TRUST_RANK
+    )
+    invalid_max_freshness = (
+        max_freshness_seconds is not None
+        and (
+            isinstance(max_freshness_seconds, bool)
+            or not isinstance(max_freshness_seconds, int)
+            or max_freshness_seconds < 0
+        )
+    )
     if (
         not isinstance(required, Sequence)
         or isinstance(required, (str, bytes))
@@ -106,12 +136,16 @@ def rank_capabilities(
             and (not isinstance(required_scope, str) or not required_scope.strip())
         )
         or (
-            required_trust is not None
-            and required_trust not in _TRUST_RANK
+            invalid_required_trust
         )
+        or invalid_max_freshness
     ):
         raise CapabilityRankingError(
-            "ranking_trust_invalid" if required_trust is not None else "ranking_request_invalid"
+            "ranking_trust_invalid"
+            if invalid_required_trust
+            else "ranking_freshness_invalid"
+            if invalid_max_freshness
+            else "ranking_request_invalid"
         )
     required_set = set(required)
     facts: list[dict[str, Any]] = []
@@ -127,6 +161,13 @@ def rank_capabilities(
             required_trust is None
             or _TRUST_RANK.get(candidate.trust, -1) >= _TRUST_RANK[required_trust]
         )
+        freshness_match = (
+            max_freshness_seconds is None
+            or (
+                candidate.freshness_seconds is not None
+                and candidate.freshness_seconds <= max_freshness_seconds
+            )
+        )
         policy = (
             "eligible"
             if candidate.policy_eligible is True
@@ -140,6 +181,7 @@ def rank_capabilities(
             "policy_eligibility": policy == "eligible",
             "scope": scope_match,
             "trust": trust_match,
+            "freshness": freshness_match,
         }
         eligible = all(hard_filter.values())
         score_components = {
@@ -151,6 +193,7 @@ def rank_capabilities(
             "policy": 0 if policy == "eligible" else -10000 if policy == "rejected" else -5000,
             "scope": 0 if scope_match else -10000,
             "trust": 0 if trust_match else -10000,
+            "freshness": 0 if freshness_match else -10000,
         }
         score = sum(value for value in score_components.values() if isinstance(value, int))
         if missing:
@@ -163,6 +206,12 @@ def rank_capabilities(
             reason = "scope_mismatch"
         elif not trust_match:
             reason = "trust_below_floor"
+        elif not freshness_match:
+            reason = (
+                "freshness_unknown"
+                if candidate.freshness_seconds is None
+                else "freshness_stale"
+            )
         else:
             reason = "eligible"
         facts.append({
@@ -175,6 +224,8 @@ def rank_capabilities(
             "trust": candidate.trust,
             "available": candidate.available,
             "scope": candidate.scope,
+            "health": candidate.health,
+            "freshness_seconds": candidate.freshness_seconds,
             "policy_eligibility": policy,
             "eligible": eligible,
             "hard_filter": hard_filter,
@@ -219,6 +270,7 @@ def rank_capabilities(
         "required_capabilities": sorted(required_set),
         "required_scope": required_scope,
         "required_trust": required_trust,
+        "max_freshness_seconds": max_freshness_seconds,
         "candidates": facts[:max_results],
         "pareto_frontier": frontier,
         "truncated": len(facts) > max_results,

@@ -65,6 +65,58 @@ def test_capability_ranking_applies_owner_trust_floor_as_hard_filter() -> None:
         rank_capabilities([], ("query",), required_trust="unknown")
 
 
+def test_capability_ranking_applies_owner_freshness_bound() -> None:
+    result = rank_capabilities(
+        [
+            CapabilityCandidate(
+                "fresh",
+                "worker",
+                "1",
+                ("query",),
+                policy_eligible=True,
+                freshness_seconds=10,
+                health="healthy",
+            ),
+            CapabilityCandidate(
+                "stale",
+                "worker",
+                "1",
+                ("query",),
+                policy_eligible=True,
+                freshness_seconds=90,
+                health="degraded",
+            ),
+            CapabilityCandidate(
+                "unknown",
+                "worker",
+                "1",
+                ("query",),
+                policy_eligible=True,
+            ),
+        ],
+        ("query",),
+        max_freshness_seconds=60,
+    )
+    by_handle = {item["handle"]: item for item in result["candidates"]}
+    assert by_handle["fresh"]["eligible"] is True
+    assert by_handle["fresh"]["hard_filter"]["freshness"] is True
+    assert by_handle["fresh"]["health"] == "healthy"
+    assert by_handle["stale"]["eligible"] is False
+    assert by_handle["stale"]["selection_reason"] == "freshness_stale"
+    assert by_handle["unknown"]["eligible"] is False
+    assert by_handle["unknown"]["selection_reason"] == "freshness_unknown"
+    assert result["max_freshness_seconds"] == 60
+
+
+def test_capability_ranking_rejects_invalid_freshness_contracts() -> None:
+    with pytest.raises(CapabilityRankingError, match="candidate_freshness_invalid"):
+        CapabilityCandidate("bad", "worker", "1", ("query",), freshness_seconds=-1)
+    with pytest.raises(CapabilityRankingError, match="candidate_health_invalid"):
+        CapabilityCandidate("bad", "worker", "1", ("query",), health="unknownish")
+    with pytest.raises(CapabilityRankingError, match="ranking_freshness_invalid"):
+        rank_capabilities([], ("query",), max_freshness_seconds=True)
+
+
 def test_capability_ranking_accepts_explicit_global_scope_and_rejects_bad_inputs() -> None:
     global_candidate = CapabilityCandidate(
         "global", "tool", "1", ("query",), policy_eligible=True, scope="*"
