@@ -110,6 +110,18 @@ def test_operations_projection_receipt_and_scope_contracts_fail_closed() -> None
         OperationsProjection("", "g1")
 
 
+def test_operations_projection_rejects_untyped_ingest_filters_and_lease_limits() -> None:
+    projection = OperationsProjection("repo", "g1")
+    with pytest.raises(OperationsProjectionError, match="receipt_type_invalid"):
+        projection.ingest([object()])
+    with pytest.raises(OperationsProjectionError, match="query_filter_invalid"):
+        projection.query(status=1)
+    with pytest.raises(OperationsProjectionError, match="lease_query_invalid"):
+        projection.query_leases(0, max_results=True)
+    with pytest.raises(OperationsProjectionError, match="lease_query_invalid"):
+        projection.query_leases(0, max_results=1.5)
+
+
 def test_operations_projection_causal_and_lease_boundaries() -> None:
     projection = OperationsProjection("repo", "g1")
     projection.ingest([
