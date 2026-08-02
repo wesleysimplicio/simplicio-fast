@@ -31,3 +31,52 @@ def test_universal_context_budget_and_scope_fail_closed() -> None:
     assert result["truncation_reasons"] == ["item_budget"]
     with pytest.raises(UniversalContextError, match="context_budget_invalid"):
         compile_context([], max_tokens=0)
+
+
+def test_universal_context_exposes_boundaries_and_wrapper_accounting() -> None:
+    untrusted = ProjectionEnvelope.create(
+        "knowledge",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g2",
+        stable_handle="k",
+        domain_scope="knowledge",
+        payload={
+            "repository": "repo",
+            "value": "retrieved text",
+            "trust": "untrusted",
+            "content_class": "untrusted_text",
+            "freshness": "stale",
+        },
+    )
+    result = compile_context(
+        [untrusted, projection("operations", "o")],
+        repository_scope="repo",
+        domain_caps={"knowledge": 1},
+        wrapper_bytes=7,
+        wrapper_tokens=3,
+    )
+    item = next(item for item in result["projections"] if item["projection_type"] == "knowledge")
+    assert item["digest"].startswith("sha256:")
+    assert item["trust"] == "untrusted"
+    assert item["freshness"] == "stale"
+    assert item["trusted_for_instruction"] is False
+    assert result["wrapper_bytes"] == 7
+    assert result["wrapper_tokens"] == 3
+    assert result["source_generations"] == ["g1", "g2"]
+
+
+def test_universal_context_rejects_conflicting_duplicate_and_impossible_wrapper() -> None:
+    first = projection("knowledge", "same")
+    second = ProjectionEnvelope.create(
+        "knowledge",
+        producer="producer",
+        producer_schema="producer/v1",
+        generation="g1",
+        stable_handle="same",
+        payload={"repository": "repo", "value": "different"},
+    )
+    with pytest.raises(UniversalContextError, match="context_conflict"):
+        compile_context([first, second])
+    with pytest.raises(UniversalContextError, match="context_budget_invalid"):
+        compile_context([], max_bytes=3, wrapper_bytes=4)
