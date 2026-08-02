@@ -201,7 +201,7 @@ class OperationsProjection:
                     continue
                 lease = lease if isinstance(lease, dict) else receipt.payload
                 expires_at = lease.get("expires_at")
-                if isinstance(expires_at, bool) or not isinstance(expires_at, int):
+                if isinstance(expires_at, bool) or not isinstance(expires_at, int) or expires_at < 0:
                     raise OperationsProjectionError("lease_expiry_invalid")
                 item = self._item(receipt)
                 item["lease"] = {
