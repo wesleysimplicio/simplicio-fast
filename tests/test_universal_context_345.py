@@ -103,3 +103,23 @@ def test_universal_context_rejects_boolean_budget_values() -> None:
         compile_context([], max_tokens=True)
     with pytest.raises(UniversalContextError, match="context_budget_invalid"):
         compile_context([], wrapper_bytes=False)
+
+
+def test_universal_context_rejects_invalid_domain_caps_and_records_duplicate() -> None:
+    for caps in ({"": 1}, {"knowledge": True}, {"knowledge": -1}, {1: 1}):
+        with pytest.raises(UniversalContextError, match="context_domain_budget_invalid"):
+            compile_context([], domain_caps=caps)
+    duplicate = projection("knowledge", "same")
+    result = compile_context([duplicate, duplicate])
+    assert result["selection"]["rejected"] == [{"stable_handle": "same", "reason": "duplicate"}]
+    assert result["truncated"] is False
+
+
+def test_universal_context_reports_domain_byte_and_token_truncation() -> None:
+    item = projection("knowledge", "bounded")
+    domain_limited = compile_context([item], domain_caps={"knowledge": 0})
+    assert domain_limited["truncation_reasons"] == ["domain_budget"]
+    byte_limited = compile_context([item], max_bytes=1)
+    assert byte_limited["truncation_reasons"] == ["byte_budget"]
+    token_limited = compile_context([item], max_tokens=1)
+    assert token_limited["truncation_reasons"] == ["token_budget"]
