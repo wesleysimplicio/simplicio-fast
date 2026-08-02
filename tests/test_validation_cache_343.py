@@ -1,5 +1,6 @@
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 import json
+import multiprocessing
 
 import pytest
 
@@ -8,6 +9,24 @@ from simplicio_fast.validation_cache import ValidationCache, ValidationCacheErro
 
 def key() -> ValidationKey:
     return ValidationKey("sha256:source", "sha256:lock", "python-3.14", ("pytest", "tests/a.py"), (("CI", "1"),), generation="g1")
+
+
+def _save_cache_from_process(arguments: tuple[str, int]) -> bool:
+    path, index = arguments
+    cache = ValidationCache()
+    cache.put(
+        ValidationKey(
+            f"sha256:source-{index}",
+            "sha256:lock",
+            "python-3.14",
+            ("pytest",),
+            generation=f"g{index}",
+        ),
+        status="pass",
+        result={"index": index},
+    )
+    cache.save(path)
+    return True
 
 
 def test_validation_key_is_content_addressed_and_cache_respects_freshness() -> None:
@@ -118,6 +137,18 @@ def test_validation_cache_serializes_concurrent_publication_and_save(tmp_path) -
     receipt = cache.save(tmp_path / "concurrent-cache.json")
     assert receipt["entries"] == len(keys)
     assert len(ValidationCache.load(tmp_path / "concurrent-cache.json")._entries) == len(keys)
+
+
+def test_validation_cache_save_is_cross_process_atomic(tmp_path) -> None:
+    path = tmp_path / "cross-process-cache.json"
+    context = multiprocessing.get_context("spawn")
+    arguments = [(str(path), index) for index in range(4)]
+    with ProcessPoolExecutor(max_workers=4, mp_context=context) as pool:
+        assert list(pool.map(_save_cache_from_process, arguments)) == [True] * 4
+
+    restored = ValidationCache.load(path)
+    assert len(restored._entries) == 1
+    assert not list(tmp_path.glob(f".{path.name}.*.tmp"))
 
 
 def test_validation_cache_contract_boundaries_and_lease_lifecycle(tmp_path) -> None:

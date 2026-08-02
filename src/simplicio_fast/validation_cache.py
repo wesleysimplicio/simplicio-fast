@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
+import tempfile
 from threading import RLock
 from typing import Any, Mapping, Sequence
 
@@ -125,9 +127,24 @@ class ValidationCache:
             document = {"body": body, "cache_sha256": _digest(body)}
             path = Path(path)
             path.parent.mkdir(parents=True, exist_ok=True)
-            temporary = path.with_name(f".{path.name}.tmp")
-            temporary.write_bytes(_canonical(document) + b"\n")
-            temporary.replace(path)
+            temporary_name: str | None = None
+            try:
+                with tempfile.NamedTemporaryFile(
+                    mode="wb",
+                    dir=path.parent,
+                    prefix=f".{path.name}.",
+                    suffix=".tmp",
+                    delete=False,
+                ) as temporary:
+                    temporary_name = temporary.name
+                    temporary.write(_canonical(document) + b"\n")
+                    temporary.flush()
+                    os.fsync(temporary.fileno())
+                os.replace(temporary_name, path)
+                temporary_name = None
+            finally:
+                if temporary_name is not None:
+                    Path(temporary_name).unlink(missing_ok=True)
             return {"schema": "simplicio.fast.validation-cache-receipt/v1", "status": "saved", "entries": len(body["entries"]), "cache_sha256": document["cache_sha256"]}
 
     @classmethod
