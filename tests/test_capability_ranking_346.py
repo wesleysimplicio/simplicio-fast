@@ -75,6 +75,18 @@ def test_capability_ranking_rejects_coercible_invalid_types() -> None:
         rank_capabilities([], ("query",), required_scope=True)
 
 
+def test_capability_candidate_normalizes_mutable_sequences() -> None:
+    candidate = CapabilityCandidate(
+        "worker:normalized",
+        "worker",
+        "1",
+        ["query"],
+        provenance=["manifest:1"],
+    )
+    assert candidate.capabilities == ("query",)
+    assert candidate.provenance == ("manifest:1",)
+
+
 def test_capability_ranking_rejects_invalid_candidate_contract_edges() -> None:
     with pytest.raises(CapabilityRankingError, match="candidate_identity_invalid"):
         CapabilityCandidate("", "tool", "1", ("query",))
