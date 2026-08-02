@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+
 import pytest
 
 from simplicio_fast.validation_cache import ValidationCache, ValidationCacheError, ValidationKey
@@ -90,3 +92,28 @@ def test_validation_cache_gc_is_bounded_and_respects_leases() -> None:
         cache.acquire_lease(retained, "bad/lease")
     with pytest.raises(ValidationCacheError, match="gc_budget_invalid"):
         cache.gc(max_entries=0)
+
+
+def test_validation_cache_serializes_concurrent_publication_and_save(tmp_path) -> None:
+    cache = ValidationCache()
+    keys = [
+        ValidationKey(
+            f"sha256:source-{index}", "sha256:lock", "python-3.14", ("pytest",),
+            generation=f"g{index}",
+        )
+        for index in range(24)
+    ]
+
+    def publish(item: tuple[int, ValidationKey]) -> None:
+        index, item_key = item
+        cache.put(item_key, status="pass", result={"index": index})
+        cache.acquire_lease(item_key, f"lease-{index}")
+        cache.gc(max_entries=1, dry_run=True)
+        cache.release_lease(item_key, f"lease-{index}")
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(publish, enumerate(keys)))
+
+    receipt = cache.save(tmp_path / "concurrent-cache.json")
+    assert receipt["entries"] == len(keys)
+    assert len(ValidationCache.load(tmp_path / "concurrent-cache.json")._entries) == len(keys)

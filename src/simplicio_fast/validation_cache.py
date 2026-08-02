@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 from pathlib import Path
+from threading import RLock
 from typing import Any, Mapping, Sequence
 
 
@@ -112,20 +113,22 @@ class ValidationCache:
     def __init__(self) -> None:
         self._entries: dict[str, ValidationResult] = {}
         self._leases: dict[str, set[str]] = {}
+        self._lock = RLock()
 
     def save(self, path: Path) -> dict[str, Any]:
         """Persist derived results atomically; execution authority stays external."""
-        body = {
-            "schema": "simplicio.fast.validation-cache/v1",
-            "entries": [self._entries[key].to_dict() for key in sorted(self._entries)],
-        }
-        document = {"body": body, "cache_sha256": _digest(body)}
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(f".{path.name}.tmp")
-        temporary.write_bytes(_canonical(document) + b"\n")
-        temporary.replace(path)
-        return {"schema": "simplicio.fast.validation-cache-receipt/v1", "status": "saved", "entries": len(self._entries), "cache_sha256": document["cache_sha256"]}
+        with self._lock:
+            body = {
+                "schema": "simplicio.fast.validation-cache/v1",
+                "entries": [self._entries[key].to_dict() for key in sorted(self._entries)],
+            }
+            document = {"body": body, "cache_sha256": _digest(body)}
+            path = Path(path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_name(f".{path.name}.tmp")
+            temporary.write_bytes(_canonical(document) + b"\n")
+            temporary.replace(path)
+            return {"schema": "simplicio.fast.validation-cache-receipt/v1", "status": "saved", "entries": len(body["entries"]), "cache_sha256": document["cache_sha256"]}
 
     @classmethod
     def load(cls, path: Path) -> "ValidationCache":
@@ -172,55 +175,61 @@ class ValidationCache:
         provenance: Sequence[str] = (),
     ) -> ValidationResult:
         result_digest = _digest(result)
-        previous = self._entries.get(key.digest)
-        if previous is not None and previous.result_digest != result_digest:
-            evidence = tuple(sorted(set(evidence).union(previous.evidence, {"nondeterministic"})))
-            verified = False
-            provenance = ()
+        key_digest = key.digest
+        with self._lock:
+            previous = self._entries.get(key_digest)
+            if previous is not None and previous.result_digest != result_digest:
+                evidence = tuple(sorted(set(evidence).union(previous.evidence, {"nondeterministic"})))
+                verified = False
+                provenance = ()
+                entry = ValidationResult(
+                    key_digest, "partial", result_digest, tuple(command or key.command), False,
+                    tuple(evidence), False, (), True, key.generation,
+                )
+                self._entries[key_digest] = entry
+                return entry
+            if verified and not provenance:
+                raise ValidationCacheError("result_provenance_required")
             entry = ValidationResult(
-                key.digest, "partial", result_digest, tuple(command or key.command), False,
-                tuple(evidence), False, (), True, key.generation,
+                key_digest, status, result_digest, tuple(command or key.command), fresh,
+                tuple(evidence), verified, tuple(provenance), False, key.generation,
             )
-            self._entries[key.digest] = entry
+            self._entries[key_digest] = entry
             return entry
-        if verified and not provenance:
-            raise ValidationCacheError("result_provenance_required")
-        entry = ValidationResult(
-            key.digest, status, result_digest, tuple(command or key.command), fresh,
-            tuple(evidence), verified, tuple(provenance), False, key.generation,
-        )
-        self._entries[key.digest] = entry
-        return entry
 
     def acquire_lease(self, key: ValidationKey, lease_id: str) -> dict[str, Any]:
         """Pin one cached result so a GC pass cannot remove it."""
         if not lease_id or any(character in lease_id for character in "\\/\0"):
             raise ValidationCacheError("lease_id_invalid")
-        if key.digest not in self._entries:
-            raise ValidationCacheError("cache_entry_missing")
-        self._leases.setdefault(key.digest, set()).add(lease_id)
-        return {
-            "schema": "simplicio.fast.validation-cache-lease/v1",
-            "status": "leased",
-            "key_digest": key.digest,
-            "lease_id": lease_id,
-        }
+        key_digest = key.digest
+        with self._lock:
+            if key_digest not in self._entries:
+                raise ValidationCacheError("cache_entry_missing")
+            self._leases.setdefault(key_digest, set()).add(lease_id)
+            return {
+                "schema": "simplicio.fast.validation-cache-lease/v1",
+                "status": "leased",
+                "key_digest": key_digest,
+                "lease_id": lease_id,
+            }
 
     def release_lease(self, key: ValidationKey, lease_id: str) -> dict[str, Any]:
         if not lease_id:
             raise ValidationCacheError("lease_id_invalid")
-        leases = self._leases.get(key.digest, set())
-        leases.discard(lease_id)
-        if leases:
-            self._leases[key.digest] = leases
-        else:
-            self._leases.pop(key.digest, None)
-        return {
-            "schema": "simplicio.fast.validation-cache-lease/v1",
-            "status": "released",
-            "key_digest": key.digest,
-            "lease_id": lease_id,
-        }
+        key_digest = key.digest
+        with self._lock:
+            leases = self._leases.get(key_digest, set())
+            leases.discard(lease_id)
+            if leases:
+                self._leases[key_digest] = leases
+            else:
+                self._leases.pop(key_digest, None)
+            return {
+                "schema": "simplicio.fast.validation-cache-lease/v1",
+                "status": "released",
+                "key_digest": key_digest,
+                "lease_id": lease_id,
+            }
 
     def gc(
         self,
@@ -233,26 +242,27 @@ class ValidationCache:
         if max_entries < 1:
             raise ValidationCacheError("gc_budget_invalid")
         keep = {str(generation) for generation in keep_generations if str(generation)}
-        candidates = sorted(
-            key_digest
-            for key_digest, entry in self._entries.items()
-            if entry.generation not in keep and not self._leases.get(key_digest)
-        )[:max_entries]
-        if not dry_run:
-            for key_digest in candidates:
-                self._entries.pop(key_digest, None)
-        return {
-            "schema": "simplicio.fast.validation-cache-gc/v1",
-            "status": "planned" if dry_run else "applied",
-            "dry_run": dry_run,
-            "removed": [] if dry_run else candidates,
-            "candidates": candidates,
-            "retained_generations": sorted(keep),
-            "leased_entries": sorted(
-                key_digest for key_digest, leases in self._leases.items() if leases
-            ),
-            "truncated": len(candidates) == max_entries,
-        }
+        with self._lock:
+            candidates = sorted(
+                key_digest
+                for key_digest, entry in self._entries.items()
+                if entry.generation not in keep and not self._leases.get(key_digest)
+            )[:max_entries]
+            if not dry_run:
+                for key_digest in candidates:
+                    self._entries.pop(key_digest, None)
+            return {
+                "schema": "simplicio.fast.validation-cache-gc/v1",
+                "status": "planned" if dry_run else "applied",
+                "dry_run": dry_run,
+                "removed": [] if dry_run else candidates,
+                "candidates": candidates,
+                "retained_generations": sorted(keep),
+                "leased_entries": sorted(
+                    key_digest for key_digest, leases in self._leases.items() if leases
+                ),
+                "truncated": len(candidates) == max_entries,
+            }
 
     def get(
         self,
@@ -262,15 +272,17 @@ class ValidationCache:
         require_verified: bool = False,
         reusable: bool = False,
     ) -> ValidationResult | None:
-        entry = self._entries.get(key.digest)
-        if (
-            entry is None
-            or (require_fresh and not entry.fresh)
-            or (require_verified and not entry.verified)
-            or (reusable and (not entry.verified or not entry.fresh or entry.nondeterministic))
-        ):
-            return None
-        return entry
+        key_digest = key.digest
+        with self._lock:
+            entry = self._entries.get(key_digest)
+            if (
+                entry is None
+                or (require_fresh and not entry.fresh)
+                or (require_verified and not entry.verified)
+                or (reusable and (not entry.verified or not entry.fresh or entry.nondeterministic))
+            ):
+                return None
+            return entry
 
     def affected(self, changed_handles: Sequence[str], tests: Mapping[str, Sequence[str]], *, max_tests: int = 1000) -> dict[str, Any]:
         if max_tests <= 0:
