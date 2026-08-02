@@ -14,3 +14,8 @@ remain open gates for #348.
 `query_async()` and `context_async()` run the same bounded local operations in
 a worker thread and return deterministic results matching the synchronous API,
 without shared mutable async state or a daemon requirement.
+
+`ProjectionSDK.capabilities()` exposes a machine-readable `support_matrix`.
+The Python surface is currently `supported`; Rust, resident session and CLI
+surfaces are explicitly `partial` until their conformance, installed-artifact
+and cross-platform receipts are available. A partial row is not a parity claim.

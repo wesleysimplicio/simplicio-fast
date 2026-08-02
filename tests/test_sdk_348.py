@@ -18,6 +18,14 @@ def test_sdk_exposes_scoped_in_process_operations_and_context(tmp_path) -> None:
     sdk.save(path)
     reopened = ProjectionSDK.open(path, "repo")
     assert reopened.snapshot() == sdk.snapshot()
+    matrix = sdk.capabilities()["support_matrix"]
+    assert {item["surface"]: item["status"] for item in matrix} == {
+        "python": "supported",
+        "rust": "partial",
+        "session": "partial",
+        "cli": "partial",
+    }
+    assert matrix[0]["reason"] is None
 
 
 def test_sdk_async_surface_is_read_only_and_matches_sync() -> None:

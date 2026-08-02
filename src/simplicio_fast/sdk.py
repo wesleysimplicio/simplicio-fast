@@ -12,6 +12,35 @@ from .universal_context import compile_context
 
 
 SDK_SCHEMA = "simplicio.fast.sdk/v1"
+SDK_SUPPORT_MATRIX = (
+    {
+        "surface": "python",
+        "status": "supported",
+        "operations": (
+            "publish", "compile_delta", "query", "query_async", "snapshot",
+            "save", "open", "context", "context_async",
+        ),
+        "reason": None,
+    },
+    {
+        "surface": "rust",
+        "status": "partial",
+        "operations": ("read", "query", "context"),
+        "reason": "crate_conformance_and_installed_matrix_pending",
+    },
+    {
+        "surface": "session",
+        "status": "partial",
+        "operations": ("stats", "query", "context"),
+        "reason": "resident_transport_and_cross_platform_receipts_pending",
+    },
+    {
+        "surface": "cli",
+        "status": "partial",
+        "operations": ("diagnose", "json_receipts"),
+        "reason": "equivalent_sdk_surface_and_installed_receipts_pending",
+    },
+)
 
 
 class SDKError(ValueError):
@@ -69,7 +98,19 @@ class ProjectionSDK:
         return await asyncio.to_thread(self.query, handle)
 
     def capabilities(self) -> dict[str, Any]:
-        return {"schema": "simplicio.fast.sdk-capabilities/v1", "sdk": SDK_SCHEMA, "operations": ["publish", "compile_delta", "query", "query_async", "snapshot", "save", "open", "context", "context_async"], "authority": "derived_read_only"}
+        return {
+            "schema": "simplicio.fast.sdk-capabilities/v1",
+            "sdk": SDK_SCHEMA,
+            "operations": [
+                "publish", "compile_delta", "query", "query_async", "snapshot",
+                "save", "open", "context", "context_async",
+            ],
+            "support_matrix": [
+                {**item, "operations": list(item["operations"])}
+                for item in SDK_SUPPORT_MATRIX
+            ],
+            "authority": "derived_read_only",
+        }
 
 
-__all__ = ["ProjectionSDK", "SDKError", "SDK_SCHEMA"]
+__all__ = ["ProjectionSDK", "SDKError", "SDK_SCHEMA", "SDK_SUPPORT_MATRIX"]
