@@ -45,3 +45,43 @@ def test_typescript_workspace_fingerprint_changes_with_config(tmp_path: Path) ->
     config.write_text('{"compilerOptions":{"strict":true}}', encoding="utf-8")
     second = typescript_workspace_fingerprint(tmp_path)
     assert first != second
+
+
+def test_typescript_monorepo_discovers_project_configs_and_tsx_symbols(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "tsconfig.json").write_text(
+        '{"references":[{"path":"packages/ui"},{"path":"packages/app"}]}',
+        encoding="utf-8",
+    )
+    (tmp_path / "package.json").write_text('{"private":true}', encoding="utf-8")
+    for package in ("ui", "app"):
+        package_root = tmp_path / "packages" / package
+        package_root.mkdir(parents=True)
+        (package_root / "tsconfig.json").write_text(
+            '{"compilerOptions":{"baseUrl":".","paths":{"@/*":["src/*"]}}}',
+            encoding="utf-8",
+        )
+        (package_root / "package.json").write_text(
+            f'{{"name":"@demo/{package}"}}', encoding="utf-8"
+        )
+    source = tmp_path / "packages" / "ui" / "src" / "Button.tsx"
+    source.parent.mkdir()
+    source.write_text(
+        "import { User } from '@/model';\n"
+        "export interface ButtonProps { label: string; }\n"
+        "export function Button(props: ButtonProps) { return <button>{props.label}</button>; }\n",
+        encoding="utf-8",
+    )
+
+    discovered = [path.relative_to(tmp_path).as_posix() for path in discover_typescript_projects(tmp_path)]
+    assert discovered == [
+        "package.json",
+        "packages/app/package.json",
+        "packages/app/tsconfig.json",
+        "packages/ui/package.json",
+        "packages/ui/tsconfig.json",
+        "tsconfig.json",
+    ]
+    symbols = parse_path(source, "packages/ui/src/Button.tsx")
+    assert {symbol.name for symbol in symbols} >= {"@/model", "ButtonProps", "Button"}
