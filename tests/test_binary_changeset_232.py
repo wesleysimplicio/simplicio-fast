@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -145,15 +146,19 @@ class BinaryChangeSet232Test(unittest.TestCase):
                 lease_id="lease-232",
                 fencing_token="fence-1",
             )
+            refresh_calls = []
             self.assertEqual(
                 "applied",
                 materialize(
                     set_for_rename,
                     root,
                     journal,
-                    refresh=lambda *_: {"status": "refreshed"},
+                    refresh=lambda _root, paths: (
+                        refresh_calls.append(tuple(paths)) or {"status": "refreshed"}
+                    ),
                 )["status"],
             )
+            self.assertEqual([("old.py", "renamed.py")], refresh_calls)
             self.assertFalse(old.exists())
             self.assertTrue((root / "renamed.py").exists())
             deleted = ChangeOperation.from_dict(
@@ -180,6 +185,35 @@ class BinaryChangeSet232Test(unittest.TestCase):
                 )["status"],
             )
             self.assertFalse((root / "renamed.py").exists())
+
+    def test_path_alias_and_symlink_escape_fail_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with self.assertRaisesRegex(BinaryChangeSetError, "path_outside_repository"):
+                ChangeOperation.from_dict(
+                    {
+                        "op": "delete",
+                        "path": r"nested\..\outside.py",
+                        "before_sha256": "a" * 64,
+                    }
+                )
+            target = root.parent / f"{root.name}-outside.txt"
+            target.write_bytes(b"outside")
+            link = root / "linked.txt"
+            try:
+                os.symlink(target, link)
+            except (OSError, NotImplementedError):
+                self.skipTest("symlink creation is unavailable")
+            operation = ChangeOperation.from_dict(
+                {
+                    "op": "delete",
+                    "path": "linked.txt",
+                    "before_sha256": sha256(b"outside"),
+                }
+            )
+            changeset = self._change_set(root, [operation])
+            with self.assertRaisesRegex(BinaryChangeSetError, "path_symlink"):
+                changeset.validate(root)
 
     def test_stale_cross_worktree_and_ambiguous_offsets_fail_closed(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -14,7 +14,7 @@ import shutil
 import struct
 import subprocess
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable, Mapping
 
 
@@ -61,15 +61,39 @@ def _sha(value: str | None, *, required: bool = False) -> str | None:
 
 
 def _path(value: str) -> str:
-    if not isinstance(value, str) or not value:
+    if not isinstance(value, str) or not value or "\0" in value or ":" in value:
         raise BinaryChangeSetError("path_invalid")
-    candidate = Path(value)
-    if candidate.is_absolute() or ".." in candidate.parts or value in {".", ".."}:
-        raise BinaryChangeSetError("path_outside_repository", value)
     normalized = value.replace("\\", "/")
-    if normalized.startswith("/") or normalized.endswith("/"):
+    candidate = PurePosixPath(normalized)
+    if (
+        candidate.is_absolute()
+        or ".." in candidate.parts
+        or any(part in {"", "."} for part in candidate.parts)
+        or value in {".", ".."}
+    ):
+        raise BinaryChangeSetError("path_outside_repository", value)
+    if normalized.startswith("/") or normalized.endswith("/") or "//" in normalized:
         raise BinaryChangeSetError("path_invalid", value)
     return normalized
+
+
+def _safe_path(root: Path, relative: str) -> Path:
+    """Resolve a changeset path without following a repository symlink."""
+    root = root.resolve()
+    candidate = root / relative
+    current = root
+    try:
+        for part in PurePosixPath(relative).parts:
+            current /= part
+            if current.is_symlink():
+                raise BinaryChangeSetError("path_symlink", relative)
+        resolved = candidate.resolve(strict=False)
+        resolved.relative_to(root)
+    except BinaryChangeSetError:
+        raise
+    except (OSError, ValueError) as error:
+        raise BinaryChangeSetError("path_outside_repository", relative) from error
+    return candidate
 
 
 def _worktree(value: str) -> str:
@@ -346,10 +370,16 @@ class BinaryChangeSet:
             raise BinaryChangeSetError("lease_mismatch")
         if fencing_token is not None and self.fencing_token != fencing_token:
             raise BinaryChangeSetError("fence_mismatch")
+        safe_paths = {
+            path: _safe_path(root, path)
+            for operation in self.operations
+            for path in (operation.path, operation.dest)
+            if path is not None
+        }
         state: dict[str, bytes | None] = {}
         statuses: list[dict[str, Any]] = []
         for operation in self.operations:
-            current = state.get(operation.path, _read(root / operation.path))
+            current = state.get(operation.path, _read(safe_paths[operation.path]))
             if operation.op == "create":
                 expected = operation.after_sha256
                 if current is None:
@@ -375,7 +405,7 @@ class BinaryChangeSet:
             elif operation.op == "rename":
                 if current is None:
                     destination = state.get(
-                        operation.dest or "", _read(root / str(operation.dest))
+                        operation.dest or "", _read(safe_paths[str(operation.dest)])
                     )
                     if destination is not None and _matches_hash(
                         destination, operation.after_sha256
@@ -388,7 +418,7 @@ class BinaryChangeSet:
                 if not _matches_hash(current, operation.before_sha256):
                     raise BinaryChangeSetError("stale_source", operation.path)
                 destination = state.get(
-                    operation.dest or "", _read(root / str(operation.dest))
+                    operation.dest or "", _read(safe_paths[str(operation.dest)])
                 )
                 if destination is not None:
                     raise BinaryChangeSetError(
@@ -713,6 +743,12 @@ class DevCliAdapter:
 
     def materialize(self, changeset: BinaryChangeSet, root: Path) -> dict[str, Any]:
         root = root.resolve()
+        safe_paths = {
+            path: _safe_path(root, path)
+            for operation in changeset.operations
+            for path in (operation.path, operation.dest)
+            if path is not None
+        }
         operations: list[dict[str, Any]] = []
         for operation in changeset.operations:
             if operation.op == "create":
@@ -726,7 +762,7 @@ class DevCliAdapter:
                     }
                 )
             elif operation.op == "replace-range":
-                raw = (root / operation.path).read_bytes()
+                raw = safe_paths[operation.path].read_bytes()
                 selected = _selected_range(raw, operation)
                 operations.append(
                     {
@@ -746,7 +782,7 @@ class DevCliAdapter:
                         "path": operation.path,
                         "dest": operation.dest,
                         "file_sha256": _normalized_sha(
-                            (root / operation.path).read_bytes()
+                            safe_paths[operation.path].read_bytes()
                         ),
                     }
                 )
@@ -756,7 +792,7 @@ class DevCliAdapter:
                         "op": "delete_file",
                         "path": operation.path,
                         "file_sha256": _normalized_sha(
-                            (root / operation.path).read_bytes()
+                            safe_paths[operation.path].read_bytes()
                         ),
                     }
                 )
@@ -840,7 +876,12 @@ def refresh_semantic_inputs(root: Path, paths: Iterable[str]) -> dict[str, Any]:
     ]
     try:
         completed = subprocess.run(
-            command, capture_output=True, text=True, check=False, timeout=120
+            command,
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=120,
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         return {
@@ -907,7 +948,14 @@ def materialize(
             }
         applied = (adapter or DevCliAdapter()).materialize(changeset, root)
         after = changeset.validate(root)
-        changed_paths = sorted({operation.path for operation in changeset.operations})
+        changed_paths = sorted(
+            {
+                path
+                for operation in changeset.operations
+                for path in (operation.path, operation.dest)
+                if path is not None
+            }
+        )
         refresh_receipt = refresh(root, changed_paths)
         event = journal.append(
             changeset,
