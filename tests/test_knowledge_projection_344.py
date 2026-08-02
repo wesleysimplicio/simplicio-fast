@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 
 import pytest
@@ -127,3 +128,28 @@ def test_knowledge_projection_idempotence_and_query_boundaries() -> None:
     assert "temporal" not in projection.query("contract", as_of=5)["handles"]
     assert "temporal" not in projection.query("contract", as_of=25)["handles"]
     assert projection.query("contract", max_tokens=1)["truncation_reasons"] == ["token_budget"]
+
+
+def test_knowledge_projection_rejects_boolean_budgets_and_enforces_fact_cap(monkeypatch: pytest.MonkeyPatch) -> None:
+    projection = KnowledgeProjection("repo", "tenant", "g1")
+    monkeypatch.setattr("simplicio_fast.knowledge_projection.MAX_FACTS", 1)
+    projection.apply_delta([fact("one", "contract")])
+    with pytest.raises(KnowledgeProjectionError, match="fact_count_limit"):
+        projection.apply_delta([fact("two", "contract")])
+    for kwargs in ({"max_results": True}, {"max_bytes": True}, {"max_tokens": True}, {"as_of": True}):
+        with pytest.raises(KnowledgeProjectionError, match="query_budget_invalid"):
+            projection.query("contract", **kwargs)
+
+
+def test_knowledge_projection_serializes_twenty_readers() -> None:
+    projection = KnowledgeProjection("repo", "tenant", "g1")
+    projection.apply_delta([fact("shared", "parser contract")])
+
+    def read(_: int) -> tuple[list[str], list[str], str]:
+        result = projection.query("parser contract")
+        snapshot = projection.snapshot()
+        return result["handles"], snapshot["handles"], snapshot["schema"]
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        results = list(pool.map(read, range(20)))
+    assert results == [(["shared"], ["shared"], "simplicio.fast.knowledge-projection/v1")] * 20

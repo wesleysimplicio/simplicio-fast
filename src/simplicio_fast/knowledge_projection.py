@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import re
+from threading import RLock
 from typing import Any, Iterable, Sequence
 
 
@@ -16,6 +17,10 @@ RESULT_SCHEMA = "simplicio.fast.precedent-result/v1"
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _ACTIVE = "active"
 _INACTIVE = frozenset({"revoked", "expired", "conflicted", "tombstoned"})
+MAX_FACTS = 100_000
+MAX_QUERY_RESULTS = 10_000
+MAX_QUERY_BYTES = 8 * 1024 * 1024
+MAX_QUERY_TOKENS = 1_000_000
 
 
 class KnowledgeProjectionError(ValueError):
@@ -95,90 +100,116 @@ class KnowledgeProjection:
         self._facts: dict[str, KnowledgeFact] = {}
         self._conflicts: set[str] = set()
         self._tombstones: set[str] = set()
+        self._lock = RLock()
 
     def apply_delta(self, facts: Iterable[KnowledgeFact] = (), tombstones: Iterable[str] = ()) -> dict[str, Any]:
-        changed: list[str] = []
-        for fact in facts:
-            if fact.repository != self.repository or fact.scope != self.scope:
-                raise KnowledgeProjectionError("fact_scope_mismatch")
-            previous = self._facts.get(fact.stable_handle)
-            if previous is not None:
-                if previous.digest == fact.digest and previous.version == fact.version:
-                    if previous.state != fact.state:
-                        self._facts[fact.stable_handle] = fact
-                        self._conflicts.discard(fact.stable_handle)
-                        changed.append(fact.stable_handle)
-                        continue
-                    self._tombstones.discard(fact.stable_handle)
-                    continue
-                self._conflicts.add(fact.stable_handle)
-                changed.append(fact.stable_handle)
-                continue
-            self._facts[fact.stable_handle] = fact
-            self._tombstones.discard(fact.stable_handle)
-            changed.append(fact.stable_handle)
+        incoming = tuple(facts)
         deleted = sorted(set(tombstones))
-        for handle in deleted:
-            self._facts.pop(handle, None)
-            self._conflicts.discard(handle)
-            self._tombstones.add(handle)
-        return {"schema": "simplicio.fast.knowledge-delta/v1", "generation": self.generation, "changed_handles": sorted(set(changed)), "tombstones": deleted, "conflicts": sorted(self._conflicts)}
+        with self._lock:
+            if any(fact.repository != self.repository or fact.scope != self.scope for fact in incoming):
+                raise KnowledgeProjectionError("fact_scope_mismatch")
+            prospective = set(self._facts)
+            prospective.update(fact.stable_handle for fact in incoming)
+            prospective.difference_update(deleted)
+            if len(prospective) > MAX_FACTS:
+                raise KnowledgeProjectionError("fact_count_limit")
+            changed: list[str] = []
+            for fact in incoming:
+                previous = self._facts.get(fact.stable_handle)
+                if previous is not None:
+                    if previous.digest == fact.digest and previous.version == fact.version:
+                        if previous.state != fact.state:
+                            self._facts[fact.stable_handle] = fact
+                            self._conflicts.discard(fact.stable_handle)
+                            changed.append(fact.stable_handle)
+                            continue
+                        self._tombstones.discard(fact.stable_handle)
+                        continue
+                    self._conflicts.add(fact.stable_handle)
+                    changed.append(fact.stable_handle)
+                    continue
+                self._facts[fact.stable_handle] = fact
+                self._tombstones.discard(fact.stable_handle)
+                changed.append(fact.stable_handle)
+            for handle in deleted:
+                self._facts.pop(handle, None)
+                self._conflicts.discard(handle)
+                self._tombstones.add(handle)
+            return {"schema": "simplicio.fast.knowledge-delta/v1", "generation": self.generation, "changed_handles": sorted(set(changed)), "tombstones": deleted, "conflicts": sorted(self._conflicts)}
 
     def query(self, task: str, *, max_results: int = 32, max_bytes: int = 256 * 1024, max_tokens: int = 4096, source_types: Sequence[str] = (), as_of: int | None = None) -> dict[str, Any]:
-        if not task or max_results <= 0 or max_bytes <= 0 or max_tokens <= 0:
+        if (
+            not task
+            or isinstance(max_results, bool)
+            or not isinstance(max_results, int)
+            or not 0 < max_results <= MAX_QUERY_RESULTS
+            or isinstance(max_bytes, bool)
+            or not isinstance(max_bytes, int)
+            or not 0 < max_bytes <= MAX_QUERY_BYTES
+            or isinstance(max_tokens, bool)
+            or not isinstance(max_tokens, int)
+            or not 0 < max_tokens <= MAX_QUERY_TOKENS
+            or (as_of is not None and (isinstance(as_of, bool) or not isinstance(as_of, int) or as_of < 0))
+        ):
             raise KnowledgeProjectionError("query_budget_invalid")
-        task_terms = _tokens(task)
-        candidates: list[dict[str, Any]] = []
-        for fact in self._facts.values():
-            if fact.stable_handle in self._conflicts or fact.stable_handle in self._tombstones or fact.state in _INACTIVE or (source_types and fact.source_type not in source_types):
-                continue
-            if as_of is not None and ((fact.valid_from is not None and as_of < fact.valid_from) or (fact.valid_until is not None and as_of > fact.valid_until)):
-                continue
-            matched = sorted(task_terms.intersection(_tokens(fact.text)))
-            relevance = len(matched)
-            if not relevance:
-                continue
-            item = {
-                "stable_handle": fact.stable_handle,
-                "source_type": fact.source_type,
-                "version": fact.version,
-                "provenance": list(fact.provenance),
-                "trust": fact.trust,
-                "digest": fact.digest,
-                "explain": {"relevance": relevance, "trust": fact.trust, "freshness": "as_of" if as_of is not None else "current", "applicability": list(fact.applicability), "matched_terms": matched, "ranking": "lexical-fallback"},
-            }
-            item["_sort"] = (-relevance, fact.stable_handle, fact.version)
-            candidates.append(item)
-        candidates.sort(key=lambda item: item.pop("_sort"))
-        selected: list[dict[str, Any]] = []
-        bytes_used = 0
-        tokens_used = 0
-        reasons: list[str] = []
-        for item in candidates[:max_results]:
-            encoded_size = len(json.dumps(item, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-            estimated = len(json.dumps(item).split())
-            if bytes_used + encoded_size > max_bytes:
-                reasons.append("byte_budget")
-                break
-            if tokens_used + estimated > max_tokens:
-                reasons.append("token_budget")
-                break
-            selected.append(item)
-            bytes_used += encoded_size
-            tokens_used += estimated
-        return {"schema": RESULT_SCHEMA, "query_schema": QUERY_SCHEMA, "projection_schema": PROJECTION_SCHEMA, "repository": self.repository, "scope": self.scope, "generation": self.generation, "handles": [item["stable_handle"] for item in selected], "results": selected, "truncated": bool(reasons) or len(candidates) > len(selected), "truncation_reasons": sorted(set(reasons))}
+        with self._lock:
+            task_terms = _tokens(task)
+            candidates: list[dict[str, Any]] = []
+            for fact in self._facts.values():
+                if fact.stable_handle in self._conflicts or fact.stable_handle in self._tombstones or fact.state in _INACTIVE or (source_types and fact.source_type not in source_types):
+                    continue
+                if as_of is not None and ((fact.valid_from is not None and as_of < fact.valid_from) or (fact.valid_until is not None and as_of > fact.valid_until)):
+                    continue
+                matched = sorted(task_terms.intersection(_tokens(fact.text)))
+                relevance = len(matched)
+                if not relevance:
+                    continue
+                item = {
+                    "stable_handle": fact.stable_handle,
+                    "source_type": fact.source_type,
+                    "version": fact.version,
+                    "provenance": list(fact.provenance),
+                    "trust": fact.trust,
+                    "digest": fact.digest,
+                    "explain": {"relevance": relevance, "trust": fact.trust, "freshness": "as_of" if as_of is not None else "current", "applicability": list(fact.applicability), "matched_terms": matched, "ranking": "lexical-fallback"},
+                }
+                item["_sort"] = (-relevance, fact.stable_handle, fact.version)
+                candidates.append(item)
+            candidates.sort(key=lambda item: item.pop("_sort"))
+            selected: list[dict[str, Any]] = []
+            bytes_used = 0
+            tokens_used = 0
+            reasons: list[str] = []
+            for item in candidates[:max_results]:
+                encoded_size = len(json.dumps(item, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+                estimated = len(json.dumps(item).split())
+                if bytes_used + encoded_size > max_bytes:
+                    reasons.append("byte_budget")
+                    break
+                if tokens_used + estimated > max_tokens:
+                    reasons.append("token_budget")
+                    break
+                selected.append(item)
+                bytes_used += encoded_size
+                tokens_used += estimated
+            return {"schema": RESULT_SCHEMA, "query_schema": QUERY_SCHEMA, "projection_schema": PROJECTION_SCHEMA, "repository": self.repository, "scope": self.scope, "generation": self.generation, "handles": [item["stable_handle"] for item in selected], "results": selected, "truncated": bool(reasons) or len(candidates) > len(selected), "truncation_reasons": sorted(set(reasons))}
 
     def snapshot(self) -> dict[str, Any]:
         """Return a bounded metadata snapshot without exposing producer storage."""
-        return {
-            "schema": PROJECTION_SCHEMA,
-            "repository": self.repository,
-            "scope": self.scope,
-            "generation": self.generation,
-            "handles": sorted(self._facts),
-            "conflicts": sorted(self._conflicts),
-            "tombstones": sorted(self._tombstones),
-        }
+        with self._lock:
+            return {
+                "schema": PROJECTION_SCHEMA,
+                "repository": self.repository,
+                "scope": self.scope,
+                "generation": self.generation,
+                "handles": sorted(self._facts),
+                "conflicts": sorted(self._conflicts),
+                "tombstones": sorted(self._tombstones),
+            }
 
 
-__all__ = ["FACT_SCHEMA", "KnowledgeFact", "KnowledgeProjection", "KnowledgeProjectionError", "PROJECTION_SCHEMA", "QUERY_SCHEMA", "RESULT_SCHEMA"]
+__all__ = [
+    "FACT_SCHEMA", "KnowledgeFact", "KnowledgeProjection", "KnowledgeProjectionError",
+    "MAX_FACTS", "MAX_QUERY_BYTES", "MAX_QUERY_RESULTS", "MAX_QUERY_TOKENS",
+    "PROJECTION_SCHEMA", "QUERY_SCHEMA", "RESULT_SCHEMA",
+]
