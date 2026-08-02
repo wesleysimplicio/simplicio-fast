@@ -25,6 +25,7 @@ def compile_context(
     projections: Sequence[ProjectionEnvelope],
     *,
     repository_scope: str | None = None,
+    tenant_scope: str | None = None,
     max_bytes: int = 256 * 1024,
     max_tokens: int = 4096,
     max_items: int = 128,
@@ -65,6 +66,8 @@ def compile_context(
     for envelope in ordered:
         if repository_scope is not None and envelope.payload.get("repository") not in {None, repository_scope}:
             raise UniversalContextError("context_scope_mismatch")
+        if tenant_scope is not None and envelope.tenant_scope not in {"*", tenant_scope}:
+            raise UniversalContextError("context_scope_mismatch")
         previous_digest = seen.get(envelope.stable_handle)
         if previous_digest is not None:
             if previous_digest != envelope.payload_sha256:
@@ -81,6 +84,8 @@ def compile_context(
             "projection_type": envelope.projection_type,
             "stable_handle": envelope.stable_handle,
             "generation": envelope.generation,
+            "source_generation": envelope.source_generation,
+            "projection_generation": envelope.projection_generation,
             "producer": envelope.producer,
             "digest": envelope.payload_sha256,
             "trust": envelope.payload.get("trust", "derived_fact"),

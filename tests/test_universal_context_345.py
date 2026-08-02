@@ -64,6 +64,8 @@ def test_universal_context_exposes_boundaries_and_wrapper_accounting() -> None:
     assert result["wrapper_bytes"] == 7
     assert result["wrapper_tokens"] == 3
     assert result["source_generations"] == ["g1", "g2"]
+    assert item["source_generation"] == "g2"
+    assert item["projection_generation"] == "g2"
 
 
 def test_universal_context_rejects_conflicting_duplicate_and_impossible_wrapper() -> None:
@@ -80,3 +82,17 @@ def test_universal_context_rejects_conflicting_duplicate_and_impossible_wrapper(
         compile_context([first, second])
     with pytest.raises(UniversalContextError, match="context_budget_invalid"):
         compile_context([], max_bytes=3, wrapper_bytes=4)
+
+
+def test_universal_context_rejects_tenant_scope_mismatch() -> None:
+    item = ProjectionEnvelope.create(
+        "knowledge",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="tenant-fact",
+        tenant_scope="tenant-a",
+        payload={"repository": "repo", "value": "scoped"},
+    )
+    with pytest.raises(UniversalContextError, match="context_scope_mismatch"):
+        compile_context([item], repository_scope="repo", tenant_scope="tenant-b")
