@@ -32,19 +32,27 @@ class CapabilityCandidate:
     metric_class: str = "unknown"
 
     def __post_init__(self) -> None:
-        if not self.handle or not self.kind or not self.version:
+        if any(
+            not isinstance(value, str) or not value.strip()
+            for value in (self.handle, self.kind, self.version, self.trust)
+        ):
             raise CapabilityRankingError("candidate_identity_invalid")
         if any(not isinstance(item, str) or not item.strip() for item in self.capabilities):
             raise CapabilityRankingError("candidate_capabilities_invalid")
+        if any(not isinstance(item, str) or not item.strip() for item in self.provenance):
+            raise CapabilityRankingError("candidate_provenance_invalid")
         if not isinstance(self.scope, str) or not self.scope.strip():
             raise CapabilityRankingError("candidate_scope_invalid")
         if not isinstance(self.available, bool):
             raise CapabilityRankingError("candidate_availability_invalid")
+        if self.policy_eligible is not None and not isinstance(self.policy_eligible, bool):
+            raise CapabilityRankingError("candidate_policy_invalid")
         if (
             (
                 self.estimated_cost is not None
                 and (
                     isinstance(self.estimated_cost, bool)
+                    or not isinstance(self.estimated_cost, int)
                     or self.estimated_cost < 0
                 )
             )
@@ -52,12 +60,13 @@ class CapabilityCandidate:
                 self.estimated_latency_ms is not None
                 and (
                     isinstance(self.estimated_latency_ms, bool)
+                    or not isinstance(self.estimated_latency_ms, int)
                     or self.estimated_latency_ms < 0
                 )
             )
         ):
             raise CapabilityRankingError("candidate_cost_invalid")
-        if self.metric_class not in {"unknown", "estimated", "measured", "simulated"}:
+        if not isinstance(self.metric_class, str) or self.metric_class not in {"unknown", "estimated", "measured", "simulated"}:
             raise CapabilityRankingError("candidate_metric_class_invalid")
 
 
@@ -69,10 +78,17 @@ def rank_capabilities(
     required_scope: str | None = None,
 ) -> dict[str, Any]:
     if (
-        not required
+        not isinstance(required, Sequence)
+        or isinstance(required, (str, bytes))
+        or not required
         or any(not isinstance(item, str) or not item.strip() for item in required)
+        or isinstance(max_results, bool)
+        or not isinstance(max_results, int)
         or max_results <= 0
-        or (required_scope is not None and not required_scope.strip())
+        or (
+            required_scope is not None
+            and (not isinstance(required_scope, str) or not required_scope.strip())
+        )
     ):
         raise CapabilityRankingError("ranking_request_invalid")
     required_set = set(required)

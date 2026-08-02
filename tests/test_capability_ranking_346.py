@@ -52,3 +52,16 @@ def test_capability_ranking_accepts_explicit_global_scope_and_rejects_bad_inputs
         rank_capabilities([], (1,))
     with pytest.raises(CapabilityRankingError, match="candidate_scope_invalid"):
         CapabilityCandidate("bad", "tool", "1", ("query",), scope="")
+
+
+def test_capability_ranking_rejects_coercible_invalid_types() -> None:
+    with pytest.raises(CapabilityRankingError, match="candidate_cost_invalid"):
+        CapabilityCandidate("float", "tool", "1", ("query",), estimated_cost=1.5)
+    with pytest.raises(CapabilityRankingError, match="candidate_policy_invalid"):
+        CapabilityCandidate("policy", "tool", "1", ("query",), policy_eligible="yes")
+    with pytest.raises(CapabilityRankingError, match="candidate_provenance_invalid"):
+        CapabilityCandidate("provenance", "tool", "1", ("query",), provenance=(1,))
+    with pytest.raises(CapabilityRankingError, match="ranking_request_invalid"):
+        rank_capabilities([], ("query",), max_results=True)
+    with pytest.raises(CapabilityRankingError, match="ranking_request_invalid"):
+        rank_capabilities([], ("query",), required_scope=True)
