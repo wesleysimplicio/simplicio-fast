@@ -593,7 +593,12 @@ def handoff(
     parity_stage_start = perf_counter()
     if unchanged_delta:
         merged = base.source_hashes
-        current = {relative: base.source_hashes[relative] for relative in scoped_paths}
+        root = store.root.resolve()
+        current = {}
+        for relative in scoped_paths:
+            path = (root / relative).resolve()
+            if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
+                current[relative] = store.source_hash(path)
     else:
         merged = _composed_source_hashes(store, base, delta)
         if scoped_paths is None:
