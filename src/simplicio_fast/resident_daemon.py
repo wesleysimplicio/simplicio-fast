@@ -12,6 +12,11 @@ from typing import Any
 
 PROTOCOL_SCHEMA = "simplicio.fast-daemon-request/v1"
 RESPONSE_SCHEMA = "simplicio.fast-daemon-response/v1"
+MAX_REQUEST_ID_BYTES = 256
+MAX_SLOT_ID_BYTES = 256
+MAX_OPERATION_BYTES = 128
+MAX_PAYLOAD_BYTES = 256 * 1024
+_FORBIDDEN_FIELDS = frozenset({"offset", "mmap_offset", "address", "pointer"})
 
 
 def _digest(value: Any) -> str:
@@ -38,26 +43,65 @@ class DaemonRequest:
 
     @classmethod
     def parse(cls, value: Mapping[str, Any]) -> "DaemonRequest":
+        if not isinstance(value, Mapping):
+            raise DaemonError("protocol_request_invalid")
         if value.get("schema") != PROTOCOL_SCHEMA:
             raise DaemonError("protocol_schema_invalid")
         required = ("request_id", "slot_id", "operation", "generation", "deadline_ns")
         if any(value.get(key) in (None, "") for key in required):
             raise DaemonError("protocol_field_missing")
+        request_id = value.get("request_id")
+        slot_id = value.get("slot_id")
+        operation = value.get("operation")
+        generation = value.get("generation")
+        deadline_ns = value.get("deadline_ns")
+        if (
+            not isinstance(request_id, str)
+            or not request_id.strip()
+            or len(request_id.encode("utf-8")) > MAX_REQUEST_ID_BYTES
+            or not isinstance(slot_id, str)
+            or not slot_id.strip()
+            or len(slot_id.encode("utf-8")) > MAX_SLOT_ID_BYTES
+            or not isinstance(operation, str)
+            or not operation.strip()
+            or len(operation.encode("utf-8")) > MAX_OPERATION_BYTES
+            or isinstance(generation, bool)
+            or not isinstance(generation, int)
+            or generation < 0
+            or isinstance(deadline_ns, bool)
+            or not isinstance(deadline_ns, int)
+            or deadline_ns < 1
+        ):
+            raise DaemonError("protocol_field_invalid")
         payload = value.get("payload", {})
         if not isinstance(payload, Mapping):
             raise DaemonError("protocol_payload_invalid")
-        # Handles are opaque. Raw mmap offsets never cross the protocol boundary.
-        forbidden = {"offset", "mmap_offset", "address", "pointer"}
-        if forbidden.intersection(payload):
+        if _contains_forbidden_field(payload):
             raise DaemonError("protocol_exposes_offset")
+        try:
+            payload_bytes = len(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+        except (TypeError, ValueError) as error:
+            raise DaemonError("protocol_payload_invalid") from error
+        if payload_bytes > MAX_PAYLOAD_BYTES:
+            raise DaemonError("protocol_payload_too_large")
         return cls(
-            request_id=str(value["request_id"]),
-            slot_id=str(value["slot_id"]),
-            operation=str(value["operation"]),
-            generation=int(value["generation"]),
-            deadline_ns=int(value["deadline_ns"]),
+            request_id=request_id,
+            slot_id=slot_id,
+            operation=operation,
+            generation=generation,
+            deadline_ns=deadline_ns,
             payload=dict(payload),
         )
+
+
+def _contains_forbidden_field(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        return bool(_FORBIDDEN_FIELDS.intersection(value)) or any(
+            _contains_forbidden_field(item) for item in value.values()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_forbidden_field(item) for item in value)
+    return False
 
 
 class ResidentFastDaemon:
