@@ -21,7 +21,11 @@ _FORBIDDEN_FIELDS = frozenset({"offset", "mmap_offset", "address", "pointer"})
 
 def _digest(value: Any) -> str:
     payload = json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+        allow_nan=False,
     )
     return hashlib.sha256(payload.encode()).hexdigest()
 
@@ -79,7 +83,7 @@ class DaemonRequest:
         if _contains_forbidden_field(payload):
             raise DaemonError("protocol_exposes_offset")
         try:
-            payload_bytes = len(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+            payload_bytes = len(json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("utf-8"))
         except (TypeError, ValueError) as error:
             raise DaemonError("protocol_payload_invalid") from error
         if payload_bytes > MAX_PAYLOAD_BYTES:
@@ -212,13 +216,24 @@ class ResidentFastDaemon:
             try:
                 await self._pin(request.generation)
                 result = await self._handler(request)
+                try:
+                    result_payload = dict(result)
+                    json.dumps(
+                        result_payload,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                        ensure_ascii=True,
+                        allow_nan=False,
+                    )
+                except (TypeError, ValueError) as error:
+                    raise DaemonError("protocol_result_invalid") from error
                 unsigned = {
                     "schema": RESPONSE_SCHEMA,
                     "request_id": request.request_id,
                     "slot_id": request.slot_id,
                     "generation": request.generation,
                     "status": "COMPLETED",
-                    "result": dict(result),
+                    "result": result_payload,
                     "daemon_epoch": self._epoch,
                     "backend": self._backend,
                     "backend_null_reason": self._rust_reason,

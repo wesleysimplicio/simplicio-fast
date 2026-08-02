@@ -22,3 +22,9 @@ def test_resident_transport_rejects_non_json_payloads() -> None:
     request = make_request("request", "slot")
     with pytest.raises(DaemonError, match="protocol_payload_invalid"):
         DaemonRequest.parse({**request, "payload": {"content": object()}})
+
+
+def test_resident_transport_rejects_non_finite_json_numbers() -> None:
+    request = make_request("request", "slot")
+    with pytest.raises(DaemonError, match="protocol_payload_invalid"):
+        DaemonRequest.parse({**request, "payload": {"content": float("nan")}})
