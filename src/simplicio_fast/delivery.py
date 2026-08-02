@@ -178,11 +178,14 @@ def _mapper_symbol_handles(
 ) -> dict[tuple[str, int], str]:
     """Index Mapper symbol IDs by the public source file/line handle."""
 
+    artifacts = mapper_provenance.get("artifacts", [])
+    if not isinstance(artifacts, list):
+        raise MapperIngestError("mapper_graph_missing")
     artifact = next(
         (
             item
-            for item in mapper_provenance.get("artifacts", [])
-            if item.get("name") == "context_snapshot"
+            for item in artifacts
+            if isinstance(item, dict) and item.get("name") == "context_snapshot"
         ),
         None,
     )
@@ -193,9 +196,10 @@ def _mapper_symbol_handles(
         graph = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise MapperIngestError("mapper_graph_missing") from error
-    if graph.get("schema") != "simplicio.context-snapshot/v1":
+    if not isinstance(graph, dict) or graph.get("schema") != "simplicio.context-snapshot/v1":
         raise MapperIngestError("mapper_schema_unsupported")
-    nodes = graph.get("graph", {}).get("nodes")
+    graph_payload = graph.get("graph")
+    nodes = graph_payload.get("nodes") if isinstance(graph_payload, dict) else None
     if not isinstance(nodes, list):
         raise MapperIngestError("mapper_graph_missing")
     result: dict[tuple[str, int], str] = {}

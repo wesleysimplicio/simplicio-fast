@@ -80,6 +80,26 @@ def test_integrated_traceability_fails_closed_without_symbol_nodes(tmp_path: Pat
         _mapper_symbol_handles(tmp_path, _provenance())
 
 
+@pytest.mark.parametrize(
+    "graph",
+    [[], {"schema": "simplicio.context-snapshot/v1", "graph": []}],
+)
+def test_malformed_mapper_graph_fails_closed_with_stable_reason(
+    tmp_path: Path, graph: object
+) -> None:
+    artifact = tmp_path / ".simplicio" / "context-snapshot.json"
+    artifact.parent.mkdir()
+    artifact.write_text(json.dumps(graph), encoding="utf-8")
+
+    with pytest.raises(MapperIngestError, match="mapper_schema_unsupported|mapper_graph_missing"):
+        _mapper_symbol_handles(tmp_path, _provenance())
+
+
+def test_malformed_mapper_artifacts_fail_closed_with_stable_reason(tmp_path: Path) -> None:
+    with pytest.raises(MapperIngestError, match="mapper_graph_missing"):
+        _mapper_symbol_handles(tmp_path, {"artifacts": [1]})
+
+
 def test_installed_mapper_to_integrated_delivery_traceability(tmp_path: Path) -> None:
     executable = shutil.which("simplicio-mapper")
     if executable is None:
