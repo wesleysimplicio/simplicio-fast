@@ -221,7 +221,6 @@ def _run_category(
     root, store, base, sizes = _make_root(
         parent, files, category, functions_per_file
     )
-    unchanged_source = (root / "module_000.py").read_text(encoding="utf-8")
     rows: list[dict[str, object]] = []
     if category == "cold":
         for revision in range(repetitions):
@@ -290,7 +289,8 @@ def _run_category(
             )
             changed_paths = ["module_000.py"]
         else:
-            source.write_text(unchanged_source, encoding="utf-8")
+            # Keep the source identity unchanged: an unchanged delta must
+            # measure the hot path, not repeated writes of identical bytes.
             if audit_parity:
                 build_snapshot(root, parity_snapshot)
             expected_parsed = 0

@@ -522,6 +522,24 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 )
             self.assertTrue(report["parity"])
 
+    def test_source_hash_cache_reuses_identity_and_invalidates_on_change(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            path = root / "one.py"
+            first = store.source_hash(path)
+            with patch(
+                "simplicio_fast.workspace._hash_source",
+                wraps=lambda value: hashlib.sha256(value.read_bytes()).hexdigest(),
+            ) as hashed:
+                self.assertEqual(first, store.source_hash(path))
+                hashed.assert_not_called()
+
+                path.write_text("def one():\n    return 10\n", encoding="utf-8")
+                second = store.source_hash(path)
+
+            self.assertNotEqual(first, second)
+            self.assertEqual(1, hashed.call_count)
+
     def test_reuses_manifest_parse_until_file_identity_changes(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             _root, store = self._store(directory)

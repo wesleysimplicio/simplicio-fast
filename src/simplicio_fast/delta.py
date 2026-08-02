@@ -347,7 +347,7 @@ def create_delta(
             if relative in base.source_hashes:
                 changed[relative] = {"sha256": None, "tombstone": True, "symbols": []}
             continue
-        digest = _hash_source(path)
+        digest = store.source_hash(path)
         if base.source_hashes.get(relative) == digest:
             continue
         changed[relative] = {
@@ -452,7 +452,7 @@ def compose_delta(
     )
     if scoped_paths is None:
         current_hashes = {
-            path.relative_to(store.root).as_posix(): _hash_source(path)
+            path.relative_to(store.root).as_posix(): store.source_hash(path)
             for path in source_files(store.root)
         }
     else:
@@ -461,7 +461,7 @@ def compose_delta(
         for relative in scoped_paths:
             path = (root / relative).resolve()
             if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
-                current_hashes[relative] = _hash_source(path)
+                current_hashes[relative] = store.source_hash(path)
     expected_hashes = _composed_source_hashes(store, base, delta)
     verification_paths = (
         sorted(set(current_hashes) | set(expected_hashes))
@@ -580,7 +580,7 @@ def handoff(
         merged = _composed_source_hashes(store, base, delta)
         if scoped_paths is None:
             current = {
-                path.relative_to(store.root).as_posix(): _hash_source(path)
+                path.relative_to(store.root).as_posix(): store.source_hash(path)
                 for path in source_files(store.root)
             }
         else:
@@ -589,7 +589,7 @@ def handoff(
             for relative in scoped_paths:
                 path = (root / relative).resolve()
                 if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
-                    current[relative] = _hash_source(path)
+                    current[relative] = store.source_hash(path)
     target = current
     parity_snapshot_hash = None
     if parity_snapshot is not None:

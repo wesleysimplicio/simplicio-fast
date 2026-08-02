@@ -208,6 +208,32 @@ class WorkspaceStore:
         self._manifest_cache: dict[
             tuple[str, str, int, int, int, int], Manifest
         ] = {}
+        self._source_hash_cache: dict[
+            tuple[str, int, int, int, int, int], str
+        ] = {}
+
+    def source_hash(self, path: Path) -> str:
+        """Hash a source file once per validated filesystem identity."""
+        try:
+            stat = path.stat()
+        except OSError:
+            return _hash_source(path)
+        key = (
+            str(path),
+            int(stat.st_size),
+            int(stat.st_mtime_ns),
+            int(stat.st_ctime_ns),
+            int(getattr(stat, "st_dev", 0)),
+            int(getattr(stat, "st_ino", 0)),
+        )
+        cached = self._source_hash_cache.get(key)
+        if cached is not None:
+            return cached
+        digest = _hash_source(path)
+        self._source_hash_cache[key] = digest
+        while len(self._source_hash_cache) > 512:
+            self._source_hash_cache.pop(next(iter(self._source_hash_cache)))
+        return digest
 
     def cached_validated_base(
         self, generation: str, base: Manifest, snapshot: Path
@@ -333,7 +359,8 @@ class WorkspaceStore:
             raise ValueError("canonical_base_dirty")
         files = source_files(self.root)
         source_hashes = {
-            path.relative_to(self.root).as_posix(): _hash_source(path) for path in files
+            path.relative_to(self.root).as_posix(): self.source_hash(path)
+            for path in files
         }
         source_tree_sha256 = hashlib.sha256(_canonical_json(source_hashes)).hexdigest()
         parser_versions = {
@@ -387,7 +414,7 @@ class WorkspaceStore:
             for path in source_files(self.root)
         }
         for relative, path in current_paths.items():
-            digest = _hash_source(path)
+            digest = self.source_hash(path)
             if manifest.source_hashes.get(relative) == digest:
                 continue
             symbols = [asdict(symbol) for symbol in parse_path(path, relative)]
@@ -628,7 +655,7 @@ class WorkspaceStore:
         previous: dict[str, str] | None = None,
     ) -> tuple[Overlay | None, dict[str, str]]:
         hashes = {
-            path.relative_to(self.root).as_posix(): _hash_source(path)
+            path.relative_to(self.root).as_posix(): self.source_hash(path)
             for path in source_files(self.root)
         }
         if previous == hashes:
