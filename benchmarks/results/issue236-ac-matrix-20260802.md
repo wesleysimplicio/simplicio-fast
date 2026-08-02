@@ -3,7 +3,7 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. Current master is `81144cd`;
+owned by an external capability or service. Current master is `2bd7ac9`;
 release-integrity passes all checks. The full-suite subprocess failures in
 this Windows shell are recorded separately and are not treated as functional
 passes.
@@ -18,7 +18,7 @@ passes.
 | #241 | PARTIAL | `81144cd`; changeset preflight rejects cross-platform path aliases, dot/dot-dot aliases and symlink escapes, rename refresh includes source+destination, and the focused binary/CLI/boundary block passes 28 tests (1 symlink test skipped by host capability); focused module coverage is 95% combined with branch coverage enabled; Runtime 3.5.6 smoke and installed lifecycle checks remain green | Linux/Windows byte parity, complete recovery/adversarial/unknown-effect matrix, independent installed E2E and final benchmark/coverage matrix |
 | #242 | PARTIAL | `issue242-windows-20260802-100k-cache2-10.json`; artifact/delta validation caches are bounded and corruption-aware; 25 focused tests pass; fresh 100k/10 receipt keeps parity and relative gates, but unchanged median is 37.14 ms (p95 85.18 ms), above the 5 ms AC | Linux receipt, unchanged <=5 ms at required scales, CI regression gate and final coverage |
 | #243 | BLOCKED | Local workflow contract/verifier pass; run `30723612138` has `startup_failure` and no jobs | GitHub Actions administrative/runner availability, then four native target builds and downloadable verification |
-| #244 | PARTIAL | `3e89acf`, `b1b4f89`; current parser/Mapper adapter suite passes within the 36-test + 16-subtest run; focused parser module measures 90.3448% line and 87.0968% branch coverage with 26 tests + 16 subtests; parser contract and fuzz corpus remain present | Frozen real-corpus parity, installed cross-platform matrix, native language implementations and final installed evidence |
+| #244 | PARTIAL | `2bd7ac9`; frozen conformance corpus now builds deterministically with 4 files, 25 unique symbols and explicit native-parser fallback diagnostics; lexical overload IDs are disambiguated by source span; parser/Mapper/fuzz/corpus block passes 28 tests + 16 subtests, Ruff passes, and focused coverage remains above 90% line/85% branch | Native legacy-parser parity, installed cross-platform matrix, native C#/TypeScript/Rust implementations and final installed evidence |
 | #347 | PARTIAL | `a511814`; Operations projection serializes ingest/read paths with process-local `RLock`, preserves read-only authority, detects causal gaps/forks, blocks inconsistent `complete` queries, and passes 6 focused tests including 20 concurrent readers; focused module report is 87% with branch coverage enabled | Canonical Mapper/Loop/Runtime streams, as-of/restart/replay E2E, Python/Rust parity, installed consumers, cross-process/crash evidence, coverage threshold and measured latency |
 | #246 | BLOCKED | Rust matrix receipts at 10k/100k/1M; Full cell reports `runtime_authorization_required` | Runtime-authorized Full, Loop standalone, real delivery tasks, concurrency and final regression gate |
 | #247 | PARTIAL | `3515bb5`; current C# adapter suite passes 13 combined language tests; multi-project/partial/test-symbol E2E present | Roslyn/native relations, affected-project invalidation, installed Linux/Windows E2E and coverage |
