@@ -69,6 +69,7 @@ def test_operations_projection_rejects_same_sequence_fork_but_allows_duplicate()
     projection.ingest([item, item])
     with pytest.raises(OperationsProjectionError, match="receipt_fork_detected"):
         projection.ingest([OperationReceipt("a", "attempt", "failed", "g1", 1, "loop/v1", {})])
+    assert projection.query()[0]["consistency"] == "fork"
 
 
 def test_operations_projection_supports_twenty_concurrent_readers() -> None:
@@ -86,3 +87,62 @@ def test_operations_projection_supports_twenty_concurrent_readers() -> None:
     with ThreadPoolExecutor(max_workers=20) as pool:
         results = list(pool.map(read, range(20)))
     assert results == [(20, 20, 20, "simplicio.fast.operations-projection/v1")] * 20
+
+
+def test_operations_projection_receipt_and_scope_contracts_fail_closed() -> None:
+    base = {
+        "handle": "h",
+        "kind": "attempt",
+        "status": "running",
+        "generation": "g1",
+        "sequence": 1,
+        "source_schema": "runtime/v1",
+        "payload": {},
+    }
+    for field, value, reason in (
+        ("handle", "", "receipt_identity_invalid"),
+        ("sequence", True, "receipt_sequence_invalid"),
+        ("payload", [], "receipt_payload_invalid"),
+    ):
+        with pytest.raises(OperationsProjectionError, match=reason):
+            OperationReceipt(**{**base, field: value})
+    with pytest.raises(OperationsProjectionError, match="projection_scope_invalid"):
+        OperationsProjection("", "g1")
+
+
+def test_operations_projection_causal_and_lease_boundaries() -> None:
+    projection = OperationsProjection("repo", "g1")
+    projection.ingest([
+        OperationReceipt("bad-parent", "attempt", "running", "g1", 1, "runtime/v1", {"causal_parent": " "}),
+        OperationReceipt("external", "other", "done", "g1", 2, "runtime/v1", {}),
+        OperationReceipt("embedded-lease", "attempt", "held", "g1", 3, "runtime/v1", {"lease": {"owner": "w", "fence": "f", "expires_at": 4}}),
+    ])
+    assert projection.query(status="done", kind="other")[0]["handle"] == "external"
+    assert projection.query_slots()[0]["handle"] == "embedded-lease"
+    assert projection.query_slots(status="missing") == []
+    assert projection.query(max_results=1)[0]["handle"] == "embedded-lease"
+    assert projection.query_leases(3)[0]["lease"]["active"] is True
+    assert projection.query_leases(4)[0]["lease"]["active"] is False
+    assert len(projection.query_leases(3, max_results=1)) == 1
+    for observed_at, max_results in ((True, 1), (-1, 1), (0, 0)):
+        with pytest.raises(OperationsProjectionError, match="lease_query_invalid"):
+            projection.query_leases(observed_at, max_results=max_results)
+    invalid_expiry = OperationsProjection("repo", "g1")
+    invalid_expiry.ingest([OperationReceipt("lease", "lease", "held", "g1", 1, "runtime/v1", {"expires_at": True})])
+    with pytest.raises(OperationsProjectionError, match="lease_expiry_invalid"):
+        invalid_expiry.query_leases(0)
+    with pytest.raises(OperationsProjectionError, match="query_budget_invalid"):
+        projection.query_slots(max_results=0)
+    ordered = OperationsProjection("repo", "g1")
+    ordered.ingest([
+        OperationReceipt("parent", "attempt", "running", "g1", 2, "runtime/v1", {}),
+        OperationReceipt("child", "attempt", "running", "g1", 1, "runtime/v1", {"causal_parent": "parent"}),
+    ])
+    by_handle = {item["handle"]: item for item in ordered.query()}
+    assert by_handle["child"]["consistency"] == "causal_gap"
+    ordered_ok = OperationsProjection("repo", "g1")
+    ordered_ok.ingest([
+        OperationReceipt("parent", "attempt", "running", "g1", 1, "runtime/v1", {}),
+        OperationReceipt("child", "attempt", "running", "g1", 2, "runtime/v1", {"causal_parent": "parent"}),
+    ])
+    assert ordered_ok.query()[0]["consistency"] == "consistent"
