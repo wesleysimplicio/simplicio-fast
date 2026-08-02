@@ -1,9 +1,11 @@
 use serde_json::Value;
 use sha2::{Digest, Sha256};
-use simplicio_fast_core::{manifest, SegmentReader, SegmentWriter, SnapshotReader};
+use simplicio_fast_core::{
+    decode_projection, encode_projection, manifest, SegmentReader, SegmentWriter, SnapshotReader,
+};
 use std::{
     collections::HashMap,
-    env,
+    env, fs,
     io::{self, BufRead, Write},
     process::ExitCode,
 };
@@ -13,6 +15,7 @@ fn print_help() {
     println!();
     println!("Usage:");
     println!("  simplicio-fast-rs --version [--json]");
+    println!("  simplicio-fast-rs --projection <projection.json>");
     println!("  simplicio-fast-rs --stats <snapshot.sfast>");
     println!("  simplicio-fast-rs --query <snapshot.sfast> <term> [--path <file>] [--kind <kind>] [--limit <positive>] [--cursor <record-id>]");
     println!("  simplicio-fast-rs --relations <snapshot.sfast> [--handle <handle>] [--kind <kind>] [--limit <positive>]");
@@ -230,6 +233,41 @@ fn main() -> ExitCode {
     if args.iter().any(|arg| arg == "--version") {
         println!("{}", manifest());
         return ExitCode::SUCCESS;
+    }
+    if let Some(index) = args.iter().position(|arg| arg == "--projection") {
+        let Some(path) = args.get(index + 1) else {
+            eprintln!("missing projection path");
+            return ExitCode::from(2);
+        };
+        let result = fs::read(path)
+            .map_err(|error| error.to_string())
+            .and_then(|raw| {
+                let envelope = decode_projection(&raw).map_err(|error| error.to_string())?;
+                let encoded = encode_projection(&envelope).map_err(|error| error.to_string())?;
+                Ok(serde_json::json!({
+                    "schema": "simplicio.fast.projection-conformance/v1",
+                    "engine": "rust",
+                    "projection_type": envelope.projection_type,
+                    "stable_handle": envelope.stable_handle,
+                    "generation": envelope.generation,
+                    "input_bytes": raw.len(),
+                    "encoded_bytes": encoded.len(),
+                    "byte_for_byte": encoded == raw,
+                }))
+            });
+        return match result {
+            Ok(receipt) => {
+                println!("{}", receipt);
+                ExitCode::SUCCESS
+            }
+            Err(reason) => {
+                println!(
+                    "{}",
+                    serde_json::json!({"schema":"simplicio.fast.error/v1", "engine":"rust", "status":"error", "reason":reason})
+                );
+                ExitCode::from(2)
+            }
+        };
     }
     if args.iter().any(|arg| arg == "--session") {
         return run_session();
