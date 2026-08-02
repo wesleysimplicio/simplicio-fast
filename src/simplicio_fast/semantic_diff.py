@@ -105,8 +105,12 @@ class WhatIfOverlay:
     """Immutable proposal view; no source or base records are modified."""
 
     def __init__(self, base_generation: str, records: Sequence[DiffRecord]) -> None:
-        if not base_generation:
+        if not isinstance(base_generation, str) or not base_generation.strip():
             raise SemanticDiffError("generation_invalid")
+        if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
+            raise SemanticDiffError("records_invalid")
+        if any(not isinstance(item, DiffRecord) for item in records):
+            raise SemanticDiffError("records_invalid")
         if any(item.source_generation != base_generation for item in records):
             raise SemanticDiffError("overlay_generation_mismatch")
         keys = [(item.handle, item.kind) for item in records]
@@ -133,12 +137,32 @@ class WhatIfOverlay:
 
 class SemanticDiff:
     def __init__(self, source_generation: str, proposed_generation: str, records: Sequence[DiffRecord], *, complete: bool = True, truncation_reasons: Sequence[str] = ()) -> None:
-        if not source_generation or not proposed_generation:
+        if (
+            not isinstance(source_generation, str)
+            or not source_generation.strip()
+            or not isinstance(proposed_generation, str)
+            or not proposed_generation.strip()
+        ):
             raise SemanticDiffError("generation_invalid")
+        if not isinstance(records, Sequence) or isinstance(records, (str, bytes)):
+            raise SemanticDiffError("records_invalid")
+        if any(not isinstance(item, DiffRecord) for item in records):
+            raise SemanticDiffError("records_invalid")
+        if not isinstance(complete, bool):
+            raise SemanticDiffError("complete_invalid")
+        if (
+            not isinstance(truncation_reasons, Sequence)
+            or isinstance(truncation_reasons, (str, bytes))
+            or any(
+                not isinstance(reason, str) or not reason.strip()
+                for reason in truncation_reasons
+            )
+        ):
+            raise SemanticDiffError("truncation_reasons_invalid")
         self.source_generation = source_generation
         self.proposed_generation = proposed_generation
         self.records = tuple(sorted(records, key=lambda item: (item.handle, item.kind)))
-        self.complete = bool(complete)
+        self.complete = complete
         self.truncation_reasons = tuple(truncation_reasons)
 
     @property
@@ -274,6 +298,10 @@ class SemanticDiff:
 
 
 def diff_generations(source: Mapping[str, Mapping[str, Any]], proposed: Mapping[str, Mapping[str, Any]], *, source_generation: str, proposed_generation: str) -> SemanticDiff:
+    if not isinstance(source, Mapping) or not isinstance(proposed, Mapping):
+        raise SemanticDiffError("diff_input_invalid")
+    if any(not isinstance(handle, str) or not handle.strip() for handle in (*source, *proposed)):
+        raise SemanticDiffError("stable_handle_invalid")
     records: list[DiffRecord] = []
     for handle in sorted(set(source) | set(proposed)):
         before = source.get(handle)

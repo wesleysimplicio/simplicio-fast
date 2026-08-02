@@ -110,6 +110,20 @@ def test_diff_overlay_impact_budget_and_duplicate_walk_edges() -> None:
     assert diff_generations({"same": {"x": 1}}, {"same": {"x": 1}}, source_generation="g1", proposed_generation="g2").records == ()
 
 
+def test_diff_public_constructors_reject_untyped_state() -> None:
+    record = DiffRecord("a", "update", {}, {"x": 1}, "g1", "g2", "update")
+    with pytest.raises(SemanticDiffError, match="complete_invalid"):
+        SemanticDiff("g1", "g2", [record], complete="false")  # type: ignore[arg-type]
+    with pytest.raises(SemanticDiffError, match="truncation_reasons_invalid"):
+        SemanticDiff("g1", "g2", [record], truncation_reasons=[1])  # type: ignore[list-item]
+    with pytest.raises(SemanticDiffError, match="records_invalid"):
+        SemanticDiff("g1", "g2", [object()])  # type: ignore[list-item]
+    with pytest.raises(SemanticDiffError, match="generation_invalid"):
+        WhatIfOverlay(1, [record])  # type: ignore[arg-type]
+    with pytest.raises(SemanticDiffError, match="diff_input_invalid"):
+        diff_generations([], {}, source_generation="g1", proposed_generation="g2")  # type: ignore[arg-type]
+
+
 def test_impact_applies_depth_edge_and_byte_budgets_before_expansion() -> None:
     result = diff_generations({"a": {}}, {"a": {"changed": True}}, source_generation="g1", proposed_generation="g2")
     depth_limited = result.impact({"a": ["b"], "b": ["c"]}, max_depth=0)
