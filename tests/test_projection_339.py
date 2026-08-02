@@ -3,7 +3,12 @@ import pytest
 from simplicio_fast.knowledge import KnowledgeFacade
 from simplicio_fast.prism_arena import PrismArena
 from simplicio_fast.parser_adapter import build_projection
-from simplicio_fast.projection import ProjectionEnvelope, ProjectionError, ProjectionStore
+from simplicio_fast.projection import (
+    ProjectionEnvelope,
+    ProjectionError,
+    ProjectionStore,
+    contract_manifest,
+)
 from simplicio_fast.skills import SkillCatalog
 
 
@@ -57,6 +62,44 @@ def test_projection_rejects_future_schema_and_private_offsets() -> None:
             generation="g1",
             stable_handle="symbol:abc",
             payload={"items": [{"mmap_offset": 4}]},
+        )
+
+
+def test_projection_manifest_and_provenance_fields_are_strict_and_deterministic() -> None:
+    manifest = contract_manifest()
+    assert manifest["envelope"] == {"schema": "simplicio.fast.projection/v1", "major": 1, "minor": 0}
+    assert manifest["type_manifest"]["types"] == ["code", "knowledge", "operations"]
+    envelope = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper.context/v1",
+        generation="g1",
+        stable_handle="symbol:abc",
+        producer_version="2.0.20",
+        repository_scope="org/repo",
+        tenant_scope="tenant-a",
+        domain_scope="code",
+        capabilities_required=("projection.decode.v1",),
+        budgets={"bytes": 1024},
+        truncation_reasons=("budget",),
+        payload={"name": "abc"},
+    )
+    decoded = ProjectionEnvelope.decode(envelope.encode())
+    assert decoded.repository_scope == "org/repo"
+    assert decoded.capabilities_required == ("projection.decode.v1",)
+    assert decoded.budgets == {"bytes": 1024}
+    assert decoded.truncation_reasons == ("budget",)
+    with pytest.raises(ProjectionError, match="projection_depth_limit"):
+        deep: object = "x"
+        for _ in range(34):
+            deep = {"deep": deep}
+        ProjectionEnvelope.create(
+            "code",
+            producer="mapper",
+            producer_schema="mapper.context/v1",
+            generation="g1",
+            stable_handle="symbol:abc",
+            payload=deep,
         )
 
 
