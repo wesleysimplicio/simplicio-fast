@@ -151,6 +151,30 @@ def test_validation_cache_save_is_cross_process_atomic(tmp_path) -> None:
     assert not list(tmp_path.glob(f".{path.name}.*.tmp"))
 
 
+def test_validation_cache_failed_replace_preserves_previous_generation(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "recovery-cache.json"
+    original = ValidationCache()
+    original.put(key(), status="pass", result={"generation": "old"})
+    original.save(path)
+
+    replacement = ValidationCache()
+    replacement.put(
+        ValidationKey("sha256:new", "sha256:lock", "python-3.14", ("pytest",), generation="g2"),
+        status="pass",
+        result={"generation": "new"},
+    )
+
+    def fail_replace(*_arguments: object) -> None:
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr("simplicio_fast.validation_cache.os.replace", fail_replace)
+    with pytest.raises(OSError, match="simulated replace failure"):
+        replacement.save(path)
+
+    assert ValidationCache.load(path).get(key()).result_digest == original.get(key()).result_digest
+    assert not list(tmp_path.glob(f".{path.name}.*.tmp"))
+
+
 def test_validation_cache_contract_boundaries_and_lease_lifecycle(tmp_path) -> None:
     with pytest.raises(ValidationCacheError, match="cache_key_not_json"):
         _canonical({"bad": object()})
