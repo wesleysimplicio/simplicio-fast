@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import math
 from typing import Any, Iterable, Sequence
 
 
@@ -95,7 +96,12 @@ class FederatedEdge:
             (self.relation_type, "edge_relation_invalid"),
         ):
             _text(value, reason)
-        if not 0.0 <= self.confidence <= 1.0:
+        if (
+            isinstance(self.confidence, bool)
+            or not isinstance(self.confidence, (int, float))
+            or not math.isfinite(float(self.confidence))
+            or not 0.0 <= self.confidence <= 1.0
+        ):
             raise FederationError("edge_confidence_invalid")
         if any(not isinstance(item, str) or not item.strip() for item in self.evidence):
             raise FederationError("edge_evidence_invalid")

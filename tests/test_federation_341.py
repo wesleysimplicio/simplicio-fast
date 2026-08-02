@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+import math
+
 import pytest
 
 from simplicio_fast.federation import (
@@ -40,6 +43,10 @@ def test_federation_rejects_duplicate_scope_tombstone_and_unproven_edge() -> Non
         compile_federation([FederationMember("repo", "c", "g", "s", "sha256:x", tombstone=True)])
     with pytest.raises(FederationError, match="derived_edge_evidence_missing"):
         FederatedEdge("a", "b", "depends", 1.0, derived=True)
+    with pytest.raises(FederationError, match="edge_confidence_invalid"):
+        FederatedEdge("a", "b", "depends", True)
+    with pytest.raises(FederationError, match="edge_confidence_invalid"):
+        FederatedEdge("a", "b", "depends", math.nan)
 
 
 def test_federation_rejects_unbounded_traversal() -> None:
@@ -72,3 +79,21 @@ def test_federation_delta_reuses_members_and_removes_tombstoned_edges() -> None:
     removed, removed_receipt = original.apply_delta(removed_repositories=("repo-b",))
     assert removed.edges == ()
     assert removed_receipt["tombstones"] == ["repo-b"]
+
+
+def test_federation_supports_twenty_concurrent_readers() -> None:
+    edge = FederatedEdge("repo-a:schema/x", "repo-b:consumer/y", "depends", 1.0, ("fixture:1",))
+    federation = compile_federation([member("repo-a"), member("repo-b")], [edge])
+    expected_generation = federation.generation
+
+    def read(_: int) -> tuple[str, int, int, str]:
+        return (
+            federation.generation,
+            len(federation.consumers("repo-b:consumer/y")),
+            len(federation.traverse("repo-a:schema/x")["nodes"]),
+            federation.manifest()["schema"],
+        )
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        results = list(pool.map(read, range(20)))
+    assert results == [(expected_generation, 1, 2, "simplicio.fast.federated-generation/v1")] * 20
