@@ -498,6 +498,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--write", action="store_true", help="authorize the source mutation"
     )
 
+    reconcile = changeset_commands.add_parser(
+        "reconcile", help="reconcile a locked unknown Dev CLI effect before retry"
+    )
+    reconcile.add_argument("binary")
+    reconcile.add_argument("--root", default=".")
+    reconcile.add_argument("--journal", required=True)
+
     recover = changeset_commands.add_parser(
         "recover", help="recover an incomplete binary journal tail"
     )
@@ -777,6 +784,7 @@ def main() -> None:
                 materialize,
                 prepare_from_json,
                 read_binary,
+                reconcile_unknown_effect,
             )
 
             action = args.changeset_action
@@ -837,6 +845,15 @@ def main() -> None:
                         fencing_token=changeset.fencing_token,
                     )
                     emit(materialize(changeset, Path(args.root), journal))
+            elif action == "reconcile":
+                changeset = read_binary(Path(args.binary))
+                journal = BinaryChangeJournal(
+                    Path(args.journal),
+                    worktree_id=changeset.worktree_id,
+                    lease_id=changeset.lease_id,
+                    fencing_token=changeset.fencing_token,
+                )
+                emit(reconcile_unknown_effect(changeset, Path(args.root), journal))
             else:
                 journal = BinaryChangeJournal(
                     Path(args.journal),
