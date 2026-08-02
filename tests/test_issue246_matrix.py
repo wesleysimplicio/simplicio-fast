@@ -1,3 +1,5 @@
+import sys
+
 from pathlib import Path
 
 import pytest
@@ -72,3 +74,15 @@ def test_matrix_uses_compact_corpus_only_for_one_million_symbols(
     monkeypatch.setattr(issue246_matrix, "run_comparison", fake_run)
     issue246_matrix.run_matrix(sizes=(100_000, 1_000_000), repetitions=10)
     assert compact_values == [False, True]
+
+
+def test_cli_fails_closed_for_partial_matrix(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        issue246_matrix,
+        "run_matrix",
+        lambda **_: {"schema": issue246_matrix.SCHEMA, "status": "partial"},
+    )
+    monkeypatch.setattr(sys, "argv", ["issue246_matrix", "--sizes", "10000"])
+
+    assert issue246_matrix.main() == 1
+    assert '"status": "partial"' in capsys.readouterr().out

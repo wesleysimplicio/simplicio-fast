@@ -130,7 +130,9 @@ def main() -> int:
     if args.json_out:
         args.json_out.write_text(rendered + "\n", encoding="utf-8")
     print(rendered)
-    return 0
+    # Keep the raw receipt available, but make blocked/partial matrices fail
+    # in automation so unavailable evidence cannot be treated as success.
+    return 0 if receipt["status"] == "complete" else 1
 
 
 if __name__ == "__main__":
