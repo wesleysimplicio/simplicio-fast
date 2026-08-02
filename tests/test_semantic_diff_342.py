@@ -108,3 +108,29 @@ def test_diff_overlay_impact_budget_and_duplicate_walk_edges() -> None:
     assert federated["complete"] is False
     assert federated["truncation_reasons"] == ["budget"]
     assert diff_generations({"same": {"x": 1}}, {"same": {"x": 1}}, source_generation="g1", proposed_generation="g2").records == ()
+
+
+def test_impact_applies_depth_edge_and_byte_budgets_before_expansion() -> None:
+    result = diff_generations({"a": {}}, {"a": {"changed": True}}, source_generation="g1", proposed_generation="g2")
+    depth_limited = result.impact({"a": ["b"], "b": ["c"]}, max_depth=0)
+    assert depth_limited["nodes"] == ["a"]
+    assert depth_limited["complete"] is False
+    assert depth_limited["truncation_reasons"] == ["max_depth"]
+    edge_limited = result.impact({"a": ["b", "c"]}, max_edges=1)
+    assert edge_limited["complete"] is False
+    assert edge_limited["truncation_reasons"] == ["max_edges"]
+    with pytest.raises(SemanticDiffError, match="impact_depth_invalid"):
+        result.impact({}, max_depth=True)
+    with pytest.raises(SemanticDiffError, match="impact_byte_budget_invalid"):
+        result.impact({}, max_bytes=0)
+
+
+def test_federated_impact_reports_explicit_depth_truncation() -> None:
+    result = diff_generations({"repo-a:schema": {}}, {"repo-a:schema": {"v": 2}}, source_generation="g1", proposed_generation="g2")
+    federation = SimpleNamespace(
+        generation="fg1",
+        dependencies=lambda handle: [{"target_handle": "repo-b:consumer"}] if handle == "repo-a:schema" else [],
+    )
+    impact = result.impact_federated(federation, max_depth=0)
+    assert impact["complete"] is False
+    assert impact["truncation_reasons"] == ["max_depth"]

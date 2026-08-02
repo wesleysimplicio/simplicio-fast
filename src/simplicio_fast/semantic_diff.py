@@ -12,6 +12,10 @@ DIFF_SCHEMA = "simplicio.fast.semantic-diff/v1"
 OVERLAY_SCHEMA = "simplicio.fast.what-if-overlay/v1"
 RECEIPT_SCHEMA = "simplicio.fast.simulation-receipt/v1"
 _KINDS = {"add", "remove", "update"}
+MAX_IMPACT_NODES = 100_000
+MAX_IMPACT_EDGES = 100_000
+MAX_IMPACT_DEPTH = 1_024
+MAX_IMPACT_BYTES = 8 * 1024 * 1024
 
 
 class SemanticDiffError(ValueError):
@@ -29,6 +33,12 @@ def _canonical(value: Any) -> bytes:
 
 def _digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(_canonical(value)).hexdigest()
+
+
+def _impact_budget(value: object, reason: str, *, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise SemanticDiffError(reason)
+    return value
 
 
 @dataclass(frozen=True, slots=True)
@@ -154,49 +164,112 @@ class SemanticDiff:
     def overlay(self) -> WhatIfOverlay:
         return WhatIfOverlay(self.source_generation, self.records)
 
-    def impact(self, adjacency: Mapping[str, Sequence[str]], *, max_nodes: int = 1000) -> dict[str, Any]:
-        if max_nodes <= 0:
-            raise SemanticDiffError("impact_budget_invalid")
+    def impact(
+        self,
+        adjacency: Mapping[str, Sequence[str]],
+        *,
+        max_nodes: int = 1000,
+        max_depth: int = MAX_IMPACT_DEPTH,
+        max_edges: int = MAX_IMPACT_EDGES,
+        max_bytes: int = MAX_IMPACT_BYTES,
+    ) -> dict[str, Any]:
+        _impact_budget(max_nodes, "impact_budget_invalid", minimum=1, maximum=MAX_IMPACT_NODES)
+        _impact_budget(max_depth, "impact_depth_invalid", minimum=0, maximum=MAX_IMPACT_DEPTH)
+        _impact_budget(max_edges, "impact_edge_budget_invalid", minimum=0, maximum=MAX_IMPACT_EDGES)
+        _impact_budget(max_bytes, "impact_byte_budget_invalid", minimum=1, maximum=MAX_IMPACT_BYTES)
         changed = {item.handle for item in self.records}
-        queue = list(sorted(changed))
+        queue: list[tuple[str, int]] = [(handle, 0) for handle in sorted(changed)]
         included: set[str] = set()
         reasons: dict[str, str] = {}
+        truncation_reasons: set[str] = set()
+        traversed_edges = 0
+        used_bytes = 0
         while queue and len(included) < max_nodes:
-            node = queue.pop(0)
+            node, depth = queue.pop(0)
             if node in included:
                 continue
             included.add(node)
             reasons[node] = "direct_change" if node in changed else "dependency_closure"
-            queue.extend(sorted(adjacency.get(node, ())))
-        return {"schema": "simplicio.fast.impact-explanation/v1", "nodes": sorted(included), "reasons": reasons, "complete": not queue}
+            targets = sorted(adjacency.get(node, ()))
+            if depth >= max_depth and targets:
+                truncation_reasons.add("max_depth")
+                continue
+            for target in targets:
+                traversed_edges += 1
+                if traversed_edges > max_edges:
+                    truncation_reasons.add("max_edges")
+                    break
+                edge_bytes = len(_canonical({"source": node, "target": target}))
+                if used_bytes + edge_bytes > max_bytes:
+                    truncation_reasons.add("max_bytes")
+                    break
+                used_bytes += edge_bytes
+                queue.append((target, depth + 1))
+        if queue:
+            truncation_reasons.add("max_nodes")
+        return {
+            "schema": "simplicio.fast.impact-explanation/v1",
+            "nodes": sorted(included),
+            "reasons": reasons,
+            "complete": not queue and not truncation_reasons,
+            "truncation_reasons": sorted(truncation_reasons),
+        }
 
-    def impact_federated(self, federation: Any, *, max_nodes: int = 1000) -> dict[str, Any]:
+    def impact_federated(
+        self,
+        federation: Any,
+        *,
+        max_nodes: int = 1000,
+        max_depth: int = MAX_IMPACT_DEPTH,
+        max_edges: int = MAX_IMPACT_EDGES,
+        max_bytes: int = MAX_IMPACT_BYTES,
+    ) -> dict[str, Any]:
         """Traverse pinned federation consumers; implicit latest is impossible."""
-        if max_nodes <= 0:
-            raise SemanticDiffError("impact_budget_invalid")
-        queue = sorted(item.handle for item in self.records)
+        _impact_budget(max_nodes, "impact_budget_invalid", minimum=1, maximum=MAX_IMPACT_NODES)
+        _impact_budget(max_depth, "impact_depth_invalid", minimum=0, maximum=MAX_IMPACT_DEPTH)
+        _impact_budget(max_edges, "impact_edge_budget_invalid", minimum=0, maximum=MAX_IMPACT_EDGES)
+        _impact_budget(max_bytes, "impact_byte_budget_invalid", minimum=1, maximum=MAX_IMPACT_BYTES)
+        queue: list[tuple[str, int]] = [(item.handle, 0) for item in self.records]
         included: set[str] = set()
         reasons: dict[str, str] = {}
-        paths: dict[str, list[str]] = {handle: [handle] for handle in queue}
+        paths: dict[str, list[str]] = {handle: [handle] for handle, _ in queue}
+        truncation_reasons: set[str] = set()
+        traversed_edges = 0
+        used_bytes = 0
         while queue and len(included) < max_nodes:
-            current = queue.pop(0)
+            current, depth = queue.pop(0)
             if current in included:
                 continue
             included.add(current)
             reasons[current] = "direct_change" if current in paths and len(paths[current]) == 1 else "federated_consumer"
+            if depth >= max_depth:
+                if federation.dependencies(current):
+                    truncation_reasons.add("max_depth")
+                continue
             for edge in federation.dependencies(current):
+                traversed_edges += 1
+                if traversed_edges > max_edges:
+                    truncation_reasons.add("max_edges")
+                    break
                 target = edge["target_handle"]
+                edge_bytes = len(_canonical({"source": current, "target": target}))
+                if used_bytes + edge_bytes > max_bytes:
+                    truncation_reasons.add("max_bytes")
+                    break
+                used_bytes += edge_bytes
                 if target not in paths:
                     paths[target] = paths[current] + [target]
-                    queue.append(target)
+                    queue.append((target, depth + 1))
+        if queue:
+            truncation_reasons.add("max_nodes")
         return {
             "schema": "simplicio.fast.impact-explanation/v1",
             "federation_generation": federation.generation,
             "nodes": sorted(included),
             "reasons": reasons,
             "paths": paths,
-            "complete": not queue and self.complete,
-            "truncation_reasons": list(self.truncation_reasons) if not self.complete else [],
+            "complete": not queue and not truncation_reasons and self.complete,
+            "truncation_reasons": sorted(set(self.truncation_reasons).union(truncation_reasons)) if not self.complete or truncation_reasons else [],
         }
 
 
@@ -217,4 +290,8 @@ def diff_generations(source: Mapping[str, Mapping[str, Any]], proposed: Mapping[
     return SemanticDiff(source_generation, proposed_generation, records)
 
 
-__all__ = ["DIFF_SCHEMA", "DiffRecord", "SemanticDiff", "SemanticDiffError", "WhatIfOverlay", "diff_generations"]
+__all__ = [
+    "DIFF_SCHEMA", "DiffRecord", "MAX_IMPACT_BYTES", "MAX_IMPACT_DEPTH",
+    "MAX_IMPACT_EDGES", "MAX_IMPACT_NODES", "SemanticDiff", "SemanticDiffError",
+    "WhatIfOverlay", "diff_generations",
+]
