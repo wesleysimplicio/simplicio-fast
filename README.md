@@ -341,7 +341,7 @@ simplicio-fast parser-payload . --mapper-handoff mapper-handoff.json --output pa
 The command fails closed on missing Mapper IDs, unsupported schemas, stale artifact
 digests, missing sources or unknown relation targets.
 
-Version 2.0.18 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
+Version 2.0.20 provides `ingest`, `understand`, `plan`, `apply`, `context`, `doctor`, `refresh`,
 `query` and the CRUD proof. Internal mapping/editing remain bootstrap fallbacks when integrations
 are absent; `doctor` identifies whether the complete integrated path is ready.
 The `build`, `query`, direct-index `search`, bounded `context`, typed `impact`, `stats` and
@@ -495,7 +495,7 @@ precompiled-only policy without access to the source checkout. The root
 `release-policy.json` is a checked mirror, and the integrity gate rejects drift
 between the two.
 
-Version 2.0.18 covers:
+Version 2.0.20 covers:
 
 - complete user CRUD and later status change;
 - normalized-email conflict;
@@ -585,5 +585,5 @@ See the granular cross-repository plan:
 
 ## License and status
 
-Version 2.0.18 is governed by the local release-integrity gate. Review [CHANGELOG.md](CHANGELOG.md),
+Version 2.0.20 is governed by the local release-integrity gate. Review [CHANGELOG.md](CHANGELOG.md),
 `AGENTS.md` and open issues before making it mandatory across the entire Simplicio ecosystem.
