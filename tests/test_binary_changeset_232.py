@@ -11,6 +11,7 @@ from simplicio_fast.binary_changeset import (
     BinaryChangeSet,
     BinaryChangeSetError,
     ChangeOperation,
+    canonical,
     decode_binary,
     inspect_binary,
     materialize,
@@ -347,6 +348,10 @@ class BinaryChangeSet232Test(unittest.TestCase):
                     ("x.py",),
                     (operation,),
                 )
+
+    def test_canonical_json_rejects_non_finite_numbers(self):
+        with self.assertRaisesRegex(BinaryChangeSetError, "json_encoding_invalid"):
+            canonical({"value": float("nan")})
 
 
 if __name__ == "__main__":

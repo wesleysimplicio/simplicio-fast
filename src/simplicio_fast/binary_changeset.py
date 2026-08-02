@@ -41,9 +41,16 @@ class BinaryChangeSetUnknownEffect(BinaryChangeSetError):
 
 
 def canonical(value: Any) -> bytes:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode("utf-8")
+    try:
+        return json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode("utf-8")
+    except (TypeError, ValueError, OverflowError) as error:
+        raise BinaryChangeSetError("json_encoding_invalid") from error
 
 
 def sha256(data: bytes | str) -> str:
@@ -896,7 +903,7 @@ class DevCliAdapter:
                     "--apply",
                     "--json",
                 ],
-                input=json.dumps(plan, sort_keys=True),
+                input=json.dumps(plan, sort_keys=True, allow_nan=False),
                 capture_output=True,
                 text=True,
                 check=False,
@@ -915,7 +922,7 @@ class DevCliAdapter:
             or not result.get("applied")
         ):
             raise BinaryChangeSetError(
-                "dev_cli_rejected", json.dumps(result, sort_keys=True)
+                "dev_cli_rejected", json.dumps(result, sort_keys=True, allow_nan=False)
             )
         return {"schema": ADAPTER_SCHEMA, "status": "applied", "result": result}
 
