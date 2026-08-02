@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.0.23 - 2026-08-02
+
+- Publish the complete LLM-facing Fast command and feature index, including
+  every snapshot, context, changeset, workspace, rollout, and conformance
+  action with its `--help` discovery contract.
+- Align the optional integrated dependency floors with Mapper `0.26.11` and
+  Dev CLI `0.18.6` for the coordinated release train.
+
+
 ## 2.0.22 - 2026-08-02
 
 - Synchronize the Fast release train with Mapper 0.26.10, Dev CLI 0.18.5,

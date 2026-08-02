@@ -1,0 +1,28 @@
+# Simplicio Fast LLM guide
+
+Canonical instructions: AGENTS.md
+Claude mirror: CLAUDE.md
+Gemini mirror: GEMINI.md
+Command and feature index: docs/CLI_COMMANDS.md
+
+Identity
+--------
+`simplicio-fast` turns a repository into a versioned binary/mmap semantic
+snapshot, bounded hash-verified context, PlanDAGs, guarded changesets and
+workspace/rollout receipts. It is not an LLM, scheduler, policy authority or
+source-of-truth database.
+
+Public commands
+---------------
+`simplicio-fast --help` lists snapshot, query, context, navigation, plan,
+delivery, changeset, workspace, scoring, capability, rollout and service
+commands. `simplicio-fast-cross-repo --help` lists stack-lock validation.
+Every command and nested action has `--help`; consult it before execution.
+
+Safety
+------
+Use `--json` for automation, preserve versioned schemas, reject unknown major
+versions, keep apply/delivery dry-run unless explicitly authorized, and use
+Mapper for extraction, Dev CLI for source mutation, Runtime for effects and
+Loop for convergence. GitHub issue bodies contain objective plus Execution
+for implementation/deployment and tests, without Acceptance Criteria sections.
