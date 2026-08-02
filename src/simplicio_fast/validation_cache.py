@@ -14,6 +14,7 @@ from typing import Any, Mapping, Sequence
 
 CACHE_KEY_SCHEMA = "simplicio.fast.validation-cache-key/v1"
 RESULT_SCHEMA = "simplicio.fast.validation-result/v1"
+MAX_AFFECTED_TESTS = 100_000
 
 
 class ValidationCacheError(ValueError):
@@ -297,7 +298,7 @@ class ValidationCache:
         """Plan or apply bounded removal of unleased generations."""
         if isinstance(max_entries, bool) or not isinstance(max_entries, int) or max_entries < 1:
             raise ValidationCacheError("gc_budget_invalid")
-        keep = {str(generation) for generation in keep_generations if str(generation)}
+        keep = set(_validate_string_sequence(keep_generations, "gc_generations_invalid"))
         with self._lock:
             candidates = sorted(
                 key_digest
@@ -341,11 +342,26 @@ class ValidationCache:
             return entry
 
     def affected(self, changed_handles: Sequence[str], tests: Mapping[str, Sequence[str]], *, max_tests: int = 1000) -> dict[str, Any]:
-        if isinstance(max_tests, bool) or not isinstance(max_tests, int) or max_tests <= 0:
+        if (
+            isinstance(max_tests, bool)
+            or not isinstance(max_tests, int)
+            or not 0 < max_tests <= MAX_AFFECTED_TESTS
+        ):
             raise ValidationCacheError("selection_budget_invalid")
-        changed = set(changed_handles)
+        changed = set(_validate_string_sequence(changed_handles, "changed_handles_invalid"))
+        if not isinstance(tests, Mapping):
+            raise ValidationCacheError("test_mapping_invalid")
+        normalized_tests: dict[str, tuple[str, ...]] = {}
+        for handle, values in tests.items():
+            if not isinstance(handle, str) or not handle:
+                raise ValidationCacheError("test_mapping_invalid")
+            normalized_tests[handle] = _validate_string_sequence(
+                values, "test_values_invalid"
+            )
         selected_by_handle = {
-            handle: sorted(set(values)) for handle, values in tests.items() if handle in changed
+            handle: sorted(set(values))
+            for handle, values in normalized_tests.items()
+            if handle in changed
         }
         selected = sorted({test for values in selected_by_handle.values() for test in values})
         complete = len(selected) <= max_tests

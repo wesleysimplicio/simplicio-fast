@@ -53,6 +53,12 @@ def test_invalid_cache_inputs_fail_closed() -> None:
         ValidationKey("", "lock", "tool", ("test",)).to_dict()
     with pytest.raises(ValidationCacheError, match="selection_budget_invalid"):
         ValidationCache().affected(("h",), {}, max_tests=0)
+    with pytest.raises(ValidationCacheError, match="changed_handles_invalid"):
+        ValidationCache().affected(("h", 1), {})
+    with pytest.raises(ValidationCacheError, match="test_values_invalid"):
+        ValidationCache().affected(("h",), {"h": ("test/a", 1)})
+    with pytest.raises(ValidationCacheError, match="gc_generations_invalid"):
+        ValidationCache().gc(keep_generations=(True,))
 
 
 def test_validation_cache_persistence_is_deterministic_and_tamper_evident(tmp_path) -> None:
