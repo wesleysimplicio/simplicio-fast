@@ -6,6 +6,7 @@ import pytest
 
 from simplicio_fast.federation import (
     FederatedEdge,
+    Federation,
     FederationError,
     FederationMember,
     _canonical,
@@ -176,3 +177,10 @@ def test_federation_boundaries_fail_closed_for_handles_and_delta_types() -> None
         federation.apply_delta(added_edges=[object()])
     with pytest.raises(FederationError, match="delta_repository_invalid"):
         federation.apply_delta(removed_repositories=[""])
+
+
+def test_federation_constructor_rejects_non_sequence_inputs() -> None:
+    with pytest.raises(FederationError, match="member_type_invalid"):
+        Federation(object())  # type: ignore[arg-type]
+    with pytest.raises(FederationError, match="edge_type_invalid"):
+        Federation([member("repo")], object())  # type: ignore[arg-type]
