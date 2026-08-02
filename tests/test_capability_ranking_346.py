@@ -61,6 +61,14 @@ def test_capability_ranking_rejects_coercible_invalid_types() -> None:
         CapabilityCandidate("policy", "tool", "1", ("query",), policy_eligible="yes")
     with pytest.raises(CapabilityRankingError, match="candidate_provenance_invalid"):
         CapabilityCandidate("provenance", "tool", "1", ("query",), provenance=(1,))
+    with pytest.raises(CapabilityRankingError, match="candidate_capabilities_invalid"):
+        CapabilityCandidate("capabilities", "tool", "1", "query")
+    with pytest.raises(CapabilityRankingError, match="candidate_provenance_invalid"):
+        CapabilityCandidate(
+            "provenance-string", "tool", "1", ("query",), provenance="receipt"
+        )
+    with pytest.raises(CapabilityRankingError, match="candidate_type_invalid"):
+        rank_capabilities([object()], ("query",))
     with pytest.raises(CapabilityRankingError, match="ranking_request_invalid"):
         rank_capabilities([], ("query",), max_results=True)
     with pytest.raises(CapabilityRankingError, match="ranking_request_invalid"):
@@ -100,6 +108,15 @@ def test_capability_ranking_exposes_pareto_frontier_without_auto_selecting() -> 
     assert [item["handle"] for item in result["pareto_frontier"]] == ["cheap", "fast"]
     assert result["candidates"][0]["handle"] in {"cheap", "fast"}
     assert len(result["pareto_frontier"]) == 2
+
+
+def test_capability_ranking_keeps_missing_metrics_unknown() -> None:
+    result = rank_capabilities(
+        [CapabilityCandidate("unknown", "worker", "1", ("query",), policy_eligible=True)],
+        ("query",),
+    )
+    assert result["candidates"][0]["score_components"]["cost"] is None
+    assert result["candidates"][0]["score_components"]["latency"] is None
 
 
 def test_capability_ranking_bounds_candidate_stream(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -39,8 +39,12 @@ class CapabilityCandidate:
             for value in (self.handle, self.kind, self.version, self.trust)
         ):
             raise CapabilityRankingError("candidate_identity_invalid")
+        if not isinstance(self.capabilities, (tuple, list)):
+            raise CapabilityRankingError("candidate_capabilities_invalid")
         if any(not isinstance(item, str) or not item.strip() for item in self.capabilities):
             raise CapabilityRankingError("candidate_capabilities_invalid")
+        if not isinstance(self.provenance, (tuple, list)):
+            raise CapabilityRankingError("candidate_provenance_invalid")
         if any(not isinstance(item, str) or not item.strip() for item in self.provenance):
             raise CapabilityRankingError("candidate_provenance_invalid")
         if not isinstance(self.scope, str) or not self.scope.strip():
@@ -96,6 +100,8 @@ def rank_capabilities(
     required_set = set(required)
     facts: list[dict[str, Any]] = []
     for candidate in candidates:
+        if not isinstance(candidate, CapabilityCandidate):
+            raise CapabilityRankingError("candidate_type_invalid")
         if len(facts) >= MAX_CANDIDATES:
             raise CapabilityRankingError("candidate_count_limit")
         matched = sorted(required_set.intersection(candidate.capabilities))
@@ -118,13 +124,13 @@ def rank_capabilities(
         score_components = {
             "matched_capabilities": len(matched) * 100,
             "missing_capabilities": -len(missing) * 1000,
-            "cost": -(candidate.estimated_cost or 0),
-            "latency": -(candidate.estimated_latency_ms or 0),
+            "cost": -candidate.estimated_cost if candidate.estimated_cost is not None else None,
+            "latency": -candidate.estimated_latency_ms if candidate.estimated_latency_ms is not None else None,
             "availability": 0 if candidate.available else -10000,
             "policy": 0 if policy == "eligible" else -10000 if policy == "rejected" else -5000,
             "scope": 0 if scope_match else -10000,
         }
-        score = sum(score_components.values())
+        score = sum(value for value in score_components.values() if isinstance(value, int))
         if missing:
             reason = "missing_required_capabilities"
         elif not candidate.available:
