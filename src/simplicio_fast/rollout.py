@@ -8,6 +8,13 @@ from pathlib import Path
 from typing import Literal
 
 RolloutMode = Literal["shadow", "canary", "integrated", "fallback", "rollback"]
+_ROLLOUT_MODES = frozenset({"shadow", "canary", "integrated", "fallback", "rollback"})
+
+
+class RolloutError(ValueError):
+    def __init__(self, reason_code: str) -> None:
+        self.reason_code = reason_code
+        super().__init__(reason_code)
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +40,14 @@ class RolloutController:
         generation: str | None = None,
         reason: str | None = None,
     ) -> dict[str, object]:
+        if not isinstance(mode, str) or mode not in _ROLLOUT_MODES:
+            raise RolloutError("rollout_mode_invalid")
+        if generation is not None and (not isinstance(generation, str) or not generation.strip()):
+            raise RolloutError("rollout_generation_invalid")
+        if reason is not None and not isinstance(reason, str):
+            raise RolloutError("rollout_reason_invalid")
+        if mode == "rollback" and not reason:
+            raise RolloutError("rollout_reason_required")
         previous = self._read().get("mode") if self.state_path.is_file() else None
         receipt = RolloutReceipt(
             schema="simplicio.fast.rollout-receipt/v1",
@@ -61,6 +76,12 @@ class RolloutController:
     def _read(self) -> dict[str, object]:
         try:
             value = json.loads(self.state_path.read_text(encoding="utf-8"))
-        except (FileNotFoundError, json.JSONDecodeError):
+        except FileNotFoundError:
             return {}
-        return value if isinstance(value, dict) else {}
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise RolloutError("rollout_state_invalid") from error
+        if not isinstance(value, dict) or (
+            "mode" in value and value["mode"] not in _ROLLOUT_MODES
+        ):
+            raise RolloutError("rollout_state_invalid")
+        return value
