@@ -104,6 +104,11 @@ class KnowledgeProjection:
             previous = self._facts.get(fact.stable_handle)
             if previous is not None:
                 if previous.digest == fact.digest and previous.version == fact.version:
+                    if previous.state != fact.state:
+                        self._facts[fact.stable_handle] = fact
+                        self._conflicts.discard(fact.stable_handle)
+                        changed.append(fact.stable_handle)
+                        continue
                     self._tombstones.discard(fact.stable_handle)
                     continue
                 self._conflicts.add(fact.stable_handle)

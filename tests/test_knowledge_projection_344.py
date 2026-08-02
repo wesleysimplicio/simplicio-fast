@@ -43,3 +43,27 @@ def test_knowledge_projection_preserves_conflict_and_tombstone_lineage() -> None
     removed = projection.apply_delta(tombstones=["same"])
     assert removed["tombstones"] == ["same"]
     assert projection.snapshot()["tombstones"] == ["same"]
+
+
+def test_knowledge_projection_applies_same_version_revocation() -> None:
+    projection = KnowledgeProjection("repo", "tenant", "g1")
+    active = fact("revocable", "parser contract")
+    projection.apply_delta([active])
+    revoked = KnowledgeFact(
+        active.source_type,
+        active.producer,
+        active.stable_handle,
+        active.version,
+        active.provenance,
+        active.trust,
+        active.digest,
+        active.text,
+        active.repository,
+        active.scope,
+        state="revoked",
+        applicability=active.applicability,
+    )
+    delta = projection.apply_delta([revoked])
+    assert delta["changed_handles"] == ["revocable"]
+    assert delta["conflicts"] == []
+    assert projection.query("parser contract")["handles"] == []
