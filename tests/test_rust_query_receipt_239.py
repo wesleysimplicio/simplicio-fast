@@ -356,6 +356,11 @@ def test_resident_handshake_rejects_empty_identity_and_invalid_call_frames() -> 
         _canonical({"invalid": object()})
 
 
+def test_resident_handshake_rejects_non_object_root() -> None:
+    with pytest.raises(RustSessionError, match="session_handshake_invalid"):
+        RustCoreSession._validate_handshake([])  # type: ignore[arg-type]
+
+
 def test_rust_queries_match_python_on_frozen_conformance_golden(tmp_path: Path) -> None:
     cargo = shutil.which("cargo")
     if cargo is None:

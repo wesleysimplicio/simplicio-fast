@@ -78,6 +78,8 @@ class RustCoreSession:
         expected_manifest: Mapping[str, Any] | None = None,
         executable: str | Path | None = None,
     ) -> None:
+        if not isinstance(handshake, dict):
+            raise RustSessionError("session_handshake_invalid")
         if (
             handshake.get("schema") != SESSION_SCHEMA
             or handshake.get("abi") != SESSION_SCHEMA
