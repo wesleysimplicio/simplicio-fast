@@ -19,6 +19,13 @@ AUTHORIZED_PRODUCERS = frozenset({"mapper", "runtime"})
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _ACTIVE = "active"
 _INACTIVE = frozenset({"revoked", "expired", "conflicted", "tombstoned"})
+_TRUST_RANK = {
+    "untrusted": 0,
+    "derived_fact": 1,
+    "advisory": 2,
+    "verified": 3,
+    "authoritative": 4,
+}
 MAX_FACTS = 100_000
 MAX_QUERY_RESULTS = 10_000
 MAX_QUERY_BYTES = 8 * 1024 * 1024
@@ -202,11 +209,23 @@ class KnowledgeProjection:
             "handoff_schema": HANDOFF_SCHEMA,
         }
 
-    def query(self, task: str, *, max_results: int = 32, max_bytes: int = 256 * 1024, max_tokens: int = 4096, source_types: Sequence[str] = (), as_of: int | None = None) -> dict[str, Any]:
+    def query(
+        self,
+        task: str,
+        *,
+        max_results: int = 32,
+        max_bytes: int = 256 * 1024,
+        max_tokens: int = 4096,
+        source_types: Sequence[str] = (),
+        as_of: int | None = None,
+        trust_floor: str | None = None,
+    ) -> dict[str, Any]:
         if not isinstance(task, str):
             raise KnowledgeProjectionError("query_task_invalid")
         if source_types:
             _string_sequence(source_types, "query_source_types_invalid")
+        if trust_floor is not None and trust_floor not in _TRUST_RANK:
+            raise KnowledgeProjectionError("query_trust_invalid")
         if (
             not task
             or isinstance(max_results, bool)
@@ -226,6 +245,8 @@ class KnowledgeProjection:
             candidates: list[dict[str, Any]] = []
             for fact in self._facts.values():
                 if fact.stable_handle in self._conflicts or fact.stable_handle in self._tombstones or fact.state in _INACTIVE or (source_types and fact.source_type not in source_types):
+                    continue
+                if trust_floor is not None and _TRUST_RANK.get(fact.trust, -1) < _TRUST_RANK[trust_floor]:
                     continue
                 if as_of is not None and ((fact.valid_from is not None and as_of < fact.valid_from) or (fact.valid_until is not None and as_of > fact.valid_until)):
                     continue
@@ -264,7 +285,7 @@ class KnowledgeProjection:
                 selected.append(item)
                 bytes_used += encoded_size
                 tokens_used += estimated
-            return {"schema": RESULT_SCHEMA, "query_schema": QUERY_SCHEMA, "projection_schema": PROJECTION_SCHEMA, "repository": self.repository, "scope": self.scope, "generation": self.generation, "handles": [item["stable_handle"] for item in selected], "results": selected, "truncated": bool(reasons) or len(candidates) > len(selected), "truncation_reasons": sorted(set(reasons))}
+            return {"schema": RESULT_SCHEMA, "query_schema": QUERY_SCHEMA, "projection_schema": PROJECTION_SCHEMA, "repository": self.repository, "scope": self.scope, "generation": self.generation, "trust_floor": trust_floor, "handles": [item["stable_handle"] for item in selected], "results": selected, "truncated": bool(reasons) or len(candidates) > len(selected), "truncation_reasons": sorted(set(reasons))}
 
     def snapshot(self) -> dict[str, Any]:
         """Return a bounded metadata snapshot without exposing producer storage."""
