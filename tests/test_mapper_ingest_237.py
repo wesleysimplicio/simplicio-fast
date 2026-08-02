@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
 import pytest
@@ -13,7 +14,7 @@ import pytest
 from simplicio_fast.mapper_ingest import MapperIngestError, validate_handoff
 from simplicio_fast.delivery import DeliveryEngine
 from simplicio_fast.engine import select_engine
-from simplicio_fast.snapshot import build_snapshot
+from simplicio_fast.snapshot import Snapshot, build_snapshot
 
 
 def _run_mapper(
@@ -224,3 +225,13 @@ def test_installed_mapper_handoff_is_accepted(tmp_path: Path) -> None:
     assert compiled["schema"] == "simplicio.fast.mapper-snapshot/v1"
     assert compiled["mapper_generation"] == provenance["generation"]
     assert compiled["symbols"] >= 2
+
+    def read_generation() -> tuple[str, int]:
+        with Snapshot(snapshot) as reader:
+            return reader.generation, len(reader.context(root, "helper"))
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        readers = list(pool.map(lambda _: read_generation(), range(20)))
+    assert len(readers) == 20
+    assert {generation for generation, _ in readers} == {compiled["fast_generation"]}
+    assert all(count >= 1 for _, count in readers)
