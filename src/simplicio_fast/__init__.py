@@ -28,6 +28,8 @@ _EXPORTS = {
     "NavigationPage": (".navigation", "NavigationPage"),
     "PrismArena": (".prism_arena", "PrismArena"),
     "PrismWorkDelta": (".prism_arena", "PrismWorkDelta"),
+    "ProjectionEnvelope": (".projection", "ProjectionEnvelope"),
+    "ProjectionError": (".projection", "ProjectionError"),
     "RequestKey": (".pager", "RequestKey"),
     "RuntimeArtifact": (".runtime_backend", "RuntimeArtifact"),
     "RuntimeBackendError": (".runtime_backend", "RuntimeBackendError"),
