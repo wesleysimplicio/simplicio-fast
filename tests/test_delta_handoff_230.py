@@ -602,6 +602,25 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 report["parity_result"]["composed_symbol_count_reason"],
             )
 
+    def test_persisted_unchanged_delta_revalidates_current_source_hashes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            delta = store.create_delta(base.generation_id, "stale", ["one.py"])
+            (root / "one.py").write_text(
+                "def one():\n    return 99\n", encoding="utf-8"
+            )
+
+            report = store.handoff(
+                base.generation_id,
+                "stale",
+                ["one.py"],
+                delta_generation=delta.delta_generation,
+            )
+
+            self.assertEqual("parity_mismatch", report["status"])
+            self.assertFalse(report["parity"])
+
     def test_benchmark_rejects_fewer_than_ten_repetitions(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least 10"):
             run_delta_benchmark(files=4, repetitions=9)
