@@ -208,7 +208,8 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         )
         assert result["planner"]["records_decoded"] == 1
         assert session.call("session_cache_stats", {}) == {"snapshots": 1}
-        session.restart()
+        process = session._process
+        process.kill()
         assert session.call(
             "query", {"snapshot": str(snapshot), "term": "helper", "limit": 1}
         )["planner"]["records_decoded"] == 1
@@ -216,12 +217,24 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         metrics = session.metrics()
         assert metrics["starts"] == 2
         assert metrics["reconnects"] == 1
+        assert metrics["retries"] == 1
+        assert metrics["failures"] == 1
         assert metrics["requests"] == 4
         assert metrics["bytes_in"] > 0
         assert metrics["bytes_out"] > 0
         assert metrics["wall_ms"] >= 0
         assert metrics["mapped_generations"] == 1
         assert metrics["cache_hits"] == 2
+
+    with RustCoreSession(executable) as non_read_only_session:
+        non_read_only_session.restart()
+        non_read_only_session._process.kill()
+        with pytest.raises(RustSessionError, match="session_crashed"):
+            non_read_only_session.call("write", {})
+        metrics = non_read_only_session.metrics()
+        assert metrics["starts"] == 2
+        assert metrics["reconnects"] == 1
+        assert metrics["retries"] == 0
 
     with RustCoreSession(executable) as concurrent_session:
         def read_query(_: int) -> int:

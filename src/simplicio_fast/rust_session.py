@@ -13,10 +13,12 @@ from typing import Any, Mapping
 
 SESSION_SCHEMA = "simplicio.fast.engine-session/v1"
 MAX_FRAME_BYTES = 1 * 1024 * 1024
+MAX_READ_ONLY_RETRIES = 1
+READ_ONLY_OPERATIONS = frozenset({"stats", "query", "context", "session_cache_stats"})
 
 
 class RustSessionError(RuntimeError):
-    """A Rust session failed without retrying or fabricating a response."""
+    """A Rust session failed without fabricating a response."""
 
 
 def _canonical(value: Any) -> str:
@@ -39,6 +41,7 @@ class RustCoreSession:
             "reconnects": 0,
             "requests": 0,
             "failures": 0,
+            "retries": 0,
             "bytes_in": 0,
             "bytes_out": 0,
             "wall_ms": 0.0,
@@ -141,20 +144,21 @@ class RustCoreSession:
             raise RustSessionError("session_frame_too_large")
         started = time.perf_counter()
         with self._lock:
-            self._metrics["bytes_in"] += len(frame.encode("utf-8")) + 1
-            if self._process.poll() is not None:
-                raise RustSessionError("session_crashed")
-            try:
-                if self._process.stdin is None:
-                    raise RustSessionError("session_stdin_missing")
-                self._process.stdin.write(frame + "\n")
-                self._process.stdin.flush()
-                response = self._readline()
-            except (BrokenPipeError, OSError, RustSessionError) as error:
-                self._metrics["failures"] += 1
-                raise RustSessionError("session_crashed") from error
-            self._metrics["requests"] += 1
-            self._metrics["bytes_out"] += len(_canonical(response)) + 1
+            for attempt in range(MAX_READ_ONLY_RETRIES + 1):
+                try:
+                    response = self._call_once_locked(frame)
+                except RustSessionError as error:
+                    retryable = (
+                        str(error) == "session_crashed"
+                        and operation in READ_ONLY_OPERATIONS
+                        and attempt < MAX_READ_ONLY_RETRIES
+                    )
+                    if not retryable:
+                        raise
+                    self._metrics["retries"] += 1
+                    self._restart_locked()
+                else:
+                    break
             self._metrics["wall_ms"] += (time.perf_counter() - started) * 1000
         if response.get("ok") is not True:
             self._metrics["failures"] += 1
@@ -170,6 +174,24 @@ class RustCoreSession:
                     self._metrics["cache_hits"] += 1
         return result
 
+    def _call_once_locked(self, frame: str) -> dict[str, Any]:
+        self._metrics["bytes_in"] += len(frame.encode("utf-8")) + 1
+        if self._process.poll() is not None:
+            self._metrics["failures"] += 1
+            raise RustSessionError("session_crashed")
+        try:
+            if self._process.stdin is None:
+                raise RustSessionError("session_stdin_missing")
+            self._process.stdin.write(frame + "\n")
+            self._process.stdin.flush()
+            response = self._readline()
+        except (BrokenPipeError, OSError, RustSessionError) as error:
+            self._metrics["failures"] += 1
+            raise RustSessionError("session_crashed") from error
+        self._metrics["requests"] += 1
+        self._metrics["bytes_out"] += len(_canonical(response)) + 1
+        return response
+
     def metrics(self) -> dict[str, int | float]:
         """Return resident-session request counters for benchmark receipts."""
         with self._lock:
@@ -178,30 +200,33 @@ class RustCoreSession:
     def restart(self) -> None:
         """Restart the child and require a fresh verified handshake."""
         with self._lock:
+            self._restart_locked()
+
+    def _restart_locked(self) -> None:
+        self.close()
+        try:
+            self._process = subprocess.Popen(
+                [self.executable, "--session"],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                text=True,
+                encoding="utf-8",
+                bufsize=1,
+            )
+            handshake = self._readline()
+            self._validate_handshake(
+                handshake, self._expected_manifest, self.executable
+            )
+        except (OSError, ValueError, RustSessionError) as error:
+            self._metrics["failures"] += 1
             self.close()
-            try:
-                self._process = subprocess.Popen(
-                    [self.executable, "--session"],
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.DEVNULL,
-                    text=True,
-                    encoding="utf-8",
-                    bufsize=1,
-                )
-                handshake = self._readline()
-                self._validate_handshake(
-                    handshake, self._expected_manifest, self.executable
-                )
-            except (OSError, ValueError, RustSessionError) as error:
-                self._metrics["failures"] += 1
-                self.close()
-                raise RustSessionError(
-                    f"session_restart_failed:{type(error).__name__}"
-                ) from error
-            self.handshake = handshake
-            self._metrics["starts"] += 1
-            self._metrics["reconnects"] += 1
+            raise RustSessionError(
+                f"session_restart_failed:{type(error).__name__}"
+            ) from error
+        self.handshake = handshake
+        self._metrics["starts"] += 1
+        self._metrics["reconnects"] += 1
 
     def close(self) -> None:
         process = getattr(self, "_process", None)
@@ -222,4 +247,11 @@ class RustCoreSession:
         self.close()
 
 
-__all__ = ["MAX_FRAME_BYTES", "RustCoreSession", "RustSessionError", "SESSION_SCHEMA"]
+__all__ = [
+    "MAX_FRAME_BYTES",
+    "MAX_READ_ONLY_RETRIES",
+    "READ_ONLY_OPERATIONS",
+    "RustCoreSession",
+    "RustSessionError",
+    "SESSION_SCHEMA",
+]
