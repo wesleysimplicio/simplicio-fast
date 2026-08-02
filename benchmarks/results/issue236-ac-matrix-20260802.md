@@ -3,8 +3,8 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. Current master is `fc63531`;
-the full Python suite passes `606 passed, 67 subtests` in 112.18s,
+owned by an external capability or service. Current master is `9717a4b`;
+the full Python suite passes `609 passed, 67 subtests` in 117.94s,
 and release-integrity passes all checks.
 
 | Issue | Current state | Current evidence | Remaining authoritative gate |
@@ -22,7 +22,7 @@ and release-integrity passes all checks.
 | #247 | PARTIAL | `3515bb5`; C# multi-project/partial/test-symbol E2E, 4 tests | Roslyn/native relations, affected-project invalidation, installed Linux/Windows E2E and coverage |
 | #248 | PARTIAL | `dffc0b1`; TS monorepo/project refs/aliases/TSX E2E, 4 tests | Native compiler relations, bounded invalidation, Node/React installed E2E and coverage |
 | #249 | PARTIAL | `d1ac156`; multi-crate Cargo discovery/symbol E2E, 5 tests | Native parser parity, Cargo relation/invalidation E2E, installed matrix and coverage |
-| #339 | PARTIAL | New Semantic Compute epic; explicitly depends on #236/#237–#249 and requires a new projection ABI plus cross-domain receipts | Contract/child issues, Code/Knowledge/Operations projections, installed SDK, parity and cross-domain benchmark |
+| #339 | PARTIAL | `9717a4b`; typed `simplicio.fast.projection/v1` envelope for Code/Knowledge/Operations with deterministic digest/handle and corruption/offset rejection tests | Contract/child issues, real Code/Knowledge/Operations producers, installed SDK, parity and cross-domain benchmark |
 
 ## Closure rule
 
