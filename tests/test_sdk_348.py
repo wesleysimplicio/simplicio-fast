@@ -65,7 +65,7 @@ def test_sdk_delta_and_error_contract_are_explicit() -> None:
     assert result["closure_handles"] == ["symbol:a", "symbol:downstream"]
 
 
-def test_sdk_rejects_malformed_inputs_with_typed_reason_codes() -> None:
+def test_sdk_rejects_malformed_inputs_with_typed_reason_codes(tmp_path) -> None:
     sdk = ProjectionSDK("repo")
     with pytest.raises(SDKError, match="envelope_invalid"):
         sdk.publish(object())  # type: ignore[arg-type]
@@ -75,6 +75,31 @@ def test_sdk_rejects_malformed_inputs_with_typed_reason_codes() -> None:
         sdk.compile_delta("g1", deleted_handles="symbol:a")  # type: ignore[arg-type]
     with pytest.raises(SDKError, match="closure_handles_invalid"):
         sdk.compile_delta("g1", closure_handles=("",))
+    with pytest.raises(SDKError, match="query_handle_invalid"):
+        sdk.query(1)  # type: ignore[arg-type]
+    with pytest.raises(SDKError, match="query_handle_invalid"):
+        asyncio.run(sdk.query_async(""))
+    with pytest.raises(SDKError, match="repository_invalid"):
+        ProjectionSDK(1)  # type: ignore[arg-type]
+    sdk.publish(envelope("symbol:a"))
+    foreign = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="symbol:foreign",
+        payload={"repository": "other", "name": "foreign"},
+    )
+    with pytest.raises(SDKError, match="projection_repository_mismatch"):
+        sdk.publish(foreign)
+    with pytest.raises(SDKError, match="projection_generation_stale"):
+        sdk.compile_delta("g2")
+    with pytest.raises(SDKError, match="context_budget_invalid"):
+        sdk.context(max_tokens=0)
+    invalid_path = tmp_path / "invalid.json"
+    invalid_path.write_text("{", encoding="utf-8")
+    with pytest.raises(SDKError, match="projection_store_invalid"):
+        ProjectionSDK.open(invalid_path, "repo")
 
 
 def test_sdk_compile_delta_supports_explicit_generation_swap() -> None:
