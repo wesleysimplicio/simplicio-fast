@@ -14,6 +14,11 @@ identical bytes and generation IDs. `consumers`, `dependencies` and `traverse`
 are bounded lookups; traversal returns provenance paths and an explicit
 `complete` flag. No query discovers or resolves an implicit `latest` member.
 
+`Federation.apply_delta()` returns a new generation, preserving unchanged
+members, removing tombstoned-member edges and reporting changed repositories,
+closure handles, tombstones and member reuse. The original federation remains
+available after a failed or partial proposal.
+
 This is a derived index, not a graph database, dependency resolver, source of
 truth, scheduler or release authority. Cross-repository fixtures, Rust parity,
 real Mapper contracts, worktree isolation and resource receipts remain required

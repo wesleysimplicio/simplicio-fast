@@ -151,6 +151,64 @@ class Federation:
     def encode(self) -> bytes:
         return _canonical(self.manifest()) + b"\n"
 
+    def apply_delta(
+        self,
+        changed_members: Sequence[FederationMember] = (),
+        *,
+        removed_repositories: Sequence[str] = (),
+        added_edges: Sequence[FederatedEdge] = (),
+        removed_edges: Sequence[FederatedEdge] = (),
+    ) -> tuple["Federation", dict[str, Any]]:
+        """Build a new generation from changed members without mutating this one."""
+        removed = {repository.casefold() for repository in removed_repositories}
+        active_changes: dict[str, FederationMember] = {}
+        tombstones = set(removed)
+        for member in changed_members:
+            key = member.repository.casefold()
+            if member.tombstone:
+                tombstones.add(key)
+            else:
+                active_changes[key] = member
+        members = [
+            member
+            for member in self.members
+            if member.repository.casefold() not in tombstones
+            and member.repository.casefold() not in active_changes
+        ]
+        members.extend(active_changes.values())
+        removed_edge_set = set(removed_edges)
+        def belongs_to_removed(edge: FederatedEdge) -> bool:
+            return any(
+                edge.source_handle.casefold().startswith(repository + ":")
+                or edge.target_handle.casefold().startswith(repository + ":")
+                for repository in tombstones
+            )
+        edges = [
+            edge
+            for edge in self.edges
+            if edge not in removed_edge_set and not belongs_to_removed(edge)
+        ]
+        edges.extend(added_edges)
+        next_generation = Federation(members, edges)
+        closure = sorted(
+            {
+                handle
+                for edge in (*added_edges, *removed_edges)
+                for handle in (edge.source_handle, edge.target_handle)
+            }
+        )
+        receipt = {
+            "schema": "simplicio.fast.federated-delta/v1",
+            "from_generation": self.generation,
+            "to_generation": next_generation.generation,
+            "changed_repositories": sorted(active_changes),
+            "tombstones": sorted(tombstones),
+            "closure_handles": closure,
+            "reused_members": len(members) - len(active_changes),
+            "complete": True,
+        }
+        return next_generation, receipt
+
     def consumers(self, target_handle: str, *, max_edges: int = 1000) -> list[dict[str, Any]]:
         _text(target_handle, "target_handle_invalid")
         if max_edges < 0 or max_edges > MAX_EDGES:
