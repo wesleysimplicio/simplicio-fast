@@ -10,6 +10,13 @@ FACT_SCHEMA = "simplicio.fast.capability-fact/v1"
 CATALOG_SCHEMA = "simplicio.fast.capability-catalog-projection/v1"
 MAX_CANDIDATES = 100_000
 MAX_RESULTS = 10_000
+_TRUST_RANK = {
+    "untrusted": 0,
+    "derived_fact": 1,
+    "advisory": 2,
+    "verified": 3,
+    "authoritative": 4,
+}
 
 
 class CapabilityRankingError(ValueError):
@@ -84,6 +91,7 @@ def rank_capabilities(
     *,
     max_results: int = 32,
     required_scope: str | None = None,
+    required_trust: str | None = None,
 ) -> dict[str, Any]:
     if (
         not isinstance(required, Sequence)
@@ -97,8 +105,14 @@ def rank_capabilities(
             required_scope is not None
             and (not isinstance(required_scope, str) or not required_scope.strip())
         )
+        or (
+            required_trust is not None
+            and required_trust not in _TRUST_RANK
+        )
     ):
-        raise CapabilityRankingError("ranking_request_invalid")
+        raise CapabilityRankingError(
+            "ranking_trust_invalid" if required_trust is not None else "ranking_request_invalid"
+        )
     required_set = set(required)
     facts: list[dict[str, Any]] = []
     for candidate in candidates:
@@ -109,6 +123,10 @@ def rank_capabilities(
         matched = sorted(required_set.intersection(candidate.capabilities))
         missing = sorted(required_set.difference(candidate.capabilities))
         scope_match = required_scope is None or candidate.scope in {"*", required_scope}
+        trust_match = (
+            required_trust is None
+            or _TRUST_RANK.get(candidate.trust, -1) >= _TRUST_RANK[required_trust]
+        )
         policy = (
             "eligible"
             if candidate.policy_eligible is True
@@ -121,6 +139,7 @@ def rank_capabilities(
             "available": candidate.available,
             "policy_eligibility": policy == "eligible",
             "scope": scope_match,
+            "trust": trust_match,
         }
         eligible = all(hard_filter.values())
         score_components = {
@@ -131,6 +150,7 @@ def rank_capabilities(
             "availability": 0 if candidate.available else -10000,
             "policy": 0 if policy == "eligible" else -10000 if policy == "rejected" else -5000,
             "scope": 0 if scope_match else -10000,
+            "trust": 0 if trust_match else -10000,
         }
         score = sum(value for value in score_components.values() if isinstance(value, int))
         if missing:
@@ -141,6 +161,8 @@ def rank_capabilities(
             reason = f"policy_{policy}"
         elif not scope_match:
             reason = "scope_mismatch"
+        elif not trust_match:
+            reason = "trust_below_floor"
         else:
             reason = "eligible"
         facts.append({
@@ -196,6 +218,7 @@ def rank_capabilities(
         "schema": CATALOG_SCHEMA,
         "required_capabilities": sorted(required_set),
         "required_scope": required_scope,
+        "required_trust": required_trust,
         "candidates": facts[:max_results],
         "pareto_frontier": frontier,
         "truncated": len(facts) > max_results,

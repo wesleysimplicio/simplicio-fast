@@ -42,6 +42,29 @@ def test_capability_ranking_separates_hard_filters_and_unknown_metrics() -> None
     assert by_handle["other-tenant"]["selection_reason"] == "scope_mismatch"
 
 
+def test_capability_ranking_applies_owner_trust_floor_as_hard_filter() -> None:
+    result = rank_capabilities(
+        [
+            CapabilityCandidate(
+                "derived", "worker", "1", ("query",), trust="derived_fact", policy_eligible=True
+            ),
+            CapabilityCandidate(
+                "verified", "worker", "1", ("query",), trust="verified", policy_eligible=True
+            ),
+        ],
+        ("query",),
+        required_trust="verified",
+    )
+    by_handle = {item["handle"]: item for item in result["candidates"]}
+    assert by_handle["derived"]["eligible"] is False
+    assert by_handle["derived"]["hard_filter"]["trust"] is False
+    assert by_handle["derived"]["selection_reason"] == "trust_below_floor"
+    assert by_handle["verified"]["eligible"] is True
+    assert result["required_trust"] == "verified"
+    with pytest.raises(CapabilityRankingError, match="ranking_trust_invalid"):
+        rank_capabilities([], ("query",), required_trust="unknown")
+
+
 def test_capability_ranking_accepts_explicit_global_scope_and_rejects_bad_inputs() -> None:
     global_candidate = CapabilityCandidate(
         "global", "tool", "1", ("query",), policy_eligible=True, scope="*"

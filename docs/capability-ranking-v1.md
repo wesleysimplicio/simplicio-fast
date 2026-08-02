@@ -10,4 +10,6 @@ decisions.
 Missing required capabilities receive an explicit reason and unavailable
 candidates are penalized as facts rather than silently removed. Results are
 bounded and sorted by score plus stable identity. Provider manifests and
-cross-runtime parity remain required before #346 can close.
+cross-runtime parity remain required before #346 can close. A request may set a
+known `required_trust` floor; candidates below it remain in the explanation as
+ineligible with `trust_below_floor` and are never promoted to eligible.
