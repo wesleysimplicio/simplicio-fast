@@ -1,4 +1,5 @@
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import shutil
 import subprocess
@@ -198,3 +199,20 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         assert metrics["wall_ms"] >= 0
         assert metrics["mapped_generations"] == 1
         assert metrics["cache_hits"] == 2
+
+    with RustCoreSession(executable) as concurrent_session:
+        def read_query(_: int) -> int:
+            result = concurrent_session.call(
+                "query",
+                {"snapshot": str(snapshot), "term": "helper", "limit": 1},
+            )
+            return int(result["planner"]["records_decoded"])
+
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            decoded = list(pool.map(read_query, range(20)))
+        assert decoded == [1] * 20
+        assert concurrent_session.call("session_cache_stats", {}) == {"snapshots": 1}
+        concurrent_metrics = concurrent_session.metrics()
+        assert concurrent_metrics["starts"] == 1
+        assert concurrent_metrics["requests"] == 21
+        assert concurrent_metrics["mapped_generations"] == 1
