@@ -257,3 +257,15 @@ def test_validation_cache_load_rejects_type_coercion_and_duplicate_entries(tmp_p
     path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(ValidationCacheError, match="cache_duplicate_entry"):
         ValidationCache.load(path)
+
+
+def test_validation_cache_rejects_optional_key_types_and_string_sequence_coercion() -> None:
+    with pytest.raises(ValidationCacheError, match="cache_key_optional_field_invalid"):
+        ValidationKey(
+            "source", "lock", "tool", ("pytest",), config_digest=1  # type: ignore[arg-type]
+        ).to_dict()
+    cache = ValidationCache()
+    with pytest.raises(ValidationCacheError, match="result_command_invalid"):
+        cache.put(key(), status="pass", result={}, command="pytest")  # type: ignore[arg-type]
+    with pytest.raises(ValidationCacheError, match="result_evidence_invalid"):
+        cache.put(key(), status="pass", result={}, evidence="receipt:1")  # type: ignore[arg-type]
