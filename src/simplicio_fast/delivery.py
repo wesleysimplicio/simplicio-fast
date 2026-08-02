@@ -20,6 +20,8 @@ from . import __version__
 from .adapters import language_for_path
 from .integrations import run_runtime_effect_transaction
 from .mapper_ingest import MapperIngestError, validate_handoff
+from .mapper_snapshot import compile_mapper_payload
+from .parser_adapter import build_payload_from_mapper
 from .processor import ProjectProcessor
 from .semantic_scoring import (
     SemanticBudgets,
@@ -234,6 +236,35 @@ class DeliveryEngine:
                 raise MapperIngestError("mapper_missing")
             mapper_provenance = validate_handoff(self.root, mapper_handoff)
             mapper_handles = _mapper_symbol_handles(self.root, mapper_provenance)
+            try:
+                mapper_payload = build_payload_from_mapper(self.root, mapper_handoff)
+                sidecar = self.snapshot.with_name(self.snapshot.name + ".mapper.json")
+                sidecar_data: dict[str, Any] | None = None
+                if sidecar.is_file():
+                    try:
+                        candidate = json.loads(sidecar.read_text(encoding="utf-8"))
+                        if isinstance(candidate, dict):
+                            sidecar_data = candidate
+                    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                        sidecar_data = None
+                if (
+                    not self.snapshot.is_file()
+                    or sidecar_data is None
+                    or sidecar_data.get("mapper_generation")
+                    != mapper_provenance["generation"]
+                    or sidecar_data.get("handoff_sha256")
+                    != mapper_provenance["handoff_sha256"]
+                ):
+                    compile_mapper_payload(
+                        self.root,
+                        mapper_payload,
+                        self.snapshot,
+                        mapper_generation=str(mapper_provenance["generation"]),
+                        handoff_sha256=str(mapper_provenance["handoff_sha256"]),
+                    )
+            except (OSError, TypeError, ValueError) as error:
+                reason = getattr(error, "reason_code", None) or str(error)
+                raise MapperIngestError("mapper_compile_failed", reason) from error
         else:
             mapper_provenance = {
                 "schema": "simplicio.fast.mapper-ingest/v1",

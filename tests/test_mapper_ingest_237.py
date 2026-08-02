@@ -216,3 +216,11 @@ def test_installed_mapper_handoff_is_accepted(tmp_path: Path) -> None:
     assert receipt["mapper"]["mode"] == "integrated"
     assert receipt["mapper"]["traceability"] == "mapper-symbol-id"
     assert receipt["context"]["selected"]
+    compiled = json.loads(
+        (snapshot.with_name(snapshot.name + ".mapper.json")).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert compiled["schema"] == "simplicio.fast.mapper-snapshot/v1"
+    assert compiled["mapper_generation"] == provenance["generation"]
+    assert compiled["symbols"] >= 2
