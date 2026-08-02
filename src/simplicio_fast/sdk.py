@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
+from .compatibility import compatibility_manifest
 from .projection import ProjectionEnvelope, ProjectionError, ProjectionStore
 from .universal_context import UniversalContextError, compile_context
 
@@ -175,6 +176,7 @@ class ProjectionSDK:
                 {**item, "operations": list(item["operations"])}
                 for item in SDK_SUPPORT_MATRIX
             ],
+            "compatibility": compatibility_manifest(),
             "authority": "derived_read_only",
         }
 
