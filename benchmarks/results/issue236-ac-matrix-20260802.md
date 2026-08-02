@@ -22,7 +22,7 @@ and release-integrity passes all checks.
 | #247 | PARTIAL | `3515bb5`; C# multi-project/partial/test-symbol E2E, 4 tests | Roslyn/native relations, affected-project invalidation, installed Linux/Windows E2E and coverage |
 | #248 | PARTIAL | `dffc0b1`; TS monorepo/project refs/aliases/TSX E2E, 4 tests | Native compiler relations, bounded invalidation, Node/React installed E2E and coverage |
 | #249 | PARTIAL | `d1ac156`; multi-crate Cargo discovery/symbol E2E, 5 tests | Native parser parity, Cargo relation/invalidation E2E, installed matrix and coverage |
-| #339 | PARTIAL | `4436e90`; typed `simplicio.fast.projection/v1` envelope plus Code/Knowledge/Operations producers, scoped incremental store and atomic verified persistence | Installed SDK packaging, Rust parity and cross-domain benchmark |
+| #339 | PARTIAL | `4436e90`; typed `simplicio.fast.projection/v1` envelope plus Code/Knowledge/Operations producers, scoped incremental store, atomic persistence and `issue339-windows-installed-smoke-20260802.json` | Rust parity and cross-domain benchmark |
 
 ## Closure rule
 
