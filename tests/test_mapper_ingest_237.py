@@ -254,3 +254,102 @@ def test_installed_mapper_handoff_is_accepted(tmp_path: Path) -> None:
     assert len(readers) == 20
     assert {generation for generation, _ in readers} == {compiled["fast_generation"]}
     assert all(count >= 1 for _, count in readers)
+
+
+def test_ten_physical_worktrees_keep_integrated_generations_isolated(tmp_path: Path) -> None:
+    executable = shutil.which("simplicio-mapper")
+    if executable is None:
+        pytest.fail("simplicio-mapper is required for physical worktree E2E")
+    base = tmp_path / "base"
+    base.mkdir()
+    (base / "service.py").write_text(
+        "def helper():\n    return -1\n", encoding="utf-8"
+    )
+    for command in (
+        ["git", "init", "--quiet"],
+        ["git", "config", "user.email", "e2e@example.invalid"],
+        ["git", "config", "user.name", "Mapper Worktree E2E"],
+        ["git", "add", "service.py"],
+        ["git", "commit", "--quiet", "-m", "initial"],
+    ):
+        subprocess.run(
+            command,
+            cwd=base,
+            check=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    worktrees: list[Path] = []
+    generations: list[str] = []
+    try:
+        for index in range(10):
+            worktree = tmp_path / f"worktree-{index}"
+            subprocess.run(
+                ["git", "worktree", "add", "--detach", "--quiet", str(worktree), "HEAD"],
+                cwd=base,
+                check=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            worktrees.append(worktree)
+            (worktree / "service.py").write_text(
+                f"def helper():\n    return {index}\n", encoding="utf-8"
+            )
+            subprocess.run(
+                ["git", "add", "service.py"],
+                cwd=worktree,
+                check=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            subprocess.run(
+                [
+                    "git",
+                    "-c",
+                    "user.email=e2e@example.invalid",
+                    "-c",
+                    "user.name=Mapper Worktree E2E",
+                    "commit",
+                    "--quiet",
+                    "-m",
+                    f"worktree {index}",
+                ],
+                cwd=worktree,
+                check=True,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            _run_mapper(worktree, "snapshot", "build", "--root", str(worktree), json_output=False)
+            envelope = _run_mapper(worktree, "fast-handoff", str(worktree))
+            provenance = validate_handoff(worktree, envelope)
+            snapshot = worktree / "fast.sfast"
+            receipt = DeliveryEngine(worktree, snapshot).prepare(
+                "understand helper",
+                profile="loop-standalone",
+                engine_receipt=select_engine("python").receipt(),
+                mode="integrated",
+                mapper_handoff=envelope,
+            )
+            assert provenance["mode"] == "integrated"
+            assert receipt["mapper"]["traceability"] == "mapper-symbol-id"
+            selected = receipt["context"]["selected"]
+            assert selected
+            generations.append(str(selected[0]["generation"]))
+            assert all(item["handle"].startswith("symbol:") for item in selected)
+    finally:
+        for worktree in reversed(worktrees):
+            subprocess.run(
+                ["git", "worktree", "remove", "--force", "--quiet", str(worktree)],
+                cwd=base,
+                check=False,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+    assert len(generations) == 10
+    assert len(set(generations)) == 10
