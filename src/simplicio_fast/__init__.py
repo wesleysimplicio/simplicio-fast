@@ -53,6 +53,8 @@ _EXPORTS = {
     "OperationReceipt": (".operations_projection", "OperationReceipt"),
     "OperationsProjection": (".operations_projection", "OperationsProjection"),
     "OperationsProjectionError": (".operations_projection", "OperationsProjectionError"),
+    "ProjectionSDK": (".sdk", "ProjectionSDK"),
+    "SDKError": (".sdk", "SDKError"),
     "RequestKey": (".pager", "RequestKey"),
     "RuntimeArtifact": (".runtime_backend", "RuntimeArtifact"),
     "RuntimeBackendError": (".runtime_backend", "RuntimeBackendError"),
