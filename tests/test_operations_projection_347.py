@@ -110,6 +110,13 @@ def test_operations_projection_receipt_and_scope_contracts_fail_closed() -> None
         OperationsProjection("", "g1")
 
 
+def test_operation_receipt_detaches_nested_payload() -> None:
+    payload = {"lease": {"owner": "worker-a"}}
+    item = OperationReceipt("attempt", "attempt", "running", "g1", 1, "runtime/v1", payload)
+    payload["lease"]["owner"] = "mutated"
+    assert item.payload["lease"]["owner"] == "worker-a"
+
+
 def test_operations_projection_rejects_untyped_ingest_filters_and_lease_limits() -> None:
     projection = OperationsProjection("repo", "g1")
     with pytest.raises(OperationsProjectionError, match="receipt_type_invalid"):

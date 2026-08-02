@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from threading import RLock
 from typing import Any, Iterable
@@ -35,6 +36,11 @@ class OperationReceipt:
             raise OperationsProjectionError("receipt_sequence_invalid")
         if not isinstance(self.payload, dict):
             raise OperationsProjectionError("receipt_payload_invalid")
+        try:
+            payload = deepcopy(self.payload)
+        except (TypeError, ValueError) as error:
+            raise OperationsProjectionError("receipt_payload_invalid") from error
+        object.__setattr__(self, "payload", payload)
 
     def to_dict(self) -> dict[str, Any]:
         return {
