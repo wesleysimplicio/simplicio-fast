@@ -114,8 +114,18 @@ def compile_context(
     ordered = sorted(projections, key=lambda item: (item.projection_type, item.stable_handle))
     seen: dict[str, str] = {}
     for envelope in ordered:
-        if repository_scope is not None and envelope.payload.get("repository") not in {None, repository_scope}:
-            raise UniversalContextError("context_scope_mismatch")
+        if repository_scope is not None:
+            payload_repository = envelope.payload.get("repository")
+            metadata_matches = envelope.repository_scope in {"*", repository_scope}
+            payload_matches = payload_repository in {None, repository_scope}
+            metadata_bound = envelope.repository_scope != "*"
+            payload_bound = payload_repository is not None
+            if (
+                not metadata_matches
+                or not payload_matches
+                or not (metadata_bound or payload_bound)
+            ):
+                raise UniversalContextError("context_scope_mismatch")
         if tenant_scope is not None and envelope.tenant_scope not in {"*", tenant_scope}:
             raise UniversalContextError("context_scope_mismatch")
         previous_digest = seen.get(envelope.stable_handle)
