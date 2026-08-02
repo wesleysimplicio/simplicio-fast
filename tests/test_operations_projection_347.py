@@ -146,3 +146,36 @@ def test_operations_projection_causal_and_lease_boundaries() -> None:
         OperationReceipt("child", "attempt", "running", "g1", 2, "runtime/v1", {"causal_parent": "parent"}),
     ])
     assert ordered_ok.query()[0]["consistency"] == "consistent"
+
+
+def test_operations_projection_preserves_tombstone_lineage_and_allows_correction() -> None:
+    projection = OperationsProjection("repo", "g1")
+    projection.ingest([OperationReceipt("attempt", "attempt", "running", "g1", 1, "loop/v1", {"producer": "loop"})])
+    delta = projection.ingest([OperationReceipt("attempt", "attempt", "deleted", "g1", 2, "loop/v1", {"producer": "loop", "tombstone": True})])
+    assert delta["tombstones"] == ["attempt"]
+    assert projection.query() == []
+    assert projection.snapshot()["tombstones"] == ["attempt"]
+    assert projection.stats()["tombstones"] == 1
+    projection.ingest([OperationReceipt("attempt", "attempt", "running", "g1", 3, "loop/v1", {"producer": "loop", "correction_of": "attempt"})])
+    assert projection.query()[0]["handle"] == "attempt"
+    assert projection.snapshot()["tombstones"] == []
+
+
+def test_operations_projection_supports_as_of_and_producer_freshness() -> None:
+    projection = OperationsProjection("repo", "g1")
+    projection.ingest([
+        OperationReceipt("a1", "attempt", "running", "g1", 1, "loop/v1", {"producer": "loop"}),
+        OperationReceipt("b2", "attempt", "running", "g1", 2, "runtime/v1", {"producer": "runtime"}),
+        OperationReceipt("a3", "attempt", "done", "g1", 3, "loop/v1", {"producer": "loop"}),
+    ])
+    assert [item["handle"] for item in projection.query(as_of_sequence=2)] == ["b2", "a1"]
+    snapshot = projection.snapshot(observed_sequence=4, as_of_sequence=2)
+    assert [item["handle"] for item in snapshot["receipts"]] == ["b2", "a1"]
+    assert snapshot["freshness"] == {
+        "loop": {"latest_sequence": 3, "lag": 1},
+        "runtime": {"latest_sequence": 2, "lag": 2},
+    }
+    with pytest.raises(OperationsProjectionError, match="query_as_of_invalid"):
+        projection.query(as_of_sequence=True)
+    with pytest.raises(OperationsProjectionError, match="snapshot_sequence_invalid"):
+        projection.snapshot(observed_sequence=True)

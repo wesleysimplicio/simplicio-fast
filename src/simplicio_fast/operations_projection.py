@@ -9,6 +9,7 @@ from typing import Any, Iterable
 
 RECEIPT_SCHEMA = "simplicio.fast.operations-receipt/v1"
 PROJECTION_SCHEMA = "simplicio.fast.operations-projection/v1"
+MAX_QUERY_RESULTS = 100_000
 
 
 class OperationsProjectionError(ValueError):
@@ -57,6 +58,8 @@ class OperationsProjection:
         self.repository = repository
         self.generation = generation
         self._receipts: dict[str, OperationReceipt] = {}
+        self._last_sequences: dict[str, int] = {}
+        self._tombstones: dict[str, OperationReceipt] = {}
         self._causal_gaps: set[str] = set()
         self._forks: set[str] = set()
         self._lock = RLock()
@@ -91,35 +94,61 @@ class OperationsProjection:
             for receipt in receipts:
                 if receipt.generation != self.generation:
                     raise OperationsProjectionError("receipt_generation_mismatch")
-                previous = self._receipts.get(receipt.handle)
-                if previous is not None and receipt.sequence < previous.sequence:
+                previous = self._receipts.get(receipt.handle) or self._tombstones.get(receipt.handle)
+                last_sequence = self._last_sequences.get(receipt.handle)
+                if last_sequence is not None and receipt.sequence < last_sequence:
                     raise OperationsProjectionError("receipt_sequence_regression")
-                if previous is not None and receipt.sequence == previous.sequence:
+                if previous is not None and receipt.sequence == last_sequence:
                     if receipt.to_dict() == previous.to_dict():
                         continue
                     self._forks.add(receipt.handle)
                     raise OperationsProjectionError("receipt_fork_detected")
-                self._receipts[receipt.handle] = receipt
+                self._last_sequences[receipt.handle] = receipt.sequence
+                if receipt.payload.get("tombstone") is True:
+                    self._receipts.pop(receipt.handle, None)
+                    self._tombstones[receipt.handle] = receipt
+                else:
+                    self._tombstones.pop(receipt.handle, None)
+                    self._receipts[receipt.handle] = receipt
                 changed.append(receipt.handle)
             self._refresh_consistency()
-            return {"schema": "simplicio.fast.operations-delta/v1", "repository": self.repository, "generation": self.generation, "changed_handles": sorted(set(changed))}
+            return {
+                "schema": "simplicio.fast.operations-delta/v1",
+                "repository": self.repository,
+                "generation": self.generation,
+                "changed_handles": sorted(set(changed)),
+                "tombstones": sorted(handle for handle in changed if handle in self._tombstones),
+            }
 
-    def query(self, *, status: str | None = None, kind: str | None = None, max_results: int = 1000) -> list[dict[str, Any]]:
-        if max_results <= 0:
+    @staticmethod
+    def _validate_query_budget(max_results: int, as_of_sequence: int | None) -> None:
+        if isinstance(max_results, bool) or not isinstance(max_results, int) or not 0 < max_results <= MAX_QUERY_RESULTS:
             raise OperationsProjectionError("query_budget_invalid")
+        if as_of_sequence is not None and (isinstance(as_of_sequence, bool) or not isinstance(as_of_sequence, int) or as_of_sequence < 0):
+            raise OperationsProjectionError("query_as_of_invalid")
+
+    def query(
+        self,
+        *,
+        status: str | None = None,
+        kind: str | None = None,
+        max_results: int = 1000,
+        as_of_sequence: int | None = None,
+    ) -> list[dict[str, Any]]:
+        self._validate_query_budget(max_results, as_of_sequence)
         with self._lock:
             values = [
                 item for item in self._receipts.values()
                 if (status is None or item.status == status)
                 and (kind is None or item.kind == kind)
+                and (as_of_sequence is None or item.sequence <= as_of_sequence)
                 and not (status == "complete" and item.handle in self._causal_gaps)
             ]
             return [self._item(item) for item in sorted(values, key=lambda item: (item.sequence, item.handle), reverse=True)[:max_results]]
 
     def query_slots(self, *, status: str | None = None, max_results: int = 1000) -> list[dict[str, Any]]:
         """Read slot/attempt facts without accepting or mutating leases."""
-        if max_results <= 0:
-            raise OperationsProjectionError("query_budget_invalid")
+        self._validate_query_budget(max_results, None)
         with self._lock:
             values = [
                 item for item in self._receipts.values()
@@ -162,11 +191,34 @@ class OperationsProjection:
             for receipt in self._receipts.values():
                 statuses[receipt.status] = statuses.get(receipt.status, 0) + 1
                 kinds[receipt.kind] = kinds.get(receipt.kind, 0) + 1
-            return {"schema": "simplicio.fast.operations-stats/v1", "repository": self.repository, "generation": self.generation, "receipts": len(self._receipts), "statuses": dict(sorted(statuses.items())), "kinds": dict(sorted(kinds.items())), "consistency": {"causal_gaps": len(self._causal_gaps), "forks": len(self._forks)}, "authority": "derived_read_only"}
+            return {"schema": "simplicio.fast.operations-stats/v1", "repository": self.repository, "generation": self.generation, "receipts": len(self._receipts), "tombstones": len(self._tombstones), "statuses": dict(sorted(statuses.items())), "kinds": dict(sorted(kinds.items())), "consistency": {"causal_gaps": len(self._causal_gaps), "forks": len(self._forks)}, "authority": "derived_read_only"}
 
-    def snapshot(self) -> dict[str, Any]:
+    def snapshot(self, *, observed_sequence: int | None = None, as_of_sequence: int | None = None) -> dict[str, Any]:
+        self._validate_query_budget(MAX_QUERY_RESULTS, as_of_sequence)
+        if observed_sequence is not None and (isinstance(observed_sequence, bool) or not isinstance(observed_sequence, int) or observed_sequence < 0):
+            raise OperationsProjectionError("snapshot_sequence_invalid")
         with self._lock:
-            return {"schema": PROJECTION_SCHEMA, "repository": self.repository, "generation": self.generation, "consistency": {"causal_gaps": sorted(self._causal_gaps), "forks": sorted(self._forks)}, "receipts": self.query()}
+            latest_by_producer: dict[str, int] = {}
+            for receipt in self._receipts.values():
+                producer = receipt.payload.get("producer")
+                if isinstance(producer, str) and producer.strip():
+                    latest_by_producer[producer] = max(latest_by_producer.get(producer, -1), receipt.sequence)
+            freshness = {
+                producer: {
+                    "latest_sequence": sequence,
+                    "lag": None if observed_sequence is None else max(0, observed_sequence - sequence),
+                }
+                for producer, sequence in sorted(latest_by_producer.items())
+            }
+            return {
+                "schema": PROJECTION_SCHEMA,
+                "repository": self.repository,
+                "generation": self.generation,
+                "consistency": {"causal_gaps": sorted(self._causal_gaps), "forks": sorted(self._forks)},
+                "tombstones": sorted(self._tombstones),
+                "freshness": freshness,
+                "receipts": self.query(as_of_sequence=as_of_sequence),
+            }
 
 
-__all__ = ["OperationReceipt", "OperationsProjection", "OperationsProjectionError", "PROJECTION_SCHEMA", "RECEIPT_SCHEMA"]
+__all__ = ["MAX_QUERY_RESULTS", "OperationReceipt", "OperationsProjection", "OperationsProjectionError", "PROJECTION_SCHEMA", "RECEIPT_SCHEMA"]
