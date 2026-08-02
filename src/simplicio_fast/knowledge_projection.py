@@ -69,8 +69,10 @@ class KnowledgeFact:
         values = (self.source_type, self.producer, self.stable_handle, self.version, self.trust, self.digest, self.repository, self.scope)
         if any(not isinstance(value, str) or not value.strip() for value in values):
             raise KnowledgeProjectionError("fact_identity_invalid")
-        _string_sequence(self.provenance, "fact_provenance_invalid", required=True)
-        _string_sequence(self.applicability, "fact_applicability_invalid")
+        provenance = _string_sequence(self.provenance, "fact_provenance_invalid", required=True)
+        applicability = _string_sequence(self.applicability, "fact_applicability_invalid")
+        object.__setattr__(self, "provenance", provenance)
+        object.__setattr__(self, "applicability", applicability)
         if not isinstance(self.text, str):
             raise KnowledgeProjectionError("fact_text_invalid")
         for value in (self.valid_from, self.valid_until):
