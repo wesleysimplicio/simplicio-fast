@@ -517,6 +517,49 @@ def _lexical_relations(
     return relations
 
 
+_RUST_CFG_ATTRIBUTE = re.compile(
+    r"^\s*#\s*!?\s*\[\s*(?:cfg|cfg_attr)\s*\("
+)
+_RUST_MACRO_DECLARATION = re.compile(r"\bmacro_rules!\s*[A-Za-z_]\w*")
+_RUST_MACRO_INVOCATION = re.compile(
+    r"(?<![A-Za-z0-9_])(?:[A-Za-z_]\w*::)*[A-Za-z_]\w*!\s*[\(\[\{]"
+)
+
+
+def _rust_completeness_diagnostics(
+    text: str, relative: str
+) -> list[dict[str, str]]:
+    diagnostics: list[dict[str, str]] = []
+    if any(_RUST_CFG_ATTRIBUTE.search(line) for line in text.splitlines()):
+        diagnostics.append(
+            {
+                "path": relative,
+                "code": "rust_cfg_unresolved",
+                "detail": (
+                    "cfg/cfg_attr branches are not evaluated by the bounded "
+                    "lexical adapter"
+                ),
+                "fallback": (
+                    "use Mapper-native or rust-analyzer parsing with selected "
+                    "Cargo features and toolchain"
+                ),
+            }
+        )
+    if _RUST_MACRO_DECLARATION.search(text) or _RUST_MACRO_INVOCATION.search(text):
+        diagnostics.append(
+            {
+                "path": relative,
+                "code": "rust_macro_unexpanded",
+                "detail": (
+                    "Rust macro definitions and invocations are not expanded by "
+                    "the bounded lexical adapter"
+                ),
+                "fallback": "use Mapper-native or rust-analyzer parsing",
+            }
+        )
+    return diagnostics
+
+
 def build_payload(
     root: Path,
     *,
@@ -570,7 +613,7 @@ def build_payload(
         relative = path.relative_to(root).as_posix()
         raw = path.read_bytes()
         try:
-            path.read_text(encoding="utf-8")
+            source_text = path.read_text(encoding="utf-8")
         except UnicodeDecodeError as error:
             diagnostics.append(
                 {"path": relative, "code": "encoding_invalid", "detail": str(error)}
@@ -595,6 +638,8 @@ def build_payload(
                     "fallback": capability.fallback,
                 }
             )
+        if language == "rust":
+            diagnostics.extend(_rust_completeness_diagnostics(source_text, relative))
         try:
             if language == "python":
                 parsed, parsed_relations = _parse_file(path, relative, str(root))
