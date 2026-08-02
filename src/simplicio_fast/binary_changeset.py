@@ -321,6 +321,19 @@ class BinaryChangeSet:
         _worktree(self.worktree_id)
         if not self.lease_id or not self.fencing_token:
             raise BinaryChangeSetError("authority_missing")
+        if not isinstance(self.allowed_paths, (tuple, list)) or any(
+            not isinstance(path, str) or not path.strip() for path in self.allowed_paths
+        ):
+            raise BinaryChangeSetError("allowed_paths_invalid")
+        if not isinstance(self.operations, (tuple, list)) or any(
+            not isinstance(operation, ChangeOperation) for operation in self.operations
+        ):
+            raise BinaryChangeSetError("operations_invalid")
+        if not isinstance(self.verification_commands, (tuple, list)) or any(
+            not isinstance(command, str) or not command.strip()
+            for command in self.verification_commands
+        ):
+            raise BinaryChangeSetError("verification_commands_invalid")
         allowed = tuple(sorted({_path(path) for path in self.allowed_paths}))
         if not allowed:
             raise BinaryChangeSetError("allowed_paths_missing")
@@ -331,10 +344,11 @@ class BinaryChangeSet:
                 if path is not None and path not in allowed:
                     raise BinaryChangeSetError("path_not_allowed", path)
         object.__setattr__(self, "allowed_paths", allowed)
+        object.__setattr__(self, "operations", tuple(self.operations))
         object.__setattr__(
             self,
             "verification_commands",
-            tuple(str(item) for item in self.verification_commands),
+            tuple(self.verification_commands),
         )
 
     @classmethod

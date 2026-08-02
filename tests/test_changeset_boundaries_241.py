@@ -215,6 +215,22 @@ def test_operation_and_changeset_contract_edges(tmp_path) -> None:
         BinaryChangeSet.from_dict(exported)
 
 
+def test_direct_changeset_constructor_rejects_untyped_sequences(tmp_path) -> None:
+    operation = delete_operation()
+    args = (str(tmp_path), "b", "o", "a", "w", "l", "f")
+    with pytest.raises(BinaryChangeSetError, match="allowed_paths_invalid"):
+        BinaryChangeSet(*args, allowed_paths="item.txt", operations=(operation,))
+    with pytest.raises(BinaryChangeSetError, match="operations_invalid"):
+        BinaryChangeSet(*args, allowed_paths=("item.txt",), operations=(object(),))
+    with pytest.raises(BinaryChangeSetError, match="verification_commands_invalid"):
+        BinaryChangeSet(
+            *args,
+            allowed_paths=("item.txt",),
+            operations=(operation,),
+            verification_commands=(1,),
+        )
+
+
 def test_validation_covers_missing_sources_hashes_and_newlines(tmp_path) -> None:
     replacement = ChangeOperation.from_dict({"op": "replace-range", "path": "missing.txt", "before_sha256": "a" * 64, "after_sha256": "b" * 64, "content": "x", "line_map": {"start_line": 1, "end_line": 1}})
     with pytest.raises(BinaryChangeSetError, match="source_missing"):
