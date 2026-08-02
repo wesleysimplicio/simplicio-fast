@@ -1,4 +1,5 @@
 from dataclasses import replace
+import json
 from pathlib import Path
 
 import pytest
@@ -90,8 +91,20 @@ def test_projection_dataclass_boundary_rejects_tampered_digest() -> None:
 
 def test_projection_manifest_and_provenance_fields_are_strict_and_deterministic() -> None:
     manifest = contract_manifest()
-    assert manifest["envelope"] == {"schema": "simplicio.fast.projection/v1", "major": 1, "minor": 0}
+    assert manifest["envelope"]["schema"] == "simplicio.fast.projection/v1"
+    assert manifest["envelope"]["major"] == 1
+    assert manifest["envelope"]["minor"] == 0
     assert manifest["type_manifest"]["types"] == ["code", "knowledge", "operations"]
+    disk_manifest = json.loads(
+        (
+            Path(__file__).parents[1]
+            / "contracts"
+            / "projection"
+            / "v1"
+            / "manifest.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert disk_manifest == manifest
     envelope = ProjectionEnvelope.create(
         "code",
         producer="mapper",
@@ -124,6 +137,41 @@ def test_projection_manifest_and_provenance_fields_are_strict_and_deterministic(
             stable_handle="symbol:abc",
             payload=deep,
         )
+
+
+def test_projection_decode_preserves_all_optional_provenance_fields() -> None:
+    envelope = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper.context/v1",
+        generation="projection-g2",
+        stable_handle="symbol:abc",
+        schema_version="1.1",
+        projection_type_version="1.2",
+        producer_version="2.0.20",
+        repository_scope="org/repo",
+        tenant_scope="tenant-a",
+        domain_scope="code",
+        source_generation="source-g1",
+        projection_generation="projection-g2",
+        config_fingerprint="config-1",
+        toolchain_fingerprint="toolchain-1",
+        parser_fingerprint="parser-1",
+        stable_handles=("symbol:abc", "symbol:related"),
+        capabilities_required=("projection.decode.v1",),
+        budgets={"bytes": 1024},
+        truncation_reasons=("budget",),
+        parent_generation="parent-g0",
+        base_generation="base-g1",
+        delta_generation="delta-g2",
+        tombstones=("symbol:old",),
+        completeness="partial",
+        fidelity="estimated",
+        observed_sequence="42",
+        conformance_digest="conformance-1",
+        payload={"name": "abc"},
+    )
+    assert ProjectionEnvelope.decode(envelope.encode()) == envelope
 
 
 def test_knowledge_and_operations_producers_use_the_same_abi(tmp_path) -> None:

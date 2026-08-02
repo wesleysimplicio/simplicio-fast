@@ -135,11 +135,37 @@ class ProjectionEnvelope:
         _reject_private_fields(self.payload)
         if self.payload_sha256 != _digest(self.payload):
             raise ProjectionError("payload_digest_mismatch")
+        _validate_sequence(self.stable_handles, "stable_handles")
         if not self.stable_handles or self.stable_handle not in self.stable_handles:
             raise ProjectionError("stable_handles_invalid")
+        for value, name in (
+            (self.config_fingerprint, "config_fingerprint"),
+            (self.toolchain_fingerprint, "toolchain_fingerprint"),
+            (self.parser_fingerprint, "parser_fingerprint"),
+            (self.observed_sequence, "observed_sequence"),
+            (self.conformance_digest, "conformance_digest"),
+        ):
+            _validate_optional_text(value, name)
+        for value, name in (
+            (self.parent_generation, "parent_generation"),
+            (self.base_generation, "base_generation"),
+            (self.delta_generation, "delta_generation"),
+        ):
+            if value is not None:
+                _validate_optional_text(value, name)
         _validate_sequence(self.capabilities_required, "capabilities_required")
         _validate_sequence(self.truncation_reasons, "truncation_reasons")
         _validate_sequence(self.tombstones, "tombstones")
+        if self.budgets is not None and (
+            not isinstance(self.budgets, Mapping)
+            or any(
+                not isinstance(key, str)
+                or not isinstance(value, int)
+                or value < 0
+                for key, value in self.budgets.items()
+            )
+        ):
+            raise ProjectionError("budgets_invalid")
 
     @classmethod
     def create(
@@ -151,10 +177,18 @@ class ProjectionEnvelope:
         generation: str,
         stable_handle: str,
         payload: Mapping[str, Any],
+        schema_version: str = "1.0",
+        projection_type_version: str = "1.0",
         producer_version: str = "unknown",
         repository_scope: str = "*",
         tenant_scope: str = "*",
         domain_scope: str = "*",
+        source_generation: str | None = None,
+        projection_generation: str | None = None,
+        config_fingerprint: str = "",
+        toolchain_fingerprint: str = "",
+        parser_fingerprint: str = "",
+        stable_handles: Sequence[str] | None = None,
         capabilities_required: Sequence[str] = (),
         budgets: Mapping[str, int] | None = None,
         truncation_reasons: Sequence[str] = (),
@@ -171,6 +205,8 @@ class ProjectionEnvelope:
         if projection_type not in PROJECTION_TYPES:
             raise ProjectionError("projection_type_unsupported")
         for value, name in (
+            (schema_version, "schema_version"),
+            (projection_type_version, "projection_type_version"),
             (producer, "producer"),
             (producer_schema, "producer_schema"),
             (generation, "generation"),
@@ -190,6 +226,35 @@ class ProjectionEnvelope:
             (fidelity, "fidelity"),
         ):
             _validate_text(value, name)
+        for value, name in (
+            (
+                source_generation if source_generation is not None else generation,
+                "source_generation",
+            ),
+            (
+                projection_generation
+                if projection_generation is not None
+                else generation,
+                "projection_generation",
+            ),
+            (config_fingerprint, "config_fingerprint"),
+            (toolchain_fingerprint, "toolchain_fingerprint"),
+            (parser_fingerprint, "parser_fingerprint"),
+            (observed_sequence, "observed_sequence"),
+            (conformance_digest, "conformance_digest"),
+        ):
+            _validate_optional_text(value, name)
+        for value, name in (
+            (parent_generation, "parent_generation"),
+            (base_generation, "base_generation"),
+            (delta_generation, "delta_generation"),
+        ):
+            if value is not None:
+                _validate_optional_text(value, name)
+        resolved_stable_handles = (
+            tuple(stable_handles) if stable_handles is not None else (stable_handle,)
+        )
+        _validate_sequence(resolved_stable_handles, "stable_handles")
         if budgets is not None and (
             not isinstance(budgets, Mapping)
             or any(not isinstance(key, str) or not isinstance(value, int) or value < 0 for key, value in budgets.items())
@@ -205,13 +270,24 @@ class ProjectionEnvelope:
             stable_handle=stable_handle,
             payload=normalized,
             payload_sha256=_digest(normalized),
+            schema_version=schema_version,
+            projection_type_version=projection_type_version,
             producer_version=producer_version,
             repository_scope=repository_scope,
             tenant_scope=tenant_scope,
             domain_scope=domain_scope,
-            source_generation=generation,
-            projection_generation=generation,
-            stable_handles=(stable_handle,),
+            source_generation=(
+                source_generation if source_generation is not None else generation
+            ),
+            projection_generation=(
+                projection_generation
+                if projection_generation is not None
+                else generation
+            ),
+            config_fingerprint=config_fingerprint,
+            toolchain_fingerprint=toolchain_fingerprint,
+            parser_fingerprint=parser_fingerprint,
+            stable_handles=resolved_stable_handles,
             capabilities_required=tuple(capabilities_required),
             budgets=dict(budgets) if budgets is not None else None,
             truncation_reasons=tuple(truncation_reasons),
@@ -282,10 +358,18 @@ class ProjectionEnvelope:
             generation=value.get("generation", ""),
             stable_handle=value.get("stable_handle", ""),
             payload=payload if isinstance(payload, Mapping) else {},
+            schema_version=value.get("schema_version", "1.0"),
+            projection_type_version=value.get("projection_type_version", "1.0"),
             producer_version=value.get("producer_version", "unknown"),
             repository_scope=value.get("repository_scope", "*"),
             tenant_scope=value.get("tenant_scope", "*"),
             domain_scope=value.get("domain_scope", "*"),
+            source_generation=value.get("source_generation"),
+            projection_generation=value.get("projection_generation"),
+            config_fingerprint=value.get("config_fingerprint", ""),
+            toolchain_fingerprint=value.get("toolchain_fingerprint", ""),
+            parser_fingerprint=value.get("parser_fingerprint", ""),
+            stable_handles=value.get("stable_handles", ()),
             capabilities_required=value.get("capabilities_required", ()),
             budgets=value.get("budgets"),
             truncation_reasons=value.get("truncation_reasons", ()),
@@ -309,7 +393,33 @@ def contract_manifest() -> dict[str, Any]:
     """Return the machine-readable, dependency-free v1 contract registry."""
     return {
         "schema": ENVELOPE_MANIFEST_SCHEMA,
-        "envelope": {"schema": SCHEMA, "major": 1, "minor": 0},
+        "envelope": {
+            "schema": SCHEMA,
+            "major": 1,
+            "minor": 0,
+            "required": [
+                "schema",
+                "projection_type",
+                "producer",
+                "producer_schema",
+                "generation",
+                "stable_handle",
+                "payload",
+                "payload_sha256",
+                "schema_version",
+                "projection_type_version",
+                "producer_version",
+                "repository_scope",
+                "tenant_scope",
+                "domain_scope",
+                "source_generation",
+                "projection_generation",
+                "stable_handles",
+                "capabilities_required",
+                "completeness",
+                "fidelity",
+            ],
+        },
         "type_manifest": {
             "schema": TYPE_MANIFEST_SCHEMA,
             "types": sorted(PROJECTION_TYPES),
@@ -331,6 +441,13 @@ def contract_manifest() -> dict[str, Any]:
             "projection_depth_limit", "projection_item_limit", "projection_exposes_offset",
             "projection_scope_mismatch", "projection_capability_missing",
         }),
+        "compatibility": {
+            "unknown_major": "reject",
+            "unknown_optional_minor": "preserve_or_reject_by_manifest",
+            "missing_required_capability": "reject",
+            "digest_mismatch": "reject",
+            "scope_mismatch": "reject",
+        },
     }
 
 
@@ -469,6 +586,11 @@ class ProjectionStore:
 
 def _validate_text(value: object, field: str) -> None:
     if not isinstance(value, str) or not value.strip():
+        raise ProjectionError(f"{field}_invalid")
+
+
+def _validate_optional_text(value: object, field: str) -> None:
+    if not isinstance(value, str):
         raise ProjectionError(f"{field}_invalid")
 
 

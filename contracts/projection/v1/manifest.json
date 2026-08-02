@@ -42,6 +42,18 @@
     "max_items": 100000,
     "max_text": 4096
   },
+  "reason_codes": [
+    "payload_digest_mismatch",
+    "payload_digest_missing",
+    "projection_capability_missing",
+    "projection_depth_limit",
+    "projection_exposes_offset",
+    "projection_item_limit",
+    "projection_schema_unsupported",
+    "projection_scope_mismatch",
+    "projection_size_limit",
+    "projection_type_unsupported"
+  ],
   "compatibility": {
     "unknown_major": "reject",
     "unknown_optional_minor": "preserve_or_reject_by_manifest",
