@@ -3,7 +3,7 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. Current master is `37abe62`;
+owned by an external capability or service. Current master is `c6a95d1`;
 release-integrity passes all checks. The full-suite subprocess failures in
 this Windows shell are recorded separately and are not treated as functional
 passes.
