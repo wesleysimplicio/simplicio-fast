@@ -41,6 +41,14 @@ def _text(value: object, reason: str) -> str:
     return value
 
 
+def _handle(value: object, reason: str) -> str:
+    value = _text(value, reason)
+    owner, separator, local = value.partition(":")
+    if not separator or not owner.strip() or not local.strip():
+        raise FederationError("edge_handle_invalid")
+    return value
+
+
 def _budget(value: object, reason: str, *, minimum: int, maximum: int) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
         raise FederationError(reason)
@@ -102,17 +110,12 @@ class FederatedEdge:
     derived: bool = False
 
     def __post_init__(self) -> None:
+        _handle(self.source_handle, "edge_source_invalid")
+        _handle(self.target_handle, "edge_target_invalid")
         for value, reason in (
-            (self.source_handle, "edge_source_invalid"),
-            (self.target_handle, "edge_target_invalid"),
             (self.relation_type, "edge_relation_invalid"),
         ):
             _text(value, reason)
-        for handle in (self.source_handle, self.target_handle):
-            if ":" in handle:
-                owner, local = handle.split(":", 1)
-                if not owner.strip() or not local.strip():
-                    raise FederationError("edge_handle_invalid")
         if (
             isinstance(self.confidence, bool)
             or not isinstance(self.confidence, (int, float))
@@ -122,6 +125,7 @@ class FederatedEdge:
             raise FederationError("edge_confidence_invalid")
         if not isinstance(self.evidence, (tuple, list)) or any(not isinstance(item, str) or not item.strip() for item in self.evidence):
             raise FederationError("edge_evidence_invalid")
+        object.__setattr__(self, "evidence", tuple(self.evidence))
         if not isinstance(self.derived, bool):
             raise FederationError("edge_derived_invalid")
         if self.derived and not self.evidence:
@@ -284,7 +288,7 @@ class Federation:
         max_edges: int = 1000,
         max_bytes: int = MAX_BYTES,
     ) -> list[dict[str, Any]]:
-        _text(target_handle, "target_handle_invalid")
+        _handle(target_handle, "target_handle_invalid")
         _budget(max_edges, "edge_budget_invalid", minimum=0, maximum=MAX_EDGES)
         _budget(max_bytes, "byte_budget_invalid", minimum=0, maximum=MAX_BYTES)
         records = (edge.to_dict() for edge in self._consumers.get(target_handle, ())[:max_edges])
@@ -297,7 +301,7 @@ class Federation:
         max_edges: int = 1000,
         max_bytes: int = MAX_BYTES,
     ) -> list[dict[str, Any]]:
-        _text(source_handle, "source_handle_invalid")
+        _handle(source_handle, "source_handle_invalid")
         _budget(max_edges, "edge_budget_invalid", minimum=0, maximum=MAX_EDGES)
         _budget(max_bytes, "byte_budget_invalid", minimum=0, maximum=MAX_BYTES)
         records = (edge.to_dict() for edge in self._dependencies.get(source_handle, ())[:max_edges])
@@ -312,7 +316,7 @@ class Federation:
         max_edges: int = MAX_EDGES,
         max_bytes: int = MAX_BYTES,
     ) -> dict[str, Any]:
-        _text(start_handle, "source_handle_invalid")
+        _handle(start_handle, "source_handle_invalid")
         _budget(max_depth, "traversal_budget_invalid", minimum=0, maximum=MAX_EDGES)
         _budget(max_nodes, "traversal_budget_invalid", minimum=1, maximum=MAX_EDGES)
         _budget(max_edges, "edge_budget_invalid", minimum=0, maximum=MAX_EDGES)

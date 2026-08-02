@@ -30,12 +30,12 @@ def test_federation_is_pinned_deterministic_and_bounded() -> None:
 
 def test_federation_traversal_preserves_provenance_paths() -> None:
     edges = [
-        FederatedEdge("a", "b", "depends", 0.9, ("a.json:1",)),
-        FederatedEdge("b", "c", "depends", 0.8, ("b.json:2",), derived=True),
+        FederatedEdge("a:schema", "b:schema", "depends", 0.9, ("a.json:1",)),
+        FederatedEdge("b:schema", "c:schema", "depends", 0.8, ("b.json:2",), derived=True),
     ]
-    result = compile_federation([member("a"), member("b"), member("c")], edges).traverse("a")
-    assert result["nodes"] == ["a", "b", "c"]
-    assert result["paths"]["c"] == ["a", "b", "c"]
+    result = compile_federation([member("a"), member("b"), member("c")], edges).traverse("a:schema")
+    assert result["nodes"] == ["a:schema", "b:schema", "c:schema"]
+    assert result["paths"]["c:schema"] == ["a:schema", "b:schema", "c:schema"]
     assert result["complete"] is True
 
 
@@ -45,13 +45,13 @@ def test_federation_rejects_duplicate_scope_tombstone_and_unproven_edge() -> Non
     with pytest.raises(FederationError, match="member_tombstone_present"):
         compile_federation([FederationMember("repo", "c", "g", "s", "sha256:" + "a" * 64, tombstone=True)])
     with pytest.raises(FederationError, match="derived_edge_evidence_missing"):
-        FederatedEdge("a", "b", "depends", 1.0, derived=True)
+        FederatedEdge("a:x", "b:y", "depends", 1.0, derived=True)
     with pytest.raises(FederationError, match="edge_confidence_invalid"):
-        FederatedEdge("a", "b", "depends", True)
+        FederatedEdge("a:x", "b:y", "depends", True)
     with pytest.raises(FederationError, match="edge_confidence_invalid"):
-        FederatedEdge("a", "b", "depends", math.nan)
+        FederatedEdge("a:x", "b:y", "depends", math.nan)
     with pytest.raises(FederationError, match="edge_evidence_invalid"):
-        FederatedEdge("a", "b", "depends", 1.0, ("",))
+        FederatedEdge("a:x", "b:y", "depends", 1.0, ("",))
     with pytest.raises(FederationError, match="member_digest_invalid"):
         FederationMember("repo", "commit", "generation", "schema", "digest")
     with pytest.raises(FederationError, match="member_digest_invalid"):
@@ -69,19 +69,19 @@ def test_federation_rejects_invalid_canonical_values_and_member_limits() -> None
 
 def test_federation_rejects_unbounded_traversal() -> None:
     with pytest.raises(FederationError, match="traversal_budget_invalid"):
-        compile_federation([member("repo")]).traverse("repo", max_nodes=0)
+        compile_federation([member("repo")]).traverse("repo:root", max_nodes=0)
 
 
 def test_federation_reports_truncated_depth_and_node_closure() -> None:
     edges = [
-        FederatedEdge("a", "b", "depends", 1.0),
-        FederatedEdge("b", "c", "depends", 1.0),
+        FederatedEdge("a:schema", "b:schema", "depends", 1.0),
+        FederatedEdge("b:schema", "c:schema", "depends", 1.0),
     ]
     federation = compile_federation([member("a"), member("b"), member("c")], edges)
-    depth_limited = federation.traverse("a", max_depth=0)
+    depth_limited = federation.traverse("a:schema", max_depth=0)
     assert depth_limited["complete"] is False
     assert depth_limited["truncation_reasons"] == ["max_depth"]
-    node_limited = federation.traverse("a", max_nodes=1)
+    node_limited = federation.traverse("a:schema", max_nodes=1)
     assert node_limited["complete"] is False
     assert node_limited["truncation_reasons"] == ["max_nodes"]
 
@@ -156,9 +156,15 @@ def test_federation_supports_twenty_concurrent_readers() -> None:
 
 def test_federation_boundaries_fail_closed_for_handles_and_delta_types() -> None:
     with pytest.raises(FederationError, match="edge_handle_invalid"):
+        FederatedEdge("repo", "repo:target", "depends", 1.0)
+    with pytest.raises(FederationError, match="edge_handle_invalid"):
+        FederatedEdge("repo:source", "target", "depends", 1.0)
+    with pytest.raises(FederationError, match="edge_handle_invalid"):
         FederatedEdge("repo:", "repo:target", "depends", 1.0)
     with pytest.raises(FederationError, match="edge_evidence_invalid"):
         FederatedEdge("repo:source", "repo:target", "depends", 1.0, evidence="bad")
+    edge = FederatedEdge("repo:source", "repo:target", "depends", 1.0, evidence=["fixture:1"])
+    assert edge.evidence == ("fixture:1",)
     with pytest.raises(FederationError, match="edge_derived_invalid"):
         FederatedEdge("repo:source", "repo:target", "depends", 1.0, derived=1)
     with pytest.raises(FederationError, match="member_tombstone_invalid"):
