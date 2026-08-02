@@ -25,9 +25,16 @@ class NativeBackendError(RuntimeError):
 
 
 def canonical(value: Any) -> bytes:
-    return json.dumps(
-        value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
-    ).encode()
+    try:
+        return json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        ).encode()
+    except (TypeError, ValueError) as error:
+        raise NativeBackendError("native_payload_invalid") from error
 
 
 def _file_sha256(path: Path) -> tuple[str, int]:
