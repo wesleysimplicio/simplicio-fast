@@ -138,3 +138,21 @@ def test_federation_supports_twenty_concurrent_readers() -> None:
     with ThreadPoolExecutor(max_workers=20) as pool:
         results = list(pool.map(read, range(20)))
     assert results == [(expected_generation, 1, 2, "simplicio.fast.federated-generation/v1")] * 20
+
+
+def test_federation_boundaries_fail_closed_for_handles_and_delta_types() -> None:
+    with pytest.raises(FederationError, match="edge_handle_invalid"):
+        FederatedEdge("repo:", "repo:target", "depends", 1.0)
+    with pytest.raises(FederationError, match="edge_evidence_invalid"):
+        FederatedEdge("repo:source", "repo:target", "depends", 1.0, evidence="bad")
+    with pytest.raises(FederationError, match="edge_derived_invalid"):
+        FederatedEdge("repo:source", "repo:target", "depends", 1.0, derived=1)
+    with pytest.raises(FederationError, match="member_tombstone_invalid"):
+        FederationMember("repo", "commit", "g", "schema", "sha256:" + "a" * 64, tombstone=1)
+    federation = compile_federation([member("repo")])
+    with pytest.raises(FederationError, match="delta_member_type_invalid"):
+        federation.apply_delta([object()])
+    with pytest.raises(FederationError, match="delta_edge_type_invalid"):
+        federation.apply_delta(added_edges=[object()])
+    with pytest.raises(FederationError, match="delta_repository_invalid"):
+        federation.apply_delta(removed_repositories=[""])

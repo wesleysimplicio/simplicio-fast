@@ -77,6 +77,8 @@ class FederationMember:
             or any(character not in "0123456789abcdef" for character in digest)
         ):
             raise FederationError("member_digest_invalid")
+        if not isinstance(self.tombstone, bool):
+            raise FederationError("member_tombstone_invalid")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -106,6 +108,11 @@ class FederatedEdge:
             (self.relation_type, "edge_relation_invalid"),
         ):
             _text(value, reason)
+        for handle in (self.source_handle, self.target_handle):
+            if ":" in handle:
+                owner, local = handle.split(":", 1)
+                if not owner.strip() or not local.strip():
+                    raise FederationError("edge_handle_invalid")
         if (
             isinstance(self.confidence, bool)
             or not isinstance(self.confidence, (int, float))
@@ -113,8 +120,10 @@ class FederatedEdge:
             or not 0.0 <= self.confidence <= 1.0
         ):
             raise FederationError("edge_confidence_invalid")
-        if any(not isinstance(item, str) or not item.strip() for item in self.evidence):
+        if not isinstance(self.evidence, (tuple, list)) or any(not isinstance(item, str) or not item.strip() for item in self.evidence):
             raise FederationError("edge_evidence_invalid")
+        if not isinstance(self.derived, bool):
+            raise FederationError("edge_derived_invalid")
         if self.derived and not self.evidence:
             raise FederationError("derived_edge_evidence_missing")
 
@@ -138,6 +147,10 @@ class Federation:
             raise FederationError("member_count_limit")
         if len(edges) > MAX_EDGES:
             raise FederationError("edge_count_limit")
+        if any(not isinstance(member, FederationMember) for member in members):
+            raise FederationError("member_type_invalid")
+        if any(not isinstance(edge, FederatedEdge) for edge in edges):
+            raise FederationError("edge_type_invalid")
         repositories = [member.repository.casefold() for member in members]
         if len(repositories) != len(set(repositories)):
             raise FederationError("duplicate_member_repository")
@@ -189,6 +202,16 @@ class Federation:
         removed_edges: Sequence[FederatedEdge] = (),
     ) -> tuple["Federation", dict[str, Any]]:
         """Build a new generation from changed members without mutating this one."""
+        changed_members = tuple(changed_members)
+        removed_repositories = tuple(removed_repositories)
+        added_edges = tuple(added_edges)
+        removed_edges = tuple(removed_edges)
+        if any(not isinstance(member, FederationMember) for member in changed_members):
+            raise FederationError("delta_member_type_invalid")
+        if any(not isinstance(edge, FederatedEdge) for edge in (*added_edges, *removed_edges)):
+            raise FederationError("delta_edge_type_invalid")
+        for repository in removed_repositories:
+            _text(repository, "delta_repository_invalid")
         removed = {repository.casefold() for repository in removed_repositories}
         active_changes: dict[str, FederationMember] = {}
         tombstones = set(removed)
