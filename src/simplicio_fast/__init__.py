@@ -48,6 +48,8 @@ _EXPORTS = {
     "CapabilityCandidate": (".capability_ranking", "CapabilityCandidate"),
     "CapabilityRankingError": (".capability_ranking", "CapabilityRankingError"),
     "rank_capabilities": (".capability_ranking", "rank_capabilities"),
+    "UniversalContextError": (".universal_context", "UniversalContextError"),
+    "compile_context": (".universal_context", "compile_context"),
     "RequestKey": (".pager", "RequestKey"),
     "RuntimeArtifact": (".runtime_backend", "RuntimeArtifact"),
     "RuntimeBackendError": (".runtime_backend", "RuntimeBackendError"),
