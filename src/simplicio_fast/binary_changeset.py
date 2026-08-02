@@ -36,6 +36,10 @@ class BinaryChangeSetError(ValueError):
         super().__init__(f"{reason_code}: {detail}" if detail else reason_code)
 
 
+class BinaryChangeSetUnknownEffect(BinaryChangeSetError):
+    """The Dev CLI outcome is unknown and must be reconciled before retry."""
+
+
 def canonical(value: Any) -> bytes:
     return json.dumps(
         value, sort_keys=True, separators=(",", ":"), ensure_ascii=True
@@ -836,7 +840,7 @@ class DevCliAdapter:
                 timeout=120,
             )
         except (OSError, subprocess.TimeoutExpired) as error:
-            raise BinaryChangeSetError(f"dev_cli_{type(error).__name__}") from error
+            raise BinaryChangeSetUnknownEffect(f"dev_cli_{type(error).__name__}") from error
         try:
             result = json.loads(completed.stdout)
         except json.JSONDecodeError as error:
@@ -935,6 +939,16 @@ def materialize(
             "refresh": {"status": "not-needed"},
             "source_writer": "simplicio-dev-cli",
         }
+    if previous is not None and previous.get("state") == "unknown":
+        return {
+            "schema": RECEIPT_SCHEMA,
+            "status": "locked",
+            "reason_code": "unknown_effect",
+            "changeset_id": changeset.changeset_id,
+            "journal": previous,
+            "reconcile_required": True,
+            "source_writer": "simplicio-dev-cli",
+        }
     try:
         validation = changeset.validate(root)
         journal.append(changeset, "sealed", evidence={"validation": validation})
@@ -980,6 +994,31 @@ def materialize(
             "adapter": applied,
             "refresh": refresh_receipt,
             "journal": event,
+        }
+    except BinaryChangeSetUnknownEffect as error:
+        evidence = {"reason_code": error.reason_code, "message": str(error)}
+        try:
+            event = journal.append(changeset, "unknown", evidence=evidence)
+        except BinaryChangeSetError as journal_error:
+            return {
+                "schema": RECEIPT_SCHEMA,
+                "status": "unknown",
+                "reason_code": "unknown_effect",
+                "changeset_id": changeset.changeset_id,
+                "evidence": evidence,
+                "journal_error": journal_error.reason_code,
+                "reconcile_required": True,
+                "source_writer": "simplicio-dev-cli",
+            }
+        return {
+            "schema": RECEIPT_SCHEMA,
+            "status": "locked",
+            "reason_code": "unknown_effect",
+            "changeset_id": changeset.changeset_id,
+            "evidence": evidence,
+            "journal": event,
+            "reconcile_required": True,
+            "source_writer": "simplicio-dev-cli",
         }
     except BinaryChangeSetError as error:
         evidence = {"reason_code": error.reason_code, "message": str(error)}

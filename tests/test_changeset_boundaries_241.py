@@ -296,3 +296,45 @@ def test_adapter_and_refresh_fail_closed(monkeypatch, tmp_path) -> None:
     assert changeset_module.refresh_semantic_inputs(tmp_path, ["source.txt"])["status"] == "unverified"
     monkeypatch.setattr(changeset_module.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=0, stdout="not-json", stderr=""))
     assert changeset_module.refresh_semantic_inputs(tmp_path, ["source.txt"])["status"] == "refreshed"
+
+
+def test_unknown_dev_cli_effect_is_durable_and_locks_replay(tmp_path) -> None:
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"one\n")
+    item = changeset(tmp_path, delete_operation("source.txt", b"one\n"))
+    journal = BinaryChangeJournal(
+        tmp_path / "journal.bin",
+        worktree_id="worktree-241",
+        lease_id="lease-241",
+        fencing_token="fence-241",
+    )
+    calls = []
+
+    class TimeoutAdapter:
+        def materialize(self, changeset, root):
+            calls.append((changeset.changeset_id, root))
+            raise changeset_module.BinaryChangeSetUnknownEffect("dev_cli_TimeoutExpired")
+
+    first = changeset_module.materialize(
+        item,
+        tmp_path,
+        journal,
+        adapter=TimeoutAdapter(),
+        refresh=lambda *_: {"status": "unexpected"},
+    )
+    assert first["status"] == "locked", first
+    assert first["reason_code"] == "unknown_effect"
+    assert first["reconcile_required"] is True
+    assert journal.read()[-1]["state"] == "unknown"
+
+    second = changeset_module.materialize(
+        item,
+        tmp_path,
+        journal,
+        adapter=TimeoutAdapter(),
+        refresh=lambda *_: {"status": "unexpected"},
+    )
+    assert second["status"] == "locked"
+    assert second["reason_code"] == "unknown_effect"
+    assert len(calls) == 1
+    assert source.read_bytes() == b"one\n"
