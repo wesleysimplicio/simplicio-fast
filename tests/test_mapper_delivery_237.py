@@ -18,6 +18,20 @@ def test_delivery_cli_defaults_to_integrated_mode() -> None:
     assert args.mapper_mode == "integrated"
 
 
+def test_delivery_api_defaults_to_integrated_and_requires_mapper_handoff(tmp_path: Path) -> None:
+    from simplicio_fast.delivery import DeliveryEngine
+
+    root = tmp_path / "repo"
+    root.mkdir()
+    (root / "service.py").write_text("def run():\n    return True\n", encoding="utf-8")
+    with pytest.raises(MapperIngestError, match="mapper_missing"):
+        DeliveryEngine(root, root / "fast.sfast").prepare(
+            "understand run",
+            profile="loop-standalone",
+            engine_receipt={"backend": "python"},
+        )
+
+
 def _provenance(path: str = ".simplicio/context-snapshot.json") -> dict[str, object]:
     return {"artifacts": [{"name": "context_snapshot", "path": path}]}
 

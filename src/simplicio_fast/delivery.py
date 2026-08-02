@@ -238,7 +238,7 @@ class DeliveryEngine:
         *,
         profile: str,
         engine_receipt: dict[str, Any],
-        mode: str = "bootstrap",
+        mode: str = "integrated",
         mapper_handoff: dict[str, Any] | None = None,
         tokenizer_id: str | None = None,
         tokenizer: Callable[[str], int] | None = None,

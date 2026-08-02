@@ -33,11 +33,13 @@ class DeliveryEngineTest(unittest.TestCase):
             first = engine.prepare(
                 "understand create_user and validate tests",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=selection,
             )
             second = engine.prepare(
                 "understand create_user and validate tests",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=selection,
             )
             self.assertEqual("simplicio.fast.delivery-engine/v1", first["schema"])
@@ -59,6 +61,7 @@ class DeliveryEngineTest(unittest.TestCase):
             first = engine.prepare(
                 "understand create_user",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=selection,
             )
             cache_path = cache / f"{first['cache']['key']}.json"
@@ -66,6 +69,7 @@ class DeliveryEngineTest(unittest.TestCase):
             rebuilt = engine.prepare(
                 "understand create_user",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=selection,
             )
             assert rebuilt["cache"]["L0_attempt"] == "miss"
@@ -82,6 +86,7 @@ class DeliveryEngineTest(unittest.TestCase):
             rebuilt_again = engine.prepare(
                 "understand create_user",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=selection,
             )
             assert rebuilt_again["cache"]["L0_attempt"] == "miss"
@@ -99,6 +104,7 @@ class DeliveryEngineTest(unittest.TestCase):
             exact = engine.prepare(
                 "understand create_user",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=selection,
                 tokenizer_id="test-exact-v1",
                 tokenizer=lambda text: len(text.encode("utf-8")),
@@ -106,6 +112,7 @@ class DeliveryEngineTest(unittest.TestCase):
             changed_config = engine.prepare(
                 "understand create_user",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=selection,
                 tokenizer_id="test-exact-v2",
                 tokenizer=lambda text: len(text.encode("utf-8")),
@@ -113,6 +120,7 @@ class DeliveryEngineTest(unittest.TestCase):
             changed_scoring = engine.prepare(
                 "understand create_user",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=selection,
                 tokenizer_id="test-exact-v1",
                 tokenizer=lambda text: len(text.encode("utf-8")),
@@ -149,6 +157,7 @@ class DeliveryEngineTest(unittest.TestCase):
                 DeliveryEngine(root, snapshot).prepare(
                     "understand create_user",
                     profile="loop-standalone",
+                    mode="bootstrap",
                     engine_receipt=select_engine("python").receipt(),
                     tokenizer=lambda text: len(text),
                 )
@@ -165,6 +174,7 @@ class DeliveryEngineTest(unittest.TestCase):
                 DeliveryEngine(root, snapshot).prepare(
                     "understand create_user",
                     profile="loop-standalone",
+                    mode="bootstrap",
                     engine_receipt=select_engine("python").receipt(),
                     tokenizer_id="test-bool-v1",
                     tokenizer=lambda text: True,
@@ -181,6 +191,7 @@ class DeliveryEngineTest(unittest.TestCase):
             receipt = DeliveryEngine(root, snapshot).prepare(
                 "understand create_user",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=select_engine("python").receipt(),
                 selection_mode="legacy-regex",
             )
@@ -207,6 +218,7 @@ class DeliveryEngineTest(unittest.TestCase):
             receipt = DeliveryEngine(root, snapshot).prepare(
                 "authenticate user",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=select_engine("python").receipt(),
                 tokenizer_id="test-exact-v1",
                 tokenizer=lambda text: len(text.split()),
@@ -214,6 +226,7 @@ class DeliveryEngineTest(unittest.TestCase):
             legacy = DeliveryEngine(root, snapshot).prepare(
                 "authenticate user",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=select_engine("python").receipt(),
                 selection_mode="legacy-regex",
                 tokenizer_id="test-exact-v1",
@@ -306,6 +319,7 @@ class DeliveryEngineTest(unittest.TestCase):
             engine.prepare(
                 "validate ping",
                 profile="loop-standalone",
+                mode="bootstrap",
                 engine_receipt=select_engine("python").receipt(),
             )
             stats = engine.cache_stats()
@@ -324,6 +338,7 @@ class DeliveryEngineTest(unittest.TestCase):
             receipt = DeliveryEngine(root, snapshot).prepare(
                 "validate ping",
                 profile="full",
+                mode="bootstrap",
                 engine_receipt=select_engine("python").receipt(),
             )
             self.assertEqual(
