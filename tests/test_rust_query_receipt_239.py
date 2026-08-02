@@ -134,6 +134,24 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         "--limit",
         "20",
     )
+    limited_relations = _run_json(
+        executable,
+        "--relations",
+        str(snapshot),
+        "--kind",
+        "definition",
+        "--limit",
+        "1",
+    )
+    handle_relations = _run_json(
+        executable,
+        "--relations",
+        str(snapshot),
+        "--handle",
+        "helper",
+        "--limit",
+        "20",
+    )
     assert exact["planner"]["selected_index"] == "persisted.exact"
     assert prefix["planner"]["selected_index"] == "persisted.prefix"
     assert by_path["planner"]["selected_index"] == "persisted.exact+path"
@@ -143,6 +161,13 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
     assert relations["schema"] == "simplicio.fast.relations/v1"
     assert relations["relations"]
     assert all(item["kind"] == "definition" for item in relations["relations"])
+    assert len(limited_relations["relations"]) <= 1
+    assert handle_relations["relations"]
+    assert all(
+        item["origin"] == "helper" or item["destination"] == "helper"
+        or item.get("origin_id") == "helper" or item.get("destination_id") == "helper"
+        for item in handle_relations["relations"]
+    )
     assert exact["planner"]["records_decoded"] == 1
     assert prefix["planner"]["records_decoded"] == 1
     with Snapshot(snapshot) as python_snapshot:
