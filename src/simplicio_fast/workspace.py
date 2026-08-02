@@ -211,6 +211,9 @@ class WorkspaceStore:
         self._source_hash_cache: dict[
             tuple[str, int, int, int, int, int], str
         ] = {}
+        self._validated_snapshot_cache: set[
+            tuple[str, str, int, int, int, int]
+        ] = set()
 
     def source_hash(self, path: Path) -> str:
         """Hash a source file once per validated filesystem identity."""
@@ -274,6 +277,36 @@ class WorkspaceStore:
         self._validated_base_cache[key] = (base, digest)
         while len(self._validated_base_cache) > 8:
             self._validated_base_cache.pop(next(iter(self._validated_base_cache)))
+
+    def validate_snapshot(self, snapshot: Path, expected_sha256: str) -> None:
+        """Validate snapshot structure once per immutable artifact identity.
+
+        The caller has already checked the exact artifact digest through
+        ``_base_snapshot``.  This cache only avoids repeating the structural
+        mmap/record validation while that same immutable artifact is reused.
+        """
+        try:
+            stat = snapshot.stat()
+        except OSError as error:
+            raise ValueError("base_artifact_missing") from error
+        key = (
+            str(snapshot),
+            expected_sha256,
+            int(stat.st_size),
+            int(stat.st_mtime_ns),
+            int(stat.st_ctime_ns),
+            int(getattr(stat, "st_ino", 0)),
+        )
+        if key in self._validated_snapshot_cache:
+            return
+        try:
+            with Snapshot(snapshot):
+                pass
+        except (OSError, ValueError) as error:
+            raise ValueError("base_artifact_invalid") from error
+        self._validated_snapshot_cache.add(key)
+        while len(self._validated_snapshot_cache) > 8:
+            self._validated_snapshot_cache.pop()
 
     def cached_delta(self, worktree_id: str, generation: str, path: Path) -> object | None:
         try:
@@ -382,6 +415,7 @@ class WorkspaceStore:
         manifest_path = directory / "manifest.json"
         if snapshot_path.is_file() and manifest_path.is_file():
             existing = self.manifest(generation)
+            self.validate_snapshot(snapshot_path, existing.snapshot_sha256)
             _atomic_json(self.storage / "current.json", existing.to_dict())
             return existing
         build_snapshot(self.root, snapshot_path)
@@ -402,6 +436,7 @@ class WorkspaceStore:
         )
         _atomic_json(manifest_path, manifest.to_dict())
         _atomic_json(self.storage / "current.json", manifest.to_dict())
+        self.validate_snapshot(snapshot_path, manifest.snapshot_sha256)
         self._receipt("base", {"generation_id": generation, "source_count": len(files)})
         return manifest
 

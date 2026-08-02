@@ -17,7 +17,7 @@ from benchmarks.changed_path_delta_230 import (
     workload_shape,
 )
 from simplicio_fast.delta import DELTA_SCHEMA, Delta, DeltaError
-from simplicio_fast.snapshot import build_snapshot
+from simplicio_fast.snapshot import Snapshot, build_snapshot
 from simplicio_fast.workspace import MANIFEST_SCHEMA, Manifest, WorkspaceStore
 
 
@@ -133,6 +133,7 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                 {
                     "base_validation_and_open",
                     "delta_load_or_create",
+                    "snapshot_structural_validation",
                     "compose_and_validate",
                     "source_verification_and_parity",
                 },
@@ -174,6 +175,34 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             self.assertTrue(report["parity"])
             self.assertEqual("explicit_changed_paths", report["parity_result"]["scope"])
             self.assertEqual(["one.py"], report["changed_paths"])
+
+    def test_scoped_handoff_caches_structural_snapshot_validation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root, store = self._store(directory)
+            base = store.build_base()
+            (root / "one.py").write_text(
+                "def one():\n    return 10\n", encoding="utf-8"
+            )
+            delta = store.create_delta(base.generation_id, "cached", ["one.py"])
+            reloaded = WorkspaceStore(root, storage=store.storage)
+            with patch(
+                "simplicio_fast.workspace.Snapshot", wraps=Snapshot
+            ) as opened:
+                first = reloaded.handoff(
+                    base.generation_id,
+                    "cached",
+                    ["one.py"],
+                    delta_generation=delta.delta_generation,
+                )
+                second = reloaded.handoff(
+                    base.generation_id,
+                    "cached",
+                    ["one.py"],
+                    delta_generation=delta.delta_generation,
+                )
+            self.assertTrue(first["parity"])
+            self.assertTrue(second["parity"])
+            self.assertEqual(1, opened.call_count)
 
     def test_repeated_identical_delta_is_content_addressed(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -503,7 +532,15 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
             receipt["performance_gates"]["checks"],
         )
         self.assertIn(
+            "one_file_within_half_cold",
+            receipt["performance_gates"]["checks"],
+        )
+        self.assertIn(
             "unchanged_within_two_times_warm",
+            receipt["performance_gates"]["checks"],
+        )
+        self.assertIn(
+            "unchanged_under_reference_budget",
             receipt["performance_gates"]["checks"],
         )
 

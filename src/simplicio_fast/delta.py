@@ -312,6 +312,61 @@ def _verify_delta(delta: Delta) -> None:
         raise DeltaError("delta_digest_mismatch")
 
 
+def _validate_delta_base(
+    base_generation: str,
+    delta: Delta,
+    base,
+    snapshot_sha256: str,
+    config_fingerprint: str | None,
+) -> None:
+    if delta.base_generation != base_generation:
+        raise DeltaError("base_generation_mismatch")
+    if delta.base_commit != base.commit:
+        raise DeltaError("base_commit_mismatch")
+    if delta.base_config_fingerprint != base.config_fingerprint:
+        raise DeltaError("config_fingerprint_mismatch")
+    if config_fingerprint is not None and config_fingerprint != base.config_fingerprint:
+        raise DeltaError("config_fingerprint_mismatch")
+    if (
+        delta.base_schema != base.schema
+        or delta.base_snapshot_sha256 != snapshot_sha256
+    ):
+        raise DeltaError("base_artifact_digest_mismatch")
+
+
+def _validate_composed_sources(
+    store: WorkspaceStore,
+    base,
+    delta: Delta,
+    scoped_paths: list[str] | None,
+) -> tuple[dict[str, str], dict[str, str]]:
+    if scoped_paths is None:
+        current_hashes = {
+            path.relative_to(store.root).as_posix(): store.source_hash(path)
+            for path in source_files(store.root)
+        }
+    else:
+        current_hashes = {}
+        root = store.root.resolve()
+        for relative in scoped_paths:
+            path = (root / relative).resolve()
+            if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
+                current_hashes[relative] = store.source_hash(path)
+    expected_hashes = _composed_source_hashes(store, base, delta)
+    verification_paths = (
+        sorted(set(current_hashes) | set(expected_hashes))
+        if scoped_paths is None
+        else scoped_paths
+    )
+    for relative in verification_paths:
+        if current_hashes.get(relative) == expected_hashes.get(relative):
+            continue
+        if relative not in delta.changed:
+            raise DeltaError("delta_source_unlisted", relative)
+        raise DeltaError("delta_source_stale", relative)
+    return current_hashes, expected_hashes
+
+
 def create_delta(
     store: WorkspaceStore,
     base_generation: str,
@@ -452,48 +507,21 @@ def compose_delta(
     else:
         base, snapshot_path, snapshot_sha256 = _validated_base
     delta = load_delta(store, worktree_id, delta_generation)
-    if delta.base_generation != base_generation:
-        raise DeltaError("base_generation_mismatch")
-    if delta.base_commit != base.commit:
-        raise DeltaError("base_commit_mismatch")
-    if delta.base_config_fingerprint != base.config_fingerprint:
-        raise DeltaError("config_fingerprint_mismatch")
-    if config_fingerprint is not None and config_fingerprint != base.config_fingerprint:
-        raise DeltaError("config_fingerprint_mismatch")
-    if (
-        delta.base_schema != base.schema
-        or delta.base_snapshot_sha256 != snapshot_sha256
-    ):
-        raise DeltaError("base_artifact_digest_mismatch")
+    _validate_delta_base(
+        base_generation,
+        delta,
+        base,
+        snapshot_sha256,
+        config_fingerprint,
+    )
     scoped_paths = (
         None
         if changed_paths is None
         else sorted({_normal_path(path) for path in changed_paths})
     )
-    if scoped_paths is None:
-        current_hashes = {
-            path.relative_to(store.root).as_posix(): store.source_hash(path)
-            for path in source_files(store.root)
-        }
-    else:
-        current_hashes = {}
-        root = store.root.resolve()
-        for relative in scoped_paths:
-            path = (root / relative).resolve()
-            if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
-                current_hashes[relative] = store.source_hash(path)
-    expected_hashes = _composed_source_hashes(store, base, delta)
-    verification_paths = (
-        sorted(set(current_hashes) | set(expected_hashes))
-        if scoped_paths is None
-        else scoped_paths
+    _current_hashes, _expected_hashes = _validate_composed_sources(
+        store, base, delta, scoped_paths
     )
-    for relative in verification_paths:
-        if current_hashes.get(relative) == expected_hashes.get(relative):
-            continue
-        if relative not in delta.changed:
-            raise DeltaError("delta_source_unlisted", relative)
-        raise DeltaError("delta_source_stale", relative)
     overlay = Overlay(
         OVERLAY_SCHEMA,
         delta.delta_generation,
@@ -560,6 +588,24 @@ def handoff(
     incremental_ms = (perf_counter() - incremental_start) * 1000
     delta_stage_ms = (perf_counter() - delta_stage_start) * 1000
     unchanged_delta = scoped_paths is not None and not delta.changed
+    validated_current: dict[str, str] | None = None
+    snapshot_validation_stage_start = perf_counter()
+    if scoped_paths is not None:
+        store.validate_snapshot(snapshot_path, snapshot_sha256)
+        _validate_delta_base(
+            base_generation,
+            delta,
+            base,
+            snapshot_sha256,
+            config_fingerprint,
+        )
+        if not unchanged_delta:
+            validated_current, _ = _validate_composed_sources(
+                store, base, delta, scoped_paths
+            )
+    snapshot_validation_ms = (
+        perf_counter() - snapshot_validation_stage_start
+    ) * 1000
     warm_start = perf_counter()
     compose_stage_start = perf_counter()
     if unchanged_delta:
@@ -578,16 +624,6 @@ def handoff(
             composed_symbol_count: int | None = len(composed.symbols())
         composed_symbol_count_reason = None
     else:
-        with compose_delta(
-            store,
-            base_generation,
-            worktree_id,
-            delta.delta_generation,
-            config_fingerprint=config_fingerprint,
-            changed_paths=scoped_paths,
-            _validated_base=(base, snapshot_path, snapshot_sha256),
-        ):
-            pass
         composed_symbol_count = None
         composed_symbol_count_reason = "scoped_query_not_materialized"
     compose_stage_ms = (perf_counter() - compose_stage_start) * 1000
@@ -595,12 +631,15 @@ def handoff(
     parity_stage_start = perf_counter()
     if unchanged_delta:
         merged = base.source_hashes
-        root = store.root.resolve()
-        current = {}
-        for relative in scoped_paths:
-            path = (root / relative).resolve()
-            if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
-                current[relative] = store.source_hash(path)
+        if validated_current is None:
+            root = store.root.resolve()
+            current = {}
+            for relative in scoped_paths:
+                path = (root / relative).resolve()
+                if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
+                    current[relative] = store.source_hash(path)
+        else:
+            current = validated_current
     else:
         merged = _composed_source_hashes(store, base, delta)
         if scoped_paths is None:
@@ -609,12 +648,7 @@ def handoff(
                 for path in source_files(store.root)
             }
         else:
-            current = {}
-            root = store.root.resolve()
-            for relative in scoped_paths:
-                path = (root / relative).resolve()
-                if path.is_file() and path.suffix.casefold() in SOURCE_SUFFIXES:
-                    current[relative] = store.source_hash(path)
+            current = validated_current or {}
     target = current
     parity_snapshot_hash = None
     if parity_snapshot is not None:
@@ -677,6 +711,7 @@ def handoff(
         "stage_timings_ms": {
             "base_validation_and_open": round(base_stage_ms, 3),
             "delta_load_or_create": round(delta_stage_ms, 3),
+            "snapshot_structural_validation": round(snapshot_validation_ms, 3),
             "compose_and_validate": round(compose_stage_ms, 3),
             "source_verification_and_parity": round(parity_stage_ms, 3),
         },
