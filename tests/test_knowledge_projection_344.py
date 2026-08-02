@@ -4,7 +4,7 @@ import hashlib
 
 import pytest
 
-from simplicio_fast.knowledge_projection import KnowledgeFact, KnowledgeProjection, KnowledgeProjectionError, _digest
+from simplicio_fast.knowledge_projection import HANDOFF_SCHEMA, KnowledgeFact, KnowledgeProjection, KnowledgeProjectionError, _digest
 
 
 def fact(handle: str, text: str, *, state: str = "active") -> KnowledgeFact:
@@ -190,3 +190,41 @@ def test_knowledge_projection_serializes_twenty_readers() -> None:
     with ThreadPoolExecutor(max_workers=20) as pool:
         results = list(pool.map(read, range(20)))
     assert results == [(["shared"], ["shared"], "simplicio.fast.knowledge-projection/v1")] * 20
+
+
+def test_knowledge_projection_applies_authorized_mapper_handoff() -> None:
+    projection = KnowledgeProjection("repo", "tenant", "g1")
+    item = fact("handoff", "mapper contract")
+    handoff = {
+        "schema": HANDOFF_SCHEMA,
+        "producer": "mapper",
+        "producer_schema": "mapper.knowledge/v1",
+        "repository": "repo",
+        "scope": "tenant",
+        "generation": "g1",
+        "facts": [item.to_dict()],
+        "tombstones": [],
+    }
+    delta = projection.apply_handoff(handoff)
+    assert delta["producer"] == "mapper"
+    assert projection.query("mapper contract")["handles"] == ["handoff"]
+
+
+def test_knowledge_projection_handoff_rejects_untrusted_or_mismatched_inputs() -> None:
+    projection = KnowledgeProjection("repo", "tenant", "g1")
+    base = {
+        "schema": HANDOFF_SCHEMA,
+        "producer": "mapper",
+        "producer_schema": "mapper.knowledge/v1",
+        "repository": "repo",
+        "scope": "tenant",
+        "generation": "g1",
+        "facts": [],
+        "tombstones": [],
+    }
+    with pytest.raises(KnowledgeProjectionError, match="handoff_producer_untrusted"):
+        projection.apply_handoff({**base, "producer": "arbitrary"})
+    with pytest.raises(KnowledgeProjectionError, match="handoff_scope_mismatch"):
+        projection.apply_handoff({**base, "generation": "g2"})
+    with pytest.raises(KnowledgeProjectionError, match="handoff_producer_mismatch"):
+        projection.apply_handoff({**base, "facts": [{**fact("wrong", "contract").to_dict(), "producer": "runtime"}]})

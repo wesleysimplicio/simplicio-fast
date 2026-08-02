@@ -7,13 +7,15 @@ import hashlib
 import json
 import re
 from threading import RLock
-from typing import Any, Iterable, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 
 FACT_SCHEMA = "simplicio.fast.knowledge-fact/v1"
 PROJECTION_SCHEMA = "simplicio.fast.knowledge-projection/v1"
 QUERY_SCHEMA = "simplicio.fast.precedent-query/v1"
 RESULT_SCHEMA = "simplicio.fast.precedent-result/v1"
+HANDOFF_SCHEMA = "simplicio.fast.knowledge-handoff/v1"
+AUTHORIZED_PRODUCERS = frozenset({"mapper", "runtime"})
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9_-]*")
 _ACTIVE = "active"
 _INACTIVE = frozenset({"revoked", "expired", "conflicted", "tombstoned"})
@@ -157,6 +159,49 @@ class KnowledgeProjection:
                 self._tombstones.add(handle)
             return {"schema": "simplicio.fast.knowledge-delta/v1", "generation": self.generation, "changed_handles": sorted(set(changed)), "tombstones": deleted, "conflicts": sorted(self._conflicts)}
 
+    def apply_handoff(self, handoff: Mapping[str, Any]) -> dict[str, Any]:
+        """Apply a bounded Mapper/Runtime handoff without opening producer storage."""
+        if not isinstance(handoff, Mapping) or handoff.get("schema") != HANDOFF_SCHEMA:
+            raise KnowledgeProjectionError("handoff_schema_invalid")
+        producer = handoff.get("producer")
+        producer_schema = handoff.get("producer_schema")
+        if producer not in AUTHORIZED_PRODUCERS:
+            raise KnowledgeProjectionError("handoff_producer_untrusted")
+        if not isinstance(producer_schema, str) or not producer_schema.strip():
+            raise KnowledgeProjectionError("handoff_producer_schema_invalid")
+        if any(handoff.get(key) != expected for key, expected in (
+            ("repository", self.repository),
+            ("scope", self.scope),
+            ("generation", self.generation),
+        )):
+            raise KnowledgeProjectionError("handoff_scope_mismatch")
+        raw_facts = handoff.get("facts")
+        raw_tombstones = handoff.get("tombstones", [])
+        if not isinstance(raw_facts, list) or not isinstance(raw_tombstones, list):
+            raise KnowledgeProjectionError("handoff_payload_invalid")
+        if any(not isinstance(item, Mapping) for item in raw_facts):
+            raise KnowledgeProjectionError("handoff_fact_invalid")
+        if any(not isinstance(item, str) or not item.strip() for item in raw_tombstones):
+            raise KnowledgeProjectionError("handoff_tombstone_invalid")
+        facts: list[KnowledgeFact] = []
+        for item in raw_facts:
+            if item.get("producer") != producer:
+                raise KnowledgeProjectionError("handoff_producer_mismatch")
+            try:
+                fact_payload = dict(item)
+                if fact_payload.pop("schema", FACT_SCHEMA) != FACT_SCHEMA:
+                    raise KnowledgeProjectionError("handoff_fact_invalid")
+                facts.append(KnowledgeFact(**fact_payload))
+            except (KnowledgeProjectionError, TypeError) as error:
+                raise KnowledgeProjectionError("handoff_fact_invalid") from error
+        delta = self.apply_delta(facts, raw_tombstones)
+        return {
+            **delta,
+            "producer": producer,
+            "producer_schema": producer_schema,
+            "handoff_schema": HANDOFF_SCHEMA,
+        }
+
     def query(self, task: str, *, max_results: int = 32, max_bytes: int = 256 * 1024, max_tokens: int = 4096, source_types: Sequence[str] = (), as_of: int | None = None) -> dict[str, Any]:
         if not isinstance(task, str):
             raise KnowledgeProjectionError("query_task_invalid")
@@ -237,6 +282,7 @@ class KnowledgeProjection:
 
 __all__ = [
     "FACT_SCHEMA", "KnowledgeFact", "KnowledgeProjection", "KnowledgeProjectionError",
+    "AUTHORIZED_PRODUCERS", "HANDOFF_SCHEMA",
     "MAX_FACTS", "MAX_QUERY_BYTES", "MAX_QUERY_RESULTS", "MAX_QUERY_TOKENS",
     "PROJECTION_SCHEMA", "QUERY_SCHEMA", "RESULT_SCHEMA",
 ]
