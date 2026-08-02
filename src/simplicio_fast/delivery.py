@@ -76,6 +76,13 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
+def _receipt_digest(receipt: dict[str, Any]) -> str:
+    unsigned = dict(receipt)
+    unsigned.pop("receipt_digest", None)
+    encoded = json.dumps(unsigned, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
 def _load_cached_prepare(path: Path, cache_key: str) -> dict[str, Any] | None:
     """Return only a structurally valid receipt for this exact cache key."""
     try:
@@ -98,6 +105,7 @@ def _load_cached_prepare(path: Path, cache_key: str) -> dict[str, Any] | None:
         or request.get("schema") != CONTEXT_REQUEST_SCHEMA
         or not isinstance(context, dict)
         or not isinstance(context.get("tokenizer"), dict)
+        or cached.get("receipt_digest") != _receipt_digest(cached)
     ):
         return None
     return cached
@@ -353,6 +361,7 @@ class DeliveryEngine:
                     cached["timings"]["prepare_wall_ms"] = (
                         time.perf_counter_ns() - started
                     ) / 1_000_000
+                    cached["receipt_digest"] = _receipt_digest(cached)
                     return cached
 
             terms = _terms(task)
@@ -638,6 +647,7 @@ class DeliveryEngine:
                     "prepare_wall_ms": (time.perf_counter_ns() - started) / 1_000_000
                 },
             }
+            receipt["receipt_digest"] = _receipt_digest(receipt)
         _atomic_json(cache_path, receipt)
         return receipt
 
