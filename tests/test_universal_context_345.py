@@ -123,3 +123,29 @@ def test_universal_context_reports_domain_byte_and_token_truncation() -> None:
     assert byte_limited["truncation_reasons"] == ["byte_budget"]
     token_limited = compile_context([item], max_tokens=1)
     assert token_limited["truncation_reasons"] == ["token_budget"]
+
+
+def test_universal_context_applies_trust_floor_without_promoting_instructions() -> None:
+    untrusted = ProjectionEnvelope.create(
+        "knowledge",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="untrusted",
+        payload={"repository": "repo", "trust": "untrusted", "value": "text"},
+    )
+    verified = ProjectionEnvelope.create(
+        "knowledge",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="verified",
+        payload={"repository": "repo", "trust": "verified", "value": "fact"},
+    )
+    result = compile_context([untrusted, verified], repository_scope="repo", trust_floor="verified")
+    assert [item["stable_handle"] for item in result["projections"]] == ["verified"]
+    assert result["selection"]["rejected"] == [{"stable_handle": "untrusted", "reason": "trust_floor"}]
+    assert result["projections"][0]["trusted_for_instruction"] is False
+    assert result["trust_floor"] == "verified"
+    with pytest.raises(UniversalContextError, match="context_trust_invalid"):
+        compile_context([], trust_floor="unknown")

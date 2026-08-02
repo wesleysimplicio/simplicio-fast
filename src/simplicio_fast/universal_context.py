@@ -9,6 +9,13 @@ from .projection import ProjectionEnvelope
 
 
 CONTEXT_SCHEMA = "simplicio.fast.universal-context/v1"
+_TRUST_RANK = {
+    "untrusted": 0,
+    "derived_fact": 1,
+    "advisory": 2,
+    "verified": 3,
+    "authoritative": 4,
+}
 
 
 class UniversalContextError(ValueError):
@@ -32,6 +39,7 @@ def compile_context(
     domain_caps: Mapping[str, int] | None = None,
     wrapper_bytes: int = 0,
     wrapper_tokens: int = 0,
+    trust_floor: str | None = None,
 ) -> dict[str, Any]:
     """Compile a deterministic context packet; inputs remain immutable."""
     if (
@@ -63,6 +71,8 @@ def compile_context(
         for key, value in domain_caps.items()
     ):
         raise UniversalContextError("context_domain_budget_invalid")
+    if trust_floor is not None and trust_floor not in _TRUST_RANK:
+        raise UniversalContextError("context_trust_invalid")
     selected: list[dict[str, Any]] = []
     reasons: list[str] = []
     rejected: list[dict[str, str]] = []
@@ -106,6 +116,10 @@ def compile_context(
             "payload": dict(envelope.payload),
             "authority": "producer",
         }
+        if trust_floor is not None and _TRUST_RANK.get(item["trust"], -1) < _TRUST_RANK[trust_floor]:
+            reasons.append("trust_floor")
+            rejected.append({"stable_handle": envelope.stable_handle, "reason": "trust_floor"})
+            continue
         encoded_size = len(json.dumps(item, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8"))
         estimated_tokens = _tokens(item)
         if len(selected) >= max_items:
@@ -137,6 +151,7 @@ def compile_context(
         "source_tokens": source_tokens,
         "wrapper_bytes": wrapper_bytes,
         "wrapper_tokens": wrapper_tokens,
+        "trust_floor": trust_floor,
         "source_generations": sorted({item["generation"] for item in selected}),
         "selection": {
             "candidate_count": len(ordered),
