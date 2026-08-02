@@ -46,6 +46,22 @@ def test_csharp_workspace_fingerprint_changes_with_project_inputs(tmp_path: Path
     assert first != second
 
 
+def test_csharp_workspace_fingerprint_binds_sdk_and_restore_inputs(tmp_path: Path) -> None:
+    (tmp_path / "App.csproj").write_text("<Project />", encoding="utf-8")
+    (tmp_path / "global.json").write_text('{"sdk":{"version":"8.0.0"}}', encoding="utf-8")
+    (tmp_path / "NuGet.config").write_text("<configuration />", encoding="utf-8")
+    (tmp_path / "packages.lock.json").write_text('{"version":1}', encoding="utf-8")
+    assert {path.name for path in discover_csharp_projects(tmp_path)} == {
+        "App.csproj",
+        "NuGet.config",
+        "global.json",
+        "packages.lock.json",
+    }
+    baseline = csharp_workspace_fingerprint(tmp_path)
+    (tmp_path / "global.json").write_text('{"sdk":{"version":"9.0.0"}}', encoding="utf-8")
+    assert csharp_workspace_fingerprint(tmp_path) != baseline
+
+
 def test_csharp_multi_project_solution_preserves_partial_and_test_sources(
     tmp_path: Path,
 ) -> None:
