@@ -61,6 +61,19 @@ def _run_session(executable: Path, requests: list[dict[str, object]]) -> list[di
     return responses
 
 
+def _symbol_key(value: dict[str, object]) -> tuple[object, ...]:
+    return (
+        value["qualified_name"],
+        value["kind"],
+        value["file"],
+        value["line"],
+    )
+
+
+def _python_symbol_key(value: object) -> tuple[object, ...]:
+    return (value.qualified_name, value.kind, value.file, value.line)
+
+
 def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> None:
     cargo = shutil.which("cargo")
     if cargo is None:
@@ -247,3 +260,55 @@ def test_resident_handshake_rejects_manifest_version_drift() -> None:
         RustCoreSession._validate_handshake(
             handshake, {"version": "2.0.21"}
         )
+
+
+def test_rust_queries_match_python_on_frozen_conformance_golden(tmp_path: Path) -> None:
+    cargo = shutil.which("cargo")
+    if cargo is None:
+        pytest.skip("cargo is required for frozen conformance parity")
+    root = Path(__file__).parents[1]
+    subprocess.run(
+        [cargo, "build", "--manifest-path", "rust/simplicio-fast-core/Cargo.toml", "--locked", "--quiet"],
+        cwd=root,
+        check=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        timeout=180,
+    )
+    executable = root / "rust" / "target" / "debug" / (
+        "simplicio-fast-rs.exe" if shutil.which("cmd.exe") else "simplicio-fast-rs"
+    )
+    fixture_root = root / "fixtures" / "conformance" / "v1"
+    snapshot = tmp_path / "conformance.sfast"
+    build_snapshot(fixture_root, snapshot)
+
+    cases = [
+        ("resolve", {}, "exact"),
+        ("res", {}, "prefix"),
+        ("resolve_number", {"--path": "rust/service.rs", "--kind": "function"}, "exact+path+kind"),
+    ]
+    with Snapshot(snapshot) as python_snapshot:
+        for term, filters, selected_index in cases:
+            rust = _run_json(
+                executable,
+                "--query",
+                str(snapshot),
+                term,
+                *[argument for pair in filters.items() for argument in pair],
+                "--limit",
+                "50",
+            )
+            if selected_index == "prefix":
+                expected = python_snapshot.search(term, prefix=True)
+            else:
+                expected = python_snapshot.find_exact(term)
+                if "--path" in filters:
+                    expected = [item for item in expected if item.file == filters["--path"]]
+                if "--kind" in filters:
+                    expected = [item for item in expected if item.kind == filters["--kind"]]
+            assert rust["planner"]["selected_index"] == f"persisted.{selected_index}"
+            assert rust["planner"]["records_decoded"] == len(expected)
+            assert sorted(_symbol_key(item) for item in rust["matches"]) == sorted(
+                _python_symbol_key(item) for item in expected
+            )
