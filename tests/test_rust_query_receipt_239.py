@@ -9,7 +9,7 @@ import pytest
 
 from simplicio_fast.snapshot import build_snapshot
 from simplicio_fast.snapshot import Snapshot
-from simplicio_fast.rust_session import RustCoreSession, RustSessionError, _canonical
+from simplicio_fast.rust_session import READ_ONLY_OPERATIONS, RustCoreSession, RustSessionError, _canonical
 
 
 def _run_json(executable: Path, *args: str) -> dict[str, object]:
@@ -278,7 +278,7 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
     with RustCoreSession(executable) as non_read_only_session:
         non_read_only_session.restart()
         non_read_only_session._process.kill()
-        with pytest.raises(RustSessionError, match="session_crashed"):
+        with pytest.raises(RustSessionError, match="session_operation_invalid"):
             non_read_only_session.call("write", {})
         metrics = non_read_only_session.metrics()
         assert metrics["starts"] == 2
@@ -311,7 +311,7 @@ def test_resident_handshake_rejects_manifest_version_drift() -> None:
         "status": "ready",
         "engine_version": "2.0.20",
         "schemas": ["simplicio.fast.context/v1"],
-        "capabilities": ["stats", "query", "context"],
+        "capabilities": sorted(READ_ONLY_OPERATIONS),
         "binary_digest": "sha256:" + "0" * 64,
         "source_commit": "a" * 40,
         "conformance_digest": "sha256:" + "1" * 64,
@@ -332,7 +332,7 @@ def test_resident_handshake_rejects_empty_identity_and_invalid_call_frames() -> 
         "status": "ready",
         "engine_version": "2.0.20",
         "schemas": ["simplicio.fast.context/v1"],
-        "capabilities": ["stats", "query", "context"],
+        "capabilities": sorted(READ_ONLY_OPERATIONS),
         "binary_digest": "sha256:" + "0" * 64,
         "source_commit": "a" * 40,
         "conformance_digest": "sha256:" + "1" * 64,
@@ -348,6 +348,8 @@ def test_resident_handshake_rejects_empty_identity_and_invalid_call_frames() -> 
     session = object.__new__(RustCoreSession)
     with pytest.raises(RustSessionError, match="session_operation_invalid"):
         session.call("", {})
+    with pytest.raises(RustSessionError, match="session_operation_invalid"):
+        session.call("write", {})
     with pytest.raises(RustSessionError, match="session_payload_invalid"):
         session.call("query", [])
     with pytest.raises(RustSessionError, match="session_payload_invalid"):
