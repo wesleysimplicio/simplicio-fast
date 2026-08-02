@@ -26,6 +26,7 @@ from .adapters import (
 )
 from .snapshot import _parse_file, stable_id
 from .mapper_ingest import MapperIngestError, validate_handoff
+from .projection import ProjectionEnvelope
 
 SCHEMA = "simplicio.fast.parser-adapter/v1"
 SUPPORTED_MODES = {"bootstrap", "integrated"}
@@ -737,6 +738,41 @@ def build_payload(
     return payload
 
 
+def build_projection(
+    root: Path,
+    *,
+    mapper_generation: str | None = None,
+    commit: str | None = None,
+    config_fingerprint: str | None = None,
+    changed_paths: Iterable[str] | None = None,
+    mode: str = "bootstrap",
+    limits: Mapping[str, int] | None = None,
+    previous_payload: Mapping[str, Any] | None = None,
+) -> ProjectionEnvelope:
+    """Compile the Code adapter payload into the shared projection ABI."""
+    payload = build_payload(
+        root,
+        mapper_generation=mapper_generation,
+        commit=commit,
+        config_fingerprint=config_fingerprint,
+        changed_paths=changed_paths,
+        mode=mode,
+        limits=limits,
+        previous_payload=previous_payload,
+    )
+    generation = payload.get("mapper_generation") or (
+        f"bootstrap:{payload['payload_sha256']}"
+    )
+    return ProjectionEnvelope.create(
+        "code",
+        producer="simplicio-fast.parser-adapter",
+        producer_schema=SCHEMA,
+        generation=str(generation),
+        stable_handle=f"code:{payload['payload_sha256']}",
+        payload=payload,
+    )
+
+
 def validate_payload(
     value: Mapping[str, Any],
     *,
@@ -934,5 +970,6 @@ __all__ = [
     "ParserAdapterError",
     "build_payload",
     "build_payload_from_mapper",
+    "build_projection",
     "validate_payload",
 ]

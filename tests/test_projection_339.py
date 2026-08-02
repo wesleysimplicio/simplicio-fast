@@ -2,6 +2,7 @@ import pytest
 
 from simplicio_fast.knowledge import KnowledgeFacade
 from simplicio_fast.prism_arena import PrismArena
+from simplicio_fast.parser_adapter import build_projection
 from simplicio_fast.projection import ProjectionEnvelope, ProjectionError
 from simplicio_fast.skills import SkillCatalog
 
@@ -75,3 +76,13 @@ def test_knowledge_and_operations_producers_use_the_same_abi(tmp_path) -> None:
         assert ProjectionEnvelope.decode(operations_projection.encode()) == operations_projection
     finally:
         arena.close()
+
+
+def test_code_parser_producer_uses_the_same_abi(tmp_path) -> None:
+    (tmp_path / "service.py").write_text(
+        "def parse_request(value):\n    return value\n", encoding="utf-8"
+    )
+    projection = build_projection(tmp_path, mode="bootstrap")
+    assert projection.projection_type == "code"
+    assert projection.producer_schema == "simplicio.fast.parser-adapter/v1"
+    assert ProjectionEnvelope.decode(projection.encode()) == projection
