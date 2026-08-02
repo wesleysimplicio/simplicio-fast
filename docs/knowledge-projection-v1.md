@@ -7,6 +7,7 @@ Runtime database directly.
 
 Queries exclude revoked, expired, conflicted and tombstoned facts, support
 bounded as-of filtering, return handles instead of unbounded content, and keep
+producer, repository and scope alongside version, provenance, digest, and keep
 relevance, trust, freshness and applicability separate in `explain`. The
 current ranking is explicitly labelled `lexical-fallback`; vector ranking is
 optional and unavailable vector infrastructure does not silently change the
