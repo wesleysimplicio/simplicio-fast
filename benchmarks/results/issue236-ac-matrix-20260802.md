@@ -3,14 +3,14 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. The latest source evidence baseline is `c31ca88`;
+owned by an external capability or service. The latest source evidence baselines are `0750adc` and `c31ca88`;
 release-integrity passes all checks. The full-suite subprocess failures in
 this Windows shell are recorded separately and are not treated as functional
 passes.
 
 | Issue | Current state | Current evidence | Remaining authoritative gate |
 | --- | --- | --- | --- |
-| #236 | PARTIAL | Latest Windows regression after federation digest validation: 705 passed, 1 skipped and 67 subtests in 141.75 s; one prior run observed a non-reproducible WinError 5 during semantic-scoring atomic replace, while isolated and repeat full runs passed; prior full coverage totals remain 85.6299% combined (86% displayed), 76.6563% branches (77% displayed); release-integrity remains pass | Final AC matrix, >=90% changed-code line and >=85% branch coverage, Linux/Windows assets, 10 worktrees/20 readers, installed S3/S4/S5 delivery |
+| #236 | PARTIAL | Latest Windows regression after federation digest, unknown-effect and parser-path changes: 706 passed, 1 skipped and 70 subtests in 128.24 s; one prior run observed a non-reproducible WinError 5 during semantic-scoring atomic replace, while isolated and repeat full runs passed; prior full coverage totals remain 85.6299% combined (86% displayed), 76.6563% branches (77% displayed); release-integrity remains pass | Final AC matrix, >=90% changed-code line and >=85% branch coverage, Linux/Windows assets, 10 worktrees/20 readers, installed S3/S4/S5 delivery |
 | #237 | PARTIAL | `829a911`; current adapter/ingest/delivery suite passes 36 tests + 16 subtests, with strict handoff/digest/scope validation | Real current Mapper-produced handoff in installed delivery, Linux/Windows compatibility, physical worktree isolation, final coverage and installed package matrix |
 | #238 | PARTIAL | `2f27829`; resident session verifies manifest version, source commit, conformance digest, executable digest and pinned snapshot generation; `issue238-windows-20260802-30-r3.json` has 30 one-shot/resident samples, p50 0.0328ms resident vs 34.7761ms one-shot, one mapped generation, zero failures and one resident process; Rust 19 tests and focused Python 18 tests pass | Unix/Windows transport matrix, crash/concurrency/installed package and final coverage |
 | #239 | PARTIAL | `38e8bdc`; fresh 30-run indexed receipts at 10k/100k/1M; all symbol-query gates pass; Rust now exposes bounded relation query through library/CLI/resident session with explicit handle/kind/limit filters and the focused E2E passes 4 tests; 1M p95 0.1095 ms, 2 candidates, 1 decoded record, 0 KiB additional RSS; Rust workspace tests (19) and clippy `-D warnings` pass | Relation-query high-cardinality benchmark, fuzz/property, cross-platform receipts, physical worktrees, installed package and final coverage |
