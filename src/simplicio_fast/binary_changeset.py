@@ -1009,7 +1009,10 @@ def materialize(
             "refresh": {"status": "not-needed"},
             "source_writer": "simplicio-dev-cli",
         }
-    if previous is not None and previous.get("state") == "unknown":
+    if previous is not None and previous.get("state") in {
+        "unknown",
+        "reconcile_ambiguous",
+    }:
         return {
             "schema": RECEIPT_SCHEMA,
             "status": "locked",
@@ -1103,7 +1106,99 @@ def materialize(
             "reason_code": error.reason_code,
             "evidence": evidence,
             "source_writer": "simplicio-dev-cli",
+    }
+
+
+def reconcile_unknown_effect(
+    changeset: BinaryChangeSet,
+    root: Path,
+    journal: BinaryChangeJournal,
+) -> dict[str, Any]:
+    """Reconcile a locked adapter outcome using source hashes before retry."""
+
+    root = root.resolve()
+    existing = journal.read()
+    previous = next(
+        (
+            event
+            for event in reversed(existing)
+            if event.get("changeset_id") == changeset.changeset_id
+        ),
+        None,
+    )
+    if previous is None or previous.get("state") not in {
+        "unknown",
+        "reconciled",
+    }:
+        return {
+            "schema": RECEIPT_SCHEMA,
+            "status": "rejected",
+            "reason_code": "unknown_effect_missing",
+            "changeset_id": changeset.changeset_id,
+            "source_writer": "simplicio-dev-cli",
         }
+    if previous.get("state") == "reconciled":
+        return {
+            "schema": RECEIPT_SCHEMA,
+            "status": "reconciled",
+            "changeset_id": changeset.changeset_id,
+            "reconciliation": previous.get("evidence", {}).get("reconciliation"),
+            "journal": previous,
+            "retry_allowed": previous.get("evidence", {}).get("retry_allowed", False),
+            "source_writer": "simplicio-dev-cli",
+        }
+    try:
+        validation = changeset.validate(root)
+    except BinaryChangeSetError as error:
+        evidence = {
+            "reconciliation": "ambiguous",
+            "reason_code": error.reason_code,
+            "message": str(error),
+            "retry_allowed": False,
+        }
+        return {
+            "schema": RECEIPT_SCHEMA,
+            "status": "locked",
+            "reason_code": "unknown_effect",
+            "changeset_id": changeset.changeset_id,
+            "evidence": evidence,
+            "journal": previous,
+            "reconcile_required": True,
+            "source_writer": "simplicio-dev-cli",
+        }
+    if validation["idempotent"]:
+        evidence = {
+            "reconciliation": "already_applied",
+            "unknown_record_hash": previous["record_hash"],
+            "validation": validation,
+            "retry_allowed": False,
+        }
+        event = journal.append(changeset, "applied", evidence=evidence)
+        return {
+            "schema": RECEIPT_SCHEMA,
+            "status": "reconciled",
+            "changeset_id": changeset.changeset_id,
+            "reconciliation": "already_applied",
+            "journal": event,
+            "retry_allowed": False,
+            "source_writer": "simplicio-dev-cli",
+        }
+    evidence = {
+        "reconciliation": "not_applied",
+        "unknown_record_hash": previous["record_hash"],
+        "validation": validation,
+        "retry_allowed": True,
+    }
+    event = journal.append(changeset, "reconciled", evidence=evidence)
+    return {
+        "schema": RECEIPT_SCHEMA,
+        "status": "reconciled",
+        "changeset_id": changeset.changeset_id,
+        "reconciliation": "not_applied",
+        "journal": event,
+        "retry_allowed": True,
+        "source_writer": "simplicio-dev-cli",
+    }
 
 
 def prepare_from_json(

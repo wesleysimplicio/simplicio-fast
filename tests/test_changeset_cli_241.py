@@ -151,6 +151,7 @@ class ChangesetCli241Test(unittest.TestCase):
             "export-json",
             "materialize",
             "recover",
+            "reconcile",
         ):
             self.assertIn(command, stdout)
 

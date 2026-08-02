@@ -379,3 +379,105 @@ def test_unknown_dev_cli_effect_is_durable_and_locks_replay(tmp_path) -> None:
     assert second["reason_code"] == "unknown_effect"
     assert len(calls) == 1
     assert source.read_bytes() == b"one\n"
+
+
+def test_unknown_effect_reconciliation_allows_only_proven_retry(tmp_path) -> None:
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"one\n")
+    item = changeset(tmp_path, delete_operation("source.txt", b"one\n"))
+    journal = BinaryChangeJournal(
+        tmp_path / "journal.bin",
+        worktree_id="worktree-241",
+        lease_id="lease-241",
+        fencing_token="fence-241",
+    )
+
+    class AppliedTimeoutAdapter:
+        def materialize(self, changeset, root):
+            source.unlink()
+            raise changeset_module.BinaryChangeSetUnknownEffect("dev_cli_TimeoutExpired")
+
+    first = changeset_module.materialize(
+        item, tmp_path, journal, adapter=AppliedTimeoutAdapter(), refresh=lambda *_: {}
+    )
+    assert first["status"] == "locked"
+    applied = changeset_module.reconcile_unknown_effect(item, tmp_path, journal)
+    assert applied["status"] == "reconciled"
+    assert applied["reconciliation"] == "already_applied"
+    assert applied["retry_allowed"] is False
+
+    class MustNotRetryAdapter:
+        def materialize(self, changeset, root):
+            raise AssertionError("reconciliation must prevent blind retry")
+
+    replay = changeset_module.materialize(
+        item, tmp_path, journal, adapter=MustNotRetryAdapter(), refresh=lambda *_: {}
+    )
+    assert replay["status"] == "idempotent"
+
+    source.write_bytes(b"one\n")
+    second_item = changeset(tmp_path, delete_operation("source.txt", b"one\n"))
+    second_journal = BinaryChangeJournal(
+        tmp_path / "second-journal.bin",
+        worktree_id="worktree-241",
+        lease_id="lease-241",
+        fencing_token="fence-241",
+    )
+
+    class NotAppliedTimeoutAdapter:
+        def materialize(self, changeset, root):
+            raise changeset_module.BinaryChangeSetUnknownEffect("dev_cli_TimeoutExpired")
+
+    changeset_module.materialize(
+        second_item,
+        tmp_path,
+        second_journal,
+        adapter=NotAppliedTimeoutAdapter(),
+        refresh=lambda *_: {},
+    )
+    not_applied = changeset_module.reconcile_unknown_effect(
+        second_item, tmp_path, second_journal
+    )
+    assert not_applied["reconciliation"] == "not_applied"
+    assert not_applied["retry_allowed"] is True
+
+    class DeleteAdapter:
+        def materialize(self, changeset, root):
+            source.unlink()
+            return {"status": "ok"}
+
+    retried = changeset_module.materialize(
+        second_item,
+        tmp_path,
+        second_journal,
+        adapter=DeleteAdapter(),
+        refresh=lambda *_: {"status": "refreshed"},
+    )
+    assert retried["status"] == "applied"
+    assert not source.exists()
+
+
+def test_unknown_effect_reconciliation_keeps_ambiguous_state_locked(tmp_path) -> None:
+    source = tmp_path / "source.txt"
+    source.write_bytes(b"one\n")
+    item = changeset(tmp_path, delete_operation("source.txt", b"one\n"))
+    journal = BinaryChangeJournal(
+        tmp_path / "journal.bin",
+        worktree_id="worktree-241",
+        lease_id="lease-241",
+        fencing_token="fence-241",
+    )
+
+    class TimeoutAdapter:
+        def materialize(self, changeset, root):
+            raise changeset_module.BinaryChangeSetUnknownEffect("dev_cli_TimeoutExpired")
+
+    changeset_module.materialize(
+        item, tmp_path, journal, adapter=TimeoutAdapter(), refresh=lambda *_: {}
+    )
+    source.write_bytes(b"unexpected\n")
+    reconciled = changeset_module.reconcile_unknown_effect(item, tmp_path, journal)
+    assert reconciled["status"] == "locked"
+    assert reconciled["reconcile_required"] is True
+    assert reconciled["evidence"]["reconciliation"] == "ambiguous"
+    assert journal.read()[-1]["state"] == "unknown"
