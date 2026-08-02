@@ -12,6 +12,7 @@ from simplicio_fast.native_backend import (
     ResidentRustSession,
     RustBackend,
     backend_receipt_fields,
+    canonical,
     execute_with_fallback,
     platform_tag,
     resolve_packaged_backend,
@@ -39,6 +40,13 @@ def test_python_standalone_hot_paths(operation, payload):
     result, backend, reason = execute_with_fallback(PythonBackend(), operation, payload)
     assert backend == "python" and reason == "RUST_UNAVAILABLE"
     assert result is not None
+
+
+def test_native_canonical_rejects_non_finite_payloads():
+    with pytest.raises(NativeBackendError, match="native_payload_invalid"):
+        canonical({"value": float("nan")})
+    with pytest.raises(NativeBackendError, match="native_payload_invalid"):
+        canonical({"value": float("inf")})
 
 
 def test_incompatible_or_tampered_artifact_is_never_used(tmp_path):
