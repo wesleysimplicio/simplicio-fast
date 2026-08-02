@@ -252,6 +252,135 @@ class ChangesetCli241Test(unittest.TestCase):
             self.assertEqual("ok", materialized["adapter"]["result"]["status"])
             self.assertEqual(created, (root / "created.txt").read_bytes())
 
+    def test_installed_console_materializes_all_operations_and_recovers(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original = b"one\ntwo\nthree\n"
+            replacement = b"one\nchanged\nthree\n"
+            source = root / "source.txt"
+            source.write_bytes(original)
+            intent = root / "intent.json"
+            binary = root / "changeset.sfc"
+            journal = root / "changeset.journal"
+
+            def materialize(operation: dict, attempt: str) -> dict:
+                intent.write_text(
+                    json.dumps({"operations": [operation]}), encoding="utf-8"
+                )
+                prepared = self.run_installed(
+                    root,
+                    "changeset",
+                    "prepare",
+                    str(intent),
+                    "--root",
+                    str(root),
+                    "--output",
+                    str(binary),
+                    "--base-generation",
+                    "b" * 64,
+                    "--overlay-generation",
+                    "o" * 64,
+                    "--attempt",
+                    attempt,
+                    "--worktree-id",
+                    "installed-matrix",
+                    "--lease-id",
+                    "installed-lease",
+                    "--fencing-token",
+                    "installed-fence",
+                )
+                self.assertEqual("sealed", prepared["status"])
+                result = self.run_installed(
+                    root,
+                    "changeset",
+                    "materialize",
+                    str(binary),
+                    "--root",
+                    str(root),
+                    "--journal",
+                    str(journal),
+                    "--write",
+                )
+                self.assertEqual("applied", result["status"])
+                self.assertEqual(
+                    "simplicio.fast.dev-cli-adapter/v1",
+                    result["adapter"]["schema"],
+                )
+                self.assertEqual("ok", result["adapter"]["result"]["status"])
+                return result
+
+            created = b"created\n"
+            materialize(
+                {
+                    "op": "create",
+                    "path": "created.txt",
+                    "after_sha256": digest(created),
+                    "content_b64": encoded(created),
+                },
+                "installed-create",
+            )
+            materialize(
+                {
+                    "op": "replace-range",
+                    "path": "source.txt",
+                    "before_sha256": digest(original),
+                    "after_sha256": digest(replacement),
+                    "content_b64": encoded(b"changed"),
+                    "encoding": "utf-8",
+                    "line_map": {"start_line": 2, "end_line": 2},
+                },
+                "installed-replace",
+            )
+            materialize(
+                {
+                    "op": "rename",
+                    "path": "created.txt",
+                    "dest": "renamed.txt",
+                    "before_sha256": digest(created),
+                    "after_sha256": digest(created),
+                },
+                "installed-rename",
+            )
+            materialize(
+                {
+                    "op": "delete",
+                    "path": "renamed.txt",
+                    "before_sha256": digest(created),
+                },
+                "installed-delete",
+            )
+            replay = self.run_installed(
+                root,
+                "changeset",
+                "materialize",
+                str(binary),
+                "--root",
+                str(root),
+                "--journal",
+                str(journal),
+                "--write",
+            )
+            self.assertEqual("idempotent", replay["status"])
+            complete = journal.read_bytes()
+            journal.write_bytes(complete + b"\x00incomplete-tail")
+            recovered = self.run_installed(
+                root,
+                "changeset",
+                "recover",
+                str(journal),
+                "--worktree-id",
+                "installed-matrix",
+                "--lease-id",
+                "installed-lease",
+                "--fencing-token",
+                "installed-fence",
+            )
+            self.assertEqual("recovered", recovered["status"])
+            self.assertGreater(recovered["truncated_bytes"], 0)
+            self.assertEqual(complete, journal.read_bytes())
+            self.assertEqual(replacement, source.read_bytes())
+            self.assertFalse((root / "renamed.txt").exists())
+
     def test_create_replace_rename_delete_and_replay(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
