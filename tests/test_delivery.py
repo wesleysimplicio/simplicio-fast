@@ -200,6 +200,50 @@ class DeliveryEngineTest(unittest.TestCase):
                     tokenizer=lambda text: len(text),
                 )
 
+    def test_prepare_resolves_provider_tokenizer_and_separates_fallback_cache(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def create_user(name):\n    return name\n", encoding="utf-8"
+            )
+            snapshot = root / "project.sfast"
+            cache = root / "cache"
+            build_snapshot(root, snapshot)
+            engine = DeliveryEngine(root, snapshot, cache)
+            selection = select_engine("python").receipt()
+            def exact_tokenizer(text: str) -> int:
+                return 123
+            with patch(
+                "simplicio_fast.delivery.resolve_tokenizer",
+                return_value=exact_tokenizer,
+            ) as resolver:
+                exact = engine.prepare(
+                    "understand create_user",
+                    profile="loop-standalone",
+                    mode="bootstrap",
+                    engine_receipt=selection,
+                    tokenizer_id="tiktoken:test-exact-v1",
+                )
+            resolver.assert_called_once_with("tiktoken:test-exact-v1")
+            self.assertEqual("exact", exact["context"]["tokenizer"]["mode"])
+            self.assertEqual(123, exact["context"]["tokens"])
+            with patch(
+                "simplicio_fast.delivery.resolve_tokenizer", return_value=None
+            ):
+                fallback = engine.prepare(
+                    "understand create_user",
+                    profile="loop-standalone",
+                    mode="bootstrap",
+                    engine_receipt=selection,
+                    tokenizer_id="tiktoken:test-exact-v1",
+                )
+            self.assertEqual("estimated", fallback["context"]["tokenizer"]["mode"])
+            self.assertEqual(
+                "provider_tokenizer_unavailable",
+                fallback["context"]["tokenizer"]["reason"],
+            )
+            self.assertEqual("miss", fallback["cache"]["L0_attempt"])
+
     def test_prepare_rejects_boolean_token_counts(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

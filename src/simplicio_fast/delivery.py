@@ -30,6 +30,7 @@ from .semantic_scoring import (
     SourceDocument,
 )
 from .snapshot import Snapshot, build_snapshot
+from .tokenizers import resolve_tokenizer
 
 
 SCHEMA = "simplicio.fast.delivery-engine/v1"
@@ -279,6 +280,8 @@ class DeliveryEngine:
         if selection_mode not in SELECTION_MODES:
             raise ValueError(f"unsupported selection mode: {selection_mode}")
         effective_tokenizer_id = tokenizer_id or "estimated:word-split-v1"
+        active_tokenizer = tokenizer or resolve_tokenizer(tokenizer_id)
+        tokenizer_mode = "exact" if active_tokenizer is not None else "estimated"
         mapper_provenance: dict[str, Any]
         if mode == "integrated":
             if mapper_handoff is None:
@@ -339,6 +342,7 @@ class DeliveryEngine:
                 "mapper_generation": mapper_provenance.get("generation"),
                 "mapper_handoff": mapper_provenance.get("handoff_sha256"),
                 "tokenizer_id": effective_tokenizer_id,
+                "tokenizer_mode": tokenizer_mode,
                 "context_request_schema": CONTEXT_REQUEST_SCHEMA,
                 "scoring_config": scoring_config,
                 "selection_mode": selection_mode,
@@ -407,7 +411,7 @@ class DeliveryEngine:
             }
             wrapper_tokens = _token_count(
                 json.dumps(wrapper_material, sort_keys=True, separators=(",", ":")),
-                tokenizer,
+                active_tokenizer,
             )
             if wrapper_tokens >= 8_000:
                 raise ValueError("context wrapper exceeds token budget")
@@ -490,7 +494,7 @@ class DeliveryEngine:
                 ):
                     rejected_quality.append(str(handle))
                     continue
-                token_count = _token_count(span.content, tokenizer)
+                token_count = _token_count(span.content, active_tokenizer)
                 if selected_tokens + token_count > source_token_budget:
                     rejected_budget.append(str(handle))
                     continue
@@ -583,7 +587,7 @@ class DeliveryEngine:
                     "spans": len(selected_spans),
                     "bytes": context_bytes,
                     "tokens": context_tokens,
-                    "estimated_tokens": context_tokens if tokenizer is None else None,
+                    "estimated_tokens": context_tokens if active_tokenizer is None else None,
                     "source_tokens": context_tokens,
                     "wrapper_tokens": wrapper_tokens,
                     "total_tokens": context_tokens + wrapper_tokens,
@@ -620,11 +624,15 @@ class DeliveryEngine:
                     "quality_floor": semantic_floor,
                     "deduplicated_handles": deduplicated_handles,
                     "tokenizer": {
-                        "mode": "exact" if tokenizer is not None else "estimated",
+                        "mode": tokenizer_mode,
                         "id": effective_tokenizer_id,
                         "reason": None
-                        if tokenizer is not None
-                        else "provider_tokenizer_unavailable",
+                        if active_tokenizer is not None
+                        else (
+                            "provider_tokenizer_unavailable"
+                            if tokenizer_id
+                            else "tokenizer_unconfigured"
+                        ),
                     },
                     "scoring_config": scoring_config,
                     "selection_mode": selection_mode,
