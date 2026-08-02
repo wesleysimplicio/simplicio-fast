@@ -93,18 +93,31 @@ class KnowledgeProjection:
         self.scope = scope
         self.generation = generation
         self._facts: dict[str, KnowledgeFact] = {}
+        self._conflicts: set[str] = set()
+        self._tombstones: set[str] = set()
 
     def apply_delta(self, facts: Iterable[KnowledgeFact] = (), tombstones: Iterable[str] = ()) -> dict[str, Any]:
         changed: list[str] = []
         for fact in facts:
             if fact.repository != self.repository or fact.scope != self.scope:
                 raise KnowledgeProjectionError("fact_scope_mismatch")
+            previous = self._facts.get(fact.stable_handle)
+            if previous is not None:
+                if previous.digest == fact.digest and previous.version == fact.version:
+                    self._tombstones.discard(fact.stable_handle)
+                    continue
+                self._conflicts.add(fact.stable_handle)
+                changed.append(fact.stable_handle)
+                continue
             self._facts[fact.stable_handle] = fact
+            self._tombstones.discard(fact.stable_handle)
             changed.append(fact.stable_handle)
         deleted = sorted(set(tombstones))
         for handle in deleted:
             self._facts.pop(handle, None)
-        return {"schema": "simplicio.fast.knowledge-delta/v1", "generation": self.generation, "changed_handles": sorted(set(changed)), "tombstones": deleted}
+            self._conflicts.discard(handle)
+            self._tombstones.add(handle)
+        return {"schema": "simplicio.fast.knowledge-delta/v1", "generation": self.generation, "changed_handles": sorted(set(changed)), "tombstones": deleted, "conflicts": sorted(self._conflicts)}
 
     def query(self, task: str, *, max_results: int = 32, max_bytes: int = 256 * 1024, max_tokens: int = 4096, source_types: Sequence[str] = (), as_of: int | None = None) -> dict[str, Any]:
         if not task or max_results <= 0 or max_bytes <= 0 or max_tokens <= 0:
@@ -112,7 +125,7 @@ class KnowledgeProjection:
         task_terms = _tokens(task)
         candidates: list[dict[str, Any]] = []
         for fact in self._facts.values():
-            if fact.state in _INACTIVE or (source_types and fact.source_type not in source_types):
+            if fact.stable_handle in self._conflicts or fact.stable_handle in self._tombstones or fact.state in _INACTIVE or (source_types and fact.source_type not in source_types):
                 continue
             if as_of is not None and ((fact.valid_from is not None and as_of < fact.valid_from) or (fact.valid_until is not None and as_of > fact.valid_until)):
                 continue
@@ -149,6 +162,18 @@ class KnowledgeProjection:
             bytes_used += encoded_size
             tokens_used += estimated
         return {"schema": RESULT_SCHEMA, "query_schema": QUERY_SCHEMA, "projection_schema": PROJECTION_SCHEMA, "repository": self.repository, "scope": self.scope, "generation": self.generation, "handles": [item["stable_handle"] for item in selected], "results": selected, "truncated": bool(reasons) or len(candidates) > len(selected), "truncation_reasons": sorted(set(reasons))}
+
+    def snapshot(self) -> dict[str, Any]:
+        """Return a bounded metadata snapshot without exposing producer storage."""
+        return {
+            "schema": PROJECTION_SCHEMA,
+            "repository": self.repository,
+            "scope": self.scope,
+            "generation": self.generation,
+            "handles": sorted(self._facts),
+            "conflicts": sorted(self._conflicts),
+            "tombstones": sorted(self._tombstones),
+        }
 
 
 __all__ = ["FACT_SCHEMA", "KnowledgeFact", "KnowledgeProjection", "KnowledgeProjectionError", "PROJECTION_SCHEMA", "QUERY_SCHEMA", "RESULT_SCHEMA"]

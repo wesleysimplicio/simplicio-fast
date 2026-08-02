@@ -27,3 +27,19 @@ def test_knowledge_projection_delta_temporal_scope_and_caps_fail_closed() -> Non
         projection.apply_delta([KnowledgeFact("adr", "mapper", "x", "v1", ("p",), "verified", "sha256:x", "contract", "other", "tenant")])
     assert projection.query("contract", max_bytes=1)["truncated"] is True
     assert projection.query("contract", as_of=100)["handles"] == ["h"]
+
+
+def test_knowledge_projection_preserves_conflict_and_tombstone_lineage() -> None:
+    projection = KnowledgeProjection("repo", "tenant", "g1")
+    original = fact("same", "contract v1")
+    conflicting = KnowledgeFact(
+        "adr", "mapper", "same", "v2", ("mapper:fixture:2",), "verified",
+        "sha256:" + "f" * 64, "contract v2", "repo", "tenant",
+    )
+    delta = projection.apply_delta([original, conflicting])
+    assert delta["conflicts"] == ["same"]
+    assert projection.query("contract")["handles"] == []
+    assert projection.snapshot()["conflicts"] == ["same"]
+    removed = projection.apply_delta(tombstones=["same"])
+    assert removed["tombstones"] == ["same"]
+    assert projection.snapshot()["tombstones"] == ["same"]

@@ -25,6 +25,7 @@ passes.
 | #248 | PARTIAL | `dffc0b1`; TS monorepo/project refs/aliases/TSX E2E, 4 tests | Native compiler relations, bounded invalidation, Node/React installed E2E and coverage |
 | #249 | PARTIAL | `d1ac156`; multi-crate Cargo discovery/symbol E2E, 5 tests | Native parser parity, Cargo relation/invalidation E2E, installed matrix and coverage |
 | #339 | PARTIAL | typed Projection ABI, Python/Rust golden conformance including Unicode digest parity, federation, semantic diff/overlay, validation cache, Knowledge/Context/Operations projections, capability ranking, SDK facade, and synthetic cross-domain E2E are implemented across `340`–`349` child slices | Real Mapper/Runtime/Loop/Dev CLI contracts, cross-platform installed matrix, corpus/quality gates, resource benchmarks and rollout evidence |
+| #344 | PARTIAL | Knowledge projection now preserves conflict/tombstone lineage, rejects conflicted facts from retrieval, and exposes bounded metadata snapshot; 6 focused tests pass | Canonical MapperStore/Runtime adapters, trust/revocation matrix, real precedent corpus, installed consumers, coverage and cross-domain E2E |
 
 ## Closure rule
 
