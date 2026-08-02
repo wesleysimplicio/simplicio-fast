@@ -127,6 +127,19 @@ class Federation:
             raise FederationError("duplicate_member_repository")
         if any(member.tombstone for member in members):
             raise FederationError("member_tombstone_present")
+        repository_set = set(repositories)
+
+        def edge_repository(handle: str) -> str:
+            return handle.split(":", 1)[0].casefold()
+
+        if len(edges) != len(set(edges)):
+            raise FederationError("duplicate_edge")
+        for edge in edges:
+            if (
+                edge_repository(edge.source_handle) not in repository_set
+                or edge_repository(edge.target_handle) not in repository_set
+            ):
+                raise FederationError("edge_member_missing")
         self.members = tuple(sorted(members, key=lambda item: (item.repository, item.generation)))
         self.edges = tuple(sorted(edges, key=lambda item: (item.source_handle, item.target_handle, item.relation_type)))
         self._consumers: dict[str, tuple[FederatedEdge, ...]] = {}

@@ -47,6 +47,17 @@ def test_federation_rejects_unbounded_traversal() -> None:
         compile_federation([member("repo")]).traverse("repo", max_nodes=0)
 
 
+def test_federation_rejects_edges_outside_pinned_members_and_duplicates() -> None:
+    with pytest.raises(FederationError, match="edge_member_missing"):
+        compile_federation(
+            [member("repo-a")],
+            [FederatedEdge("repo-a:schema", "repo-b:consumer", "depends", 1.0)],
+        )
+    edge = FederatedEdge("repo-a:schema", "repo-a:consumer", "depends", 1.0)
+    with pytest.raises(FederationError, match="duplicate_edge"):
+        compile_federation([member("repo-a")], [edge, edge])
+
+
 def test_federation_delta_reuses_members_and_removes_tombstoned_edges() -> None:
     original = compile_federation(
         [member("repo-a"), member("repo-b")],
