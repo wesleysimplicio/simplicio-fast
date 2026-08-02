@@ -9,7 +9,7 @@ import pytest
 
 from simplicio_fast.snapshot import build_snapshot
 from simplicio_fast.snapshot import Snapshot
-from simplicio_fast.rust_session import RustCoreSession, RustSessionError
+from simplicio_fast.rust_session import RustCoreSession, RustSessionError, _canonical
 
 
 def _run_json(executable: Path, *args: str) -> dict[str, object]:
@@ -322,6 +322,36 @@ def test_resident_handshake_rejects_manifest_version_drift() -> None:
         RustCoreSession._validate_handshake(
             handshake, {"version": "2.0.21"}
         )
+
+
+def test_resident_handshake_rejects_empty_identity_and_invalid_call_frames() -> None:
+    handshake = {
+        "schema": "simplicio.fast.engine-session/v1",
+        "abi": "simplicio.fast.engine-session/v1",
+        "engine": "rust",
+        "status": "ready",
+        "engine_version": "2.0.20",
+        "schemas": ["simplicio.fast.context/v1"],
+        "capabilities": ["stats", "query", "context"],
+        "binary_digest": "sha256:" + "0" * 64,
+        "source_commit": "a" * 40,
+        "conformance_digest": "sha256:" + "1" * 64,
+        "platform": "windows-x86_64",
+        "nonce": "nonce",
+    }
+    for field in ("binary_digest", "source_commit", "conformance_digest", "platform", "nonce"):
+        invalid = {**handshake, field: " "}
+        with pytest.raises(RustSessionError, match="session_handshake_invalid"):
+            RustCoreSession._validate_handshake(invalid)
+    with pytest.raises(RustSessionError, match="session_capabilities_invalid"):
+        RustCoreSession._validate_handshake({**handshake, "capabilities": ["stats", 1, "context"]})
+    session = object.__new__(RustCoreSession)
+    with pytest.raises(RustSessionError, match="session_operation_invalid"):
+        session.call("", {})
+    with pytest.raises(RustSessionError, match="session_payload_invalid"):
+        session.call("query", [])
+    with pytest.raises(RustSessionError, match="session_payload_invalid"):
+        _canonical({"invalid": object()})
 
 
 def test_rust_queries_match_python_on_frozen_conformance_golden(tmp_path: Path) -> None:

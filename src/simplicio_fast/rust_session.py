@@ -22,7 +22,10 @@ class RustSessionError(RuntimeError):
 
 
 def _canonical(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    try:
+        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    except (TypeError, ValueError) as error:
+        raise RustSessionError("session_payload_invalid") from error
 
 
 class RustCoreSession:
@@ -81,16 +84,23 @@ class RustCoreSession:
             or handshake.get("engine") != "rust"
             or handshake.get("status") != "ready"
             or not isinstance(handshake.get("engine_version"), str)
+            or not handshake["engine_version"].strip()
             or not isinstance(handshake.get("schemas"), list)
+            or any(not isinstance(item, str) or not item.strip() for item in handshake["schemas"])
             or not isinstance(handshake.get("binary_digest"), str)
+            or not handshake["binary_digest"].strip()
             or not isinstance(handshake.get("source_commit"), str)
+            or not handshake["source_commit"].strip()
             or not isinstance(handshake.get("conformance_digest"), str)
+            or not handshake["conformance_digest"].strip()
             or not isinstance(handshake.get("platform"), str)
+            or not handshake["platform"].strip()
             or not isinstance(handshake.get("nonce"), str)
+            or not handshake["nonce"].strip()
         ):
             raise RustSessionError("session_handshake_invalid")
         capabilities = handshake.get("capabilities")
-        if not isinstance(capabilities, list) or not {
+        if not isinstance(capabilities, list) or any(not isinstance(item, str) or not item.strip() for item in capabilities) or not {
             "stats",
             "query",
             "context",
@@ -139,6 +149,10 @@ class RustCoreSession:
         return value
 
     def call(self, operation: str, payload: Mapping[str, Any]) -> dict[str, Any]:
+        if not isinstance(operation, str) or not operation.strip():
+            raise RustSessionError("session_operation_invalid")
+        if not isinstance(payload, Mapping):
+            raise RustSessionError("session_payload_invalid")
         frame = _canonical({"operation": operation, "payload": dict(payload)})
         if len(frame.encode("utf-8")) > MAX_FRAME_BYTES:
             raise RustSessionError("session_frame_too_large")
