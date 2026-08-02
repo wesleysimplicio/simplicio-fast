@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Iterable, Sequence
 
@@ -10,6 +11,9 @@ FACT_SCHEMA = "simplicio.fast.capability-fact/v1"
 CATALOG_SCHEMA = "simplicio.fast.capability-catalog-projection/v1"
 MAX_CANDIDATES = 100_000
 MAX_RESULTS = 10_000
+PREFLIGHT_SCHEMA = "simplicio.preflight/v1"
+FAST_CAPABILITIES_SCHEMA = "simplicio.fast-capabilities/v1"
+RUNTIME_SMOKE_SCHEMA = "simplicio.standard-io-smoke/v1"
 _TRUST_RANK = {
     "untrusted": 0,
     "derived_fact": 1,
@@ -101,6 +105,114 @@ class CapabilityCandidate:
             "unhealthy",
         }:
             raise CapabilityRankingError("candidate_health_invalid")
+
+
+def candidates_from_manifest(manifest: Mapping[str, Any]) -> tuple[CapabilityCandidate, ...]:
+    """Convert installed operator receipts into advisory candidates only."""
+    if not isinstance(manifest, Mapping):
+        raise CapabilityRankingError("manifest_type_invalid")
+    schema = manifest.get("schema")
+    if schema == PREFLIGHT_SCHEMA:
+        operators = manifest.get("operators")
+        if not isinstance(operators, list):
+            raise CapabilityRankingError("manifest_operator_invalid")
+        result: list[CapabilityCandidate] = []
+        for operator in operators:
+            if not isinstance(operator, Mapping):
+                raise CapabilityRankingError("manifest_operator_invalid")
+            name = operator.get("name")
+            version = operator.get("version")
+            present = operator.get("present")
+            if (
+                not isinstance(name, str)
+                or not name.strip()
+                or not isinstance(version, str)
+                or not isinstance(present, bool)
+                or (present and not version.strip())
+            ):
+                raise CapabilityRankingError("manifest_operator_invalid")
+            normalized_version = version.strip() or "unavailable"
+            result.append(
+                CapabilityCandidate(
+                    handle=f"operator:{name}",
+                    kind="operator",
+                    version=normalized_version,
+                    capabilities=(f"operator:{name}",),
+                    trust="advisory",
+                    available=present,
+                    provenance=(PREFLIGHT_SCHEMA, f"operator:{name}"),
+                    scope="*",
+                    metric_class="measured",
+                    freshness_seconds=0 if present else None,
+                    health="healthy" if present else "unhealthy",
+                )
+            )
+        return tuple(result)
+    if schema == FAST_CAPABILITIES_SCHEMA:
+        availability = manifest.get("availability")
+        commands = manifest.get("commands")
+        languages = manifest.get("languages")
+        if (
+            not isinstance(availability, Mapping)
+            or not isinstance(commands, list)
+            or not isinstance(languages, list)
+            or any(not isinstance(item, str) or not item.strip() for item in (*commands, *languages))
+        ):
+            raise CapabilityRankingError("manifest_capability_invalid")
+        version = availability.get("fast_version")
+        status = availability.get("status")
+        if not isinstance(version, str) or not version.strip() or not isinstance(status, str):
+            raise CapabilityRankingError("manifest_capability_invalid")
+        health = "healthy" if status == "ready" else "degraded" if status == "degraded" else "unhealthy"
+        return (
+            CapabilityCandidate(
+                handle="operator:simplicio-fast",
+                kind="fast",
+                version=version,
+                capabilities=tuple([*commands, *languages]),
+                trust="advisory",
+                available=status in {"ready", "degraded"},
+                provenance=(FAST_CAPABILITIES_SCHEMA, "operator:simplicio-fast"),
+                metric_class="measured",
+                freshness_seconds=0,
+                health=health,
+            ),
+        )
+    if schema == RUNTIME_SMOKE_SCHEMA:
+        runtime = manifest.get("runtime")
+        version = manifest.get("version")
+        status = manifest.get("status")
+        checks = manifest.get("checks")
+        if (
+            not isinstance(runtime, str)
+            or not runtime.strip()
+            or not isinstance(version, str)
+            or not version.strip()
+            or status not in {"passed", "failed"}
+            or not isinstance(checks, list)
+        ):
+            raise CapabilityRankingError("manifest_runtime_invalid")
+        capabilities: list[str] = []
+        for check in checks:
+            if not isinstance(check, Mapping) or not isinstance(check.get("name"), str):
+                raise CapabilityRankingError("manifest_runtime_invalid")
+            if check.get("passed") is True:
+                capabilities.append(f"runtime:{check['name']}")
+        return (
+            CapabilityCandidate(
+                handle=f"runtime:{runtime}",
+                kind="runtime",
+                version=version,
+                capabilities=tuple(capabilities or ["runtime:smoke"]),
+                trust="advisory",
+                available=status == "passed",
+                provenance=(RUNTIME_SMOKE_SCHEMA, f"runtime:{runtime}"),
+                metric_class="measured",
+                freshness_seconds=0,
+                health="healthy" if status == "passed" else "unhealthy",
+            ),
+        )
+    raise CapabilityRankingError("manifest_schema_invalid")
 
 
 def rank_capabilities(
@@ -281,5 +393,7 @@ def rank_capabilities(
 
 __all__ = [
     "CATALOG_SCHEMA", "CapabilityCandidate", "CapabilityRankingError", "FACT_SCHEMA",
+    "FAST_CAPABILITIES_SCHEMA", "PREFLIGHT_SCHEMA", "RUNTIME_SMOKE_SCHEMA",
+    "candidates_from_manifest",
     "MAX_CANDIDATES", "MAX_RESULTS", "rank_capabilities",
 ]
