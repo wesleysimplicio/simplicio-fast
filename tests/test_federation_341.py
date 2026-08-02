@@ -7,6 +7,7 @@ from simplicio_fast.federation import (
     FederatedEdge,
     FederationError,
     FederationMember,
+    _canonical,
     compile_federation,
 )
 
@@ -47,6 +48,19 @@ def test_federation_rejects_duplicate_scope_tombstone_and_unproven_edge() -> Non
         FederatedEdge("a", "b", "depends", True)
     with pytest.raises(FederationError, match="edge_confidence_invalid"):
         FederatedEdge("a", "b", "depends", math.nan)
+    with pytest.raises(FederationError, match="edge_evidence_invalid"):
+        FederatedEdge("a", "b", "depends", 1.0, ("",))
+    with pytest.raises(FederationError, match="member_digest_invalid"):
+        FederationMember("repo", "commit", "generation", "schema", "digest")
+
+
+def test_federation_rejects_invalid_canonical_values_and_member_limits() -> None:
+    body = compile_federation([member("repo")]).manifest()["body"]
+    body["invalid"] = object()
+    with pytest.raises(FederationError, match="federation_not_json"):
+        _canonical(body)
+    with pytest.raises(FederationError, match="member_count_limit"):
+        compile_federation([member(f"repo-{index}") for index in range(257)])
 
 
 def test_federation_rejects_unbounded_traversal() -> None:

@@ -246,6 +246,8 @@ class Federation:
                 raise FederationError("result_size_limit")
             result.append(record)
             used += len(encoded)
+        if len(_canonical(result)) > max_bytes:
+            raise FederationError("result_size_limit")
         return result
 
     def consumers(
@@ -310,7 +312,16 @@ class Federation:
                 if edge.target_handle not in visited and edge.target_handle not in paths:
                     paths[edge.target_handle] = paths[current] + [edge.target_handle]
                     queue.append((edge.target_handle, depth + 1))
-        return {"start_handle": start_handle, "nodes": sorted(visited), "edges": edges, "paths": paths, "complete": not queue}
+        result = {
+            "start_handle": start_handle,
+            "nodes": sorted(visited),
+            "edges": edges,
+            "paths": paths,
+            "complete": not queue,
+        }
+        if len(_canonical(result)) > max_bytes:
+            raise FederationError("result_size_limit")
+        return result
 
 
 def compile_federation(members: Iterable[FederationMember], edges: Iterable[FederatedEdge] = ()) -> Federation:
