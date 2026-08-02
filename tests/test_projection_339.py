@@ -398,6 +398,10 @@ def test_projection_envelope_rejects_budget_and_payload_contract_edges() -> None
 
 def test_projection_store_rejects_conflicts_invalid_deltas_and_loads(tmp_path) -> None:
     store = ProjectionStore("repo-a")
+    with pytest.raises(ProjectionError, match="projection_envelope_invalid"):
+        store.publish(object())  # type: ignore[arg-type]
+    with pytest.raises(ProjectionError, match="changed_invalid"):
+        store.apply_delta("g1", changed=(object(),))  # type: ignore[tuple-item]
     first = ProjectionEnvelope.create(
         "code",
         producer="mapper",

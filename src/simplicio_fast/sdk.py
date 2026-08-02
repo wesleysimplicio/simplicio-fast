@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any, Iterable
 
-from .projection import ProjectionEnvelope, ProjectionStore
+from .projection import ProjectionEnvelope, ProjectionError, ProjectionStore
 from .universal_context import compile_context
 
 
@@ -64,11 +64,30 @@ class ProjectionSDK:
         return self.store.generation
 
     def publish(self, envelope: ProjectionEnvelope) -> dict[str, Any]:
-        self.store.publish(envelope)
+        if not isinstance(envelope, ProjectionEnvelope):
+            raise SDKError("envelope_invalid")
+        try:
+            self.store.publish(envelope)
+        except ProjectionError as error:
+            raise SDKError(error.reason_code) from error
         return {"schema": SDK_SCHEMA, "operation": "publish", "repository": self.repository, "generation": self.generation, "handle": envelope.stable_handle}
 
     def compile_delta(self, generation: str, *, base_generation: str | None = None, changed: Iterable[ProjectionEnvelope] = (), deleted_handles: Iterable[str] = (), closure_handles: Iterable[str] = ()) -> dict[str, Any]:
-        return self.store.apply_delta(generation, base_generation=base_generation, changed=tuple(changed), deleted_handles=tuple(deleted_handles), closure_handles=tuple(closure_handles))
+        changed_items = _bounded_tuple(changed, "changed")
+        if any(not isinstance(item, ProjectionEnvelope) for item in changed_items):
+            raise SDKError("changed_invalid")
+        deleted = _bounded_handles(deleted_handles, "deleted_handles")
+        closure = _bounded_handles(closure_handles, "closure_handles")
+        try:
+            return self.store.apply_delta(
+                generation,
+                base_generation=base_generation,
+                changed=changed_items,
+                deleted_handles=deleted,
+                closure_handles=closure,
+            )
+        except ProjectionError as error:
+            raise SDKError(error.reason_code) from error
 
     def query(self, handle: str) -> dict[str, Any] | None:
         return next((item for item in self.store.snapshot() if item["stable_handle"] == handle), None)
@@ -114,3 +133,25 @@ class ProjectionSDK:
 
 
 __all__ = ["ProjectionSDK", "SDKError", "SDK_SCHEMA", "SDK_SUPPORT_MATRIX"]
+
+
+_MAX_SDK_ITEMS = 100_000
+
+
+def _bounded_tuple(value: object, field: str) -> tuple[object, ...]:
+    if value is None or isinstance(value, (str, bytes)):
+        raise SDKError(f"{field}_invalid")
+    try:
+        result = tuple(value)  # type: ignore[arg-type]
+    except TypeError as error:
+        raise SDKError(f"{field}_invalid") from error
+    if len(result) > _MAX_SDK_ITEMS:
+        raise SDKError(f"{field}_invalid")
+    return result
+
+
+def _bounded_handles(value: object, field: str) -> tuple[str, ...]:
+    result = _bounded_tuple(value, field)
+    if any(not isinstance(item, str) or not item.strip() for item in result):
+        raise SDKError(f"{field}_invalid")
+    return result  # type: ignore[return-value]

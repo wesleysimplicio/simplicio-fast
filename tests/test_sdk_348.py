@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from simplicio_fast.projection import ProjectionEnvelope
 from simplicio_fast.sdk import ProjectionSDK, SDKError
 
@@ -61,6 +63,18 @@ def test_sdk_delta_and_error_contract_are_explicit() -> None:
     result = sdk.compile_delta("g1", changed=(envelope("symbol:a"),), closure_handles=("symbol:downstream",))
     assert result["changed_handles"] == ["symbol:a"]
     assert result["closure_handles"] == ["symbol:a", "symbol:downstream"]
+
+
+def test_sdk_rejects_malformed_inputs_with_typed_reason_codes() -> None:
+    sdk = ProjectionSDK("repo")
+    with pytest.raises(SDKError, match="envelope_invalid"):
+        sdk.publish(object())  # type: ignore[arg-type]
+    with pytest.raises(SDKError, match="changed_invalid"):
+        sdk.compile_delta("g1", changed=(object(),))  # type: ignore[tuple-item]
+    with pytest.raises(SDKError, match="deleted_handles_invalid"):
+        sdk.compile_delta("g1", deleted_handles="symbol:a")  # type: ignore[arg-type]
+    with pytest.raises(SDKError, match="closure_handles_invalid"):
+        sdk.compile_delta("g1", closure_handles=("",))
 
 
 def test_sdk_compile_delta_supports_explicit_generation_swap() -> None:

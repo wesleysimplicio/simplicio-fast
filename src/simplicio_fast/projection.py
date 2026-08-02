@@ -501,6 +501,8 @@ class ProjectionStore:
             return self._generation
 
     def publish(self, envelope: ProjectionEnvelope) -> None:
+        if not isinstance(envelope, ProjectionEnvelope):
+            raise ProjectionError("projection_envelope_invalid")
         with self._lock:
             declared_repository = envelope.payload.get("repository")
             if declared_repository is not None and declared_repository != self.repository:
@@ -525,6 +527,9 @@ class ProjectionStore:
         _validate_text(generation, "generation")
         if base_generation is not None:
             _validate_text(base_generation, "base_generation")
+        _validate_projection_sequence(changed, "changed")
+        _validate_sequence(deleted_handles, "deleted_handles")
+        _validate_sequence(closure_handles, "closure_handles")
         with self._lock:
             generation_swap = (
                 self._generation is not None and generation != self._generation
@@ -668,6 +673,15 @@ def _validate_sequence(value: object, field: str) -> None:
     if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
         raise ProjectionError(f"{field}_invalid")
     if len(value) > _MAX_ITEMS or any(not isinstance(item, str) or not item.strip() for item in value):
+        raise ProjectionError(f"{field}_invalid")
+
+
+def _validate_projection_sequence(value: object, field: str) -> None:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        raise ProjectionError(f"{field}_invalid")
+    if len(value) > _MAX_ITEMS or any(
+        not isinstance(item, ProjectionEnvelope) for item in value
+    ):
         raise ProjectionError(f"{field}_invalid")
 
 
