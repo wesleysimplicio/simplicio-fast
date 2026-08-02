@@ -100,11 +100,11 @@ class RustCoreSession:
         ):
             raise RustSessionError("session_handshake_invalid")
         capabilities = handshake.get("capabilities")
-        if not isinstance(capabilities, list) or any(not isinstance(item, str) or not item.strip() for item in capabilities) or not {
-            "stats",
-            "query",
-            "context",
-        }.issubset(capabilities):
+        if (
+            not isinstance(capabilities, list)
+            or any(not isinstance(item, str) or not item.strip() for item in capabilities)
+            or not READ_ONLY_OPERATIONS.issubset(capabilities)
+        ):
             raise RustSessionError("session_capabilities_invalid")
         expected = dict(expected_manifest or {})
         expected_version = expected.get("version")
@@ -149,7 +149,7 @@ class RustCoreSession:
         return value
 
     def call(self, operation: str, payload: Mapping[str, Any]) -> dict[str, Any]:
-        if not isinstance(operation, str) or not operation.strip():
+        if not isinstance(operation, str) or operation not in READ_ONLY_OPERATIONS:
             raise RustSessionError("session_operation_invalid")
         if not isinstance(payload, Mapping):
             raise RustSessionError("session_payload_invalid")
