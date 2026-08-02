@@ -64,6 +64,11 @@ def _path(value: str) -> str:
     if not isinstance(value, str) or not value or "\0" in value or ":" in value:
         raise BinaryChangeSetError("path_invalid")
     normalized = value.replace("\\", "/")
+    raw_parts = normalized.split("/")
+    if ".." in raw_parts or "." in raw_parts:
+        raise BinaryChangeSetError("path_outside_repository", value)
+    if any(not part for part in raw_parts):
+        raise BinaryChangeSetError("path_invalid", value)
     candidate = PurePosixPath(normalized)
     if (
         candidate.is_absolute()
