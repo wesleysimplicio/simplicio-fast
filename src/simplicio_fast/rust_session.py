@@ -23,7 +23,13 @@ class RustSessionError(RuntimeError):
 
 def _canonical(value: Any) -> str:
     try:
-        return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        return json.dumps(
+            value,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+            allow_nan=False,
+        )
     except (TypeError, ValueError) as error:
         raise RustSessionError("session_payload_invalid") from error
 
