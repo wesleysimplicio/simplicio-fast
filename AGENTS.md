@@ -102,6 +102,31 @@ the delivery idempotency receipt.
 When discovering the tool, run `simplicio-fast --help`; the top-level help is intentionally written
 for both humans and LLM/tool callers and explains ownership boundaries and the normal flow.
 
+## LLM command and feature index
+
+The complete public feature and command inventory is maintained in
+[`docs/CLI_COMMANDS.md`](docs/CLI_COMMANDS.md). Load that index and the
+matching `--help` output before selecting an operation.
+
+Rules for agents and LLMs:
+
+- `simplicio-fast --help` is the canonical discovery entry point;
+  `simplicio-fast-cross-repo --help` is the cross-repository conformance
+  entry point. Do not infer public commands from internal module names.
+- Every public command and nested action has a meaningful `--help`/`-h`
+  description. Run `simplicio-fast <command> --help` and, when applicable,
+  `simplicio-fast changeset <action> --help` before execution.
+- Use `--json` for automation, preserve the versioned `schema` field, and
+  reject unknown major schema versions. `apply` and `delivery` are dry-run
+  by default; writes require explicit flags and the applicable authority.
+- For GitHub issues, use the objective plus the `Execution` section for
+  implementation/deployment and tests. Do not add or reintroduce an
+  `Acceptance Criteria` or `Critérios de aceite` section.
+
+This release raises the optional integrated floors to Mapper `0.26.11` and
+Dev CLI `0.18.6`. Loop consumes the exact release commits after the upstream
+PRs are merged and tagged.
+
 ## Context safety
 
 - Treat the source repository as the only source of truth.
