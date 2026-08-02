@@ -75,5 +75,10 @@ any graph data.
   separate capability gate.
 - Mapper remains authoritative for integrated stable IDs and graph provenance.
 
+Rust payload callers may provide the selected Cargo feature set through
+`rust_features`. The normalized feature list is included in the Rust workspace
+fingerprint, so changing feature selection invalidates the generation identity;
+omitting it preserves the existing default behavior.
+
 The implementation is in `src/simplicio_fast/parser_adapter.py`; the focused
 contract tests are in `tests/test_parser_adapter_244.py`.

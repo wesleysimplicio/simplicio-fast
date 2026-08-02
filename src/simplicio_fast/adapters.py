@@ -14,6 +14,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 from .snapshot import Symbol
 
@@ -94,10 +95,24 @@ def discover_rust_projects(root: Path) -> list[Path]:
     return sorted(manifests, key=lambda path: path.relative_to(root).as_posix())
 
 
-def rust_workspace_fingerprint(root: Path) -> str:
+def rust_workspace_fingerprint(
+    root: Path, *, features: Iterable[str] = ()
+) -> str:
     """Hash Cargo inputs that affect the selected Rust source graph."""
 
     root = root.resolve()
+    if isinstance(features, (str, bytes)):
+        raise ValueError("rust_features_invalid")
+    try:
+        selected_features = tuple(features)
+    except TypeError as error:
+        raise ValueError("rust_features_invalid") from error
+    if any(
+        not isinstance(feature, str) or not feature.strip()
+        for feature in selected_features
+    ):
+        raise ValueError("rust_features_invalid")
+    selected_features = tuple(sorted(set(selected_features)))
     records: list[dict[str, str]] = []
     config_files = [
         root / "rust-toolchain",
@@ -113,6 +128,19 @@ def rust_workspace_fingerprint(root: Path) -> str:
             {
                 "path": relative,
                 "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            }
+        )
+    if selected_features:
+        records.append(
+            {
+                "path": "<selected-cargo-features>",
+                "sha256": hashlib.sha256(
+                    json.dumps(
+                        selected_features,
+                        ensure_ascii=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest(),
             }
         )
     payload = json.dumps(records, ensure_ascii=False, separators=(",", ":"))
