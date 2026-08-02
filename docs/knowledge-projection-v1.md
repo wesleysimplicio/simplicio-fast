@@ -11,5 +11,11 @@ producer, repository and scope alongside version, provenance, digest, and keep
 relevance, trust, freshness and applicability separate in `explain`. The
 current ranking is explicitly labelled `lexical-fallback`; vector ranking is
 optional and unavailable vector infrastructure does not silently change the
-contract. Cross-runtime conformance, real corpus quality receipts and external
-source adapters remain open gates for #344.
+contract.
+
+Authorized producers can submit an explicit
+`simplicio.fast.knowledge-handoff/v1` envelope through `apply_handoff`. The
+derived projection accepts only `mapper` or `runtime` producers, validates
+repository/scope/generation, reconstructs typed facts, and never opens producer
+storage. Cross-runtime conformance, real corpus quality receipts and external
+consumer adapters remain open gates for #344.
