@@ -18,7 +18,7 @@ SDK_SUPPORT_MATRIX = (
         "status": "supported",
         "operations": (
             "publish", "compile_delta", "query", "query_async", "snapshot",
-            "save", "open", "context", "context_async",
+            "save", "open", "close", "context", "context_async",
         ),
         "reason": None,
     },
@@ -53,20 +53,50 @@ class ProjectionSDK:
     """In-process projection operations with explicit repository scope."""
 
     def __init__(self, repository: str) -> None:
+        self._closed = False
         try:
             self.store = ProjectionStore(repository)
         except ProjectionError as error:
             raise SDKError(error.reason_code) from error
 
     @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def _ensure_open(self) -> None:
+        if self._closed:
+            raise SDKError("sdk_closed")
+
+    def close(self) -> None:
+        """Close the facade and reject further operations; safe to repeat."""
+        self._closed = True
+
+    def __enter__(self) -> "ProjectionSDK":
+        self._ensure_open()
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+    async def __aenter__(self) -> "ProjectionSDK":
+        self._ensure_open()
+        return self
+
+    async def __aexit__(self, *_: object) -> None:
+        self.close()
+
+    @property
     def repository(self) -> str:
+        self._ensure_open()
         return self.store.repository
 
     @property
     def generation(self) -> str | None:
+        self._ensure_open()
         return self.store.generation
 
     def publish(self, envelope: ProjectionEnvelope) -> dict[str, Any]:
+        self._ensure_open()
         if not isinstance(envelope, ProjectionEnvelope):
             raise SDKError("envelope_invalid")
         try:
@@ -76,6 +106,7 @@ class ProjectionSDK:
         return {"schema": SDK_SCHEMA, "operation": "publish", "repository": self.repository, "generation": self.generation, "handle": envelope.stable_handle}
 
     def compile_delta(self, generation: str, *, base_generation: str | None = None, changed: Iterable[ProjectionEnvelope] = (), deleted_handles: Iterable[str] = (), closure_handles: Iterable[str] = ()) -> dict[str, Any]:
+        self._ensure_open()
         changed_items = _bounded_tuple(changed, "changed")
         if any(not isinstance(item, ProjectionEnvelope) for item in changed_items):
             raise SDKError("changed_invalid")
@@ -93,14 +124,17 @@ class ProjectionSDK:
             raise SDKError(error.reason_code) from error
 
     def query(self, handle: str) -> dict[str, Any] | None:
+        self._ensure_open()
         if not isinstance(handle, str) or not handle.strip():
             raise SDKError("query_handle_invalid")
         return next((item for item in self.store.snapshot() if item["stable_handle"] == handle), None)
 
     def snapshot(self) -> list[dict[str, Any]]:
+        self._ensure_open()
         return self.store.snapshot()
 
     def save(self, path: Path) -> dict[str, Any]:
+        self._ensure_open()
         return self.store.save(path)
 
     @classmethod
@@ -113,6 +147,7 @@ class ProjectionSDK:
         return instance
 
     def context(self, *, max_bytes: int = 256 * 1024, max_tokens: int = 4096, max_items: int = 128) -> dict[str, Any]:
+        self._ensure_open()
         envelopes = [ProjectionEnvelope.decode(json.dumps(item, sort_keys=True, separators=(",", ":")).encode()) for item in self.store.snapshot()]
         try:
             return compile_context(envelopes, repository_scope=self.repository, max_bytes=max_bytes, max_tokens=max_tokens, max_items=max_items)
@@ -128,12 +163,13 @@ class ProjectionSDK:
         return await asyncio.to_thread(self.query, handle)
 
     def capabilities(self) -> dict[str, Any]:
+        self._ensure_open()
         return {
             "schema": "simplicio.fast.sdk-capabilities/v1",
             "sdk": SDK_SCHEMA,
             "operations": [
                 "publish", "compile_delta", "query", "query_async", "snapshot",
-                "save", "open", "context", "context_async",
+                "save", "open", "close", "context", "context_async",
             ],
             "support_matrix": [
                 {**item, "operations": list(item["operations"])}

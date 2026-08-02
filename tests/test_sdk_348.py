@@ -28,6 +28,8 @@ def test_sdk_exposes_scoped_in_process_operations_and_context(tmp_path) -> None:
         "cli": "partial",
     }
     assert matrix[0]["reason"] is None
+    assert "close" in matrix[0]["operations"]
+    assert "close" in sdk.capabilities()["operations"]
 
 
 def test_sdk_async_surface_is_read_only_and_matches_sync() -> None:
@@ -123,3 +125,27 @@ def test_sdk_compile_delta_supports_explicit_generation_swap() -> None:
     assert sdk.generation == "g2"
     assert sdk.query("symbol:a") is None
     assert sdk.query("symbol:b")["generation"] == "g2"
+
+
+def test_sdk_context_manager_closes_and_rejects_use_after_close() -> None:
+    with ProjectionSDK("repo") as sdk:
+        assert not sdk.closed
+        sdk.publish(envelope("symbol:a"))
+    assert sdk.closed
+    sdk.close()
+    with pytest.raises(SDKError, match="sdk_closed"):
+        sdk.snapshot()
+    with pytest.raises(SDKError, match="sdk_closed"):
+        _ = sdk.generation
+
+
+def test_sdk_async_context_manager_closes() -> None:
+    async def run() -> ProjectionSDK:
+        async with ProjectionSDK("repo") as sdk:
+            assert not sdk.closed
+            return sdk
+
+    sdk = asyncio.run(run())
+    assert sdk.closed
+    with pytest.raises(SDKError, match="sdk_closed"):
+        asyncio.run(sdk.query_async("symbol:a"))
