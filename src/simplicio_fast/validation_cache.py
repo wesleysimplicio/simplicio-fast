@@ -119,11 +119,14 @@ class ValidationResult:
             raise ValidationCacheError("result_status_invalid")
         if not isinstance(self.key_digest, str) or not self.key_digest or not isinstance(self.result_digest, str) or not self.result_digest:
             raise ValidationCacheError("result_digest_invalid")
-        _validate_string_sequence(self.command, "result_command_invalid")
-        if not self.command:
+        command = _validate_string_sequence(self.command, "result_command_invalid")
+        if not command:
             raise ValidationCacheError("result_command_invalid")
-        _validate_string_sequence(self.evidence, "result_evidence_invalid")
-        _validate_string_sequence(self.provenance, "result_provenance_invalid")
+        evidence = _validate_string_sequence(self.evidence, "result_evidence_invalid")
+        provenance = _validate_string_sequence(self.provenance, "result_provenance_invalid")
+        object.__setattr__(self, "command", command)
+        object.__setattr__(self, "evidence", evidence)
+        object.__setattr__(self, "provenance", provenance)
         if not isinstance(self.fresh, bool) or not isinstance(self.verified, bool) or not isinstance(self.nondeterministic, bool):
             raise ValidationCacheError("result_flags_invalid")
         if not isinstance(self.generation, str):

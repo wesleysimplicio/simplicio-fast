@@ -192,6 +192,15 @@ def test_validation_cache_contract_boundaries_and_lease_lifecycle(tmp_path) -> N
         ValidationResult("", "pass", "result", ("test",), True)
     with pytest.raises(ValidationCacheError, match="result_provenance_required"):
         ValidationResult("key", "pass", "result", ("test",), True, verified=True)
+    with pytest.raises(ValidationCacheError, match="cache_key_optional_field_invalid"):
+        ValidationKey("source", "lock", "tool", ("test",), config_digest=1).to_dict()
+    result = ValidationResult(
+        "key", "pass", "result", ["test"], True, ["evidence"],
+        provenance=["receipt"], verified=True,
+    )
+    assert result.command == ("test",)
+    assert result.evidence == ("evidence",)
+    assert result.provenance == ("receipt",)
 
     cache = ValidationCache()
     missing = ValidationKey("missing", "lock", "tool", ("test",))
