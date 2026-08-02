@@ -154,9 +154,31 @@ def discover_typescript_projects(root: Path) -> list[Path]:
         "jsconfig.json",
         "package.json",
         "package-lock.json",
+        "npm-shrinkwrap.json",
         "pnpm-workspace.yaml",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lock",
+        "bun.lockb",
+        ".npmrc",
+        ".yarnrc.yml",
+        ".node-version",
+        ".nvmrc",
     }
-    ignored = {".git", ".simplicio", "node_modules", "dist", "build", "coverage"}
+    ignored = {
+        ".git",
+        ".simplicio",
+        ".yarn",
+        ".pnpm-store",
+        "node_modules",
+        "dist",
+        "build",
+        "coverage",
+        ".next",
+        "out",
+        "storybook-static",
+        "generated",
+    }
     return sorted(
         path
         for path in root.rglob("*")
