@@ -30,6 +30,9 @@ pub const REQUIRED_SECTIONS: [&str; 5] = ["files", "symbols", "relations", "inde
 pub const PROJECTION_SCHEMA: &str = "simplicio.fast.projection/v1";
 pub const PROJECTION_TYPES: [&str; 3] = ["code", "knowledge", "operations"];
 pub const PROJECTION_MAX_BYTES: usize = 8 * 1024 * 1024;
+pub const PROJECTION_MAX_DEPTH: usize = 32;
+pub const PROJECTION_MAX_ITEMS: usize = 100_000;
+pub const PROJECTION_MAX_TEXT: usize = 4096;
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ProjectionEnvelope {
@@ -999,10 +1002,15 @@ pub fn validate_projection(value: &serde_json::Value) -> Result<(), SnapshotErro
         .get("payload")
         .filter(|value| value.is_object())
         .ok_or_else(|| SnapshotError::Invalid("projection_payload_invalid".into()))?;
+    let mut payload_items = 0;
+    validate_projection_payload(payload, 0, &mut payload_items)?;
     let expected = object
         .get("payload_sha256")
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| SnapshotError::Invalid("projection_digest_missing".into()))?;
+    if !is_sha256_digest(expected) {
+        return Err(SnapshotError::Invalid("payload_sha256_invalid".into()));
+    }
     if projection_payload_digest(payload) != expected {
         return Err(SnapshotError::Invalid("projection_digest_mismatch".into()));
     }
@@ -1017,6 +1025,102 @@ pub fn validate_projection(value: &serde_json::Value) -> Result<(), SnapshotErro
                 "projection_{field}_invalid"
             )));
         }
+        let values = object
+            .get(field)
+            .and_then(serde_json::Value::as_array)
+            .expect("array checked above");
+        if values.len() > PROJECTION_MAX_ITEMS
+            || values
+                .iter()
+                .any(|value| value.as_str().map_or(true, |text| text.trim().is_empty()))
+        {
+            return Err(SnapshotError::Invalid(format!(
+                "projection_{field}_invalid"
+            )));
+        }
+    }
+    let stable_handle = object
+        .get("stable_handle")
+        .and_then(serde_json::Value::as_str)
+        .expect("required text field checked above");
+    let stable_handles = object
+        .get("stable_handles")
+        .and_then(serde_json::Value::as_array)
+        .expect("array checked above");
+    if stable_handles.is_empty()
+        || !stable_handles
+            .iter()
+            .any(|value| value.as_str() == Some(stable_handle))
+    {
+        return Err(SnapshotError::Invalid(
+            "projection_stable_handles_invalid".into(),
+        ));
+    }
+    if let Some(budgets) = object.get("budgets") {
+        if !budgets.is_null() {
+            let budget_map = budgets
+                .as_object()
+                .ok_or_else(|| SnapshotError::Invalid("projection_budgets_invalid".into()))?;
+            if budget_map.len() > PROJECTION_MAX_ITEMS
+                || budget_map
+                    .iter()
+                    .any(|(key, value)| key.trim().is_empty() || value.as_u64().is_none())
+            {
+                return Err(SnapshotError::Invalid("projection_budgets_invalid".into()));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_sha256_digest(value: &str) -> bool {
+    value.len() == 71
+        && value.starts_with("sha256:")
+        && value[7..]
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+}
+
+fn validate_projection_payload(
+    value: &serde_json::Value,
+    depth: usize,
+    items: &mut usize,
+) -> Result<(), SnapshotError> {
+    if depth > PROJECTION_MAX_DEPTH {
+        return Err(SnapshotError::Invalid("projection_depth_limit".into()));
+    }
+    match value {
+        serde_json::Value::Object(map) => {
+            *items = items
+                .checked_add(map.len())
+                .ok_or_else(|| SnapshotError::Invalid("projection_item_limit".into()))?;
+            if *items > PROJECTION_MAX_ITEMS {
+                return Err(SnapshotError::Invalid("projection_item_limit".into()));
+            }
+            for key in map.keys() {
+                if ["offset", "mmap_offset", "address", "pointer"].contains(&key.as_str()) {
+                    return Err(SnapshotError::Invalid("projection_exposes_offset".into()));
+                }
+            }
+            for child in map.values() {
+                validate_projection_payload(child, depth + 1, items)?;
+            }
+        }
+        serde_json::Value::Array(values) => {
+            *items = items
+                .checked_add(values.len())
+                .ok_or_else(|| SnapshotError::Invalid("projection_item_limit".into()))?;
+            if *items > PROJECTION_MAX_ITEMS {
+                return Err(SnapshotError::Invalid("projection_item_limit".into()));
+            }
+            for child in values {
+                validate_projection_payload(child, depth + 1, items)?;
+            }
+        }
+        serde_json::Value::String(text) if text.chars().count() > PROJECTION_MAX_TEXT => {
+            return Err(SnapshotError::Invalid("projection_text_limit".into()));
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -1218,6 +1322,55 @@ mod tests {
         assert!(matches!(
             validate_projection(&envelope),
             Err(SnapshotError::Invalid(reason)) if reason == "projection_digest_mismatch"
+        ));
+    }
+
+    #[test]
+    fn projection_validator_rejects_private_fields_limits_and_invalid_handles() {
+        let payload = serde_json::json!({"pointer": 4});
+        let mut envelope = serde_json::json!({
+            "schema": PROJECTION_SCHEMA,
+            "projection_type": "code",
+            "producer": "mapper",
+            "producer_schema": "mapper.context/v1",
+            "generation": "g1",
+            "stable_handle": "symbol:a",
+            "payload": payload,
+            "payload_sha256": projection_payload_digest(&payload),
+            "schema_version": "1.0",
+            "projection_type_version": "1.0",
+            "producer_version": "test",
+            "repository_scope": "repo",
+            "tenant_scope": "tenant",
+            "domain_scope": "code",
+            "source_generation": "g1",
+            "projection_generation": "g1",
+            "config_fingerprint": "",
+            "toolchain_fingerprint": "",
+            "parser_fingerprint": "",
+            "stable_handles": ["symbol:b"],
+            "capabilities_required": [],
+            "budgets": null,
+            "truncation_reasons": [],
+            "parent_generation": null,
+            "base_generation": null,
+            "delta_generation": null,
+            "tombstones": [],
+            "completeness": "complete",
+            "fidelity": "exact",
+            "observed_sequence": "",
+            "conformance_digest": ""
+        });
+        assert!(matches!(
+            validate_projection(&envelope),
+            Err(SnapshotError::Invalid(reason)) if reason == "projection_exposes_offset"
+        ));
+        envelope["payload"] = serde_json::json!({"value": "ok"});
+        envelope["payload_sha256"] =
+            serde_json::Value::String(projection_payload_digest(&envelope["payload"]));
+        assert!(matches!(
+            validate_projection(&envelope),
+            Err(SnapshotError::Invalid(reason)) if reason == "projection_stable_handles_invalid"
         ));
     }
 
