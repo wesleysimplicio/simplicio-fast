@@ -77,12 +77,17 @@ class ValidationResult:
     command: tuple[str, ...]
     fresh: bool
     evidence: tuple[str, ...] = ()
+    verified: bool = False
+    provenance: tuple[str, ...] = ()
+    nondeterministic: bool = False
 
     def __post_init__(self) -> None:
         if self.status not in {"pass", "fail", "partial"}:
             raise ValidationCacheError("result_status_invalid")
         if not self.key_digest or not self.result_digest:
             raise ValidationCacheError("result_digest_invalid")
+        if self.verified and not self.provenance:
+            raise ValidationCacheError("result_provenance_required")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -93,6 +98,9 @@ class ValidationResult:
             "command": list(self.command),
             "fresh": self.fresh,
             "evidence": list(self.evidence),
+            "verified": self.verified,
+            "provenance": list(self.provenance),
+            "nondeterministic": self.nondeterministic,
         }
 
 
@@ -140,21 +148,62 @@ class ValidationCache:
                 entry = ValidationResult(
                     str(raw["key_digest"]), str(raw["status"]), str(raw["result_digest"]),
                     tuple(raw["command"]), bool(raw["fresh"]), tuple(raw.get("evidence", ())),
+                    bool(raw.get("verified", False)), tuple(raw.get("provenance", ())),
+                    bool(raw.get("nondeterministic", False)),
                 )
             except (KeyError, TypeError, ValueError) as error:
                 raise ValidationCacheError("cache_entry_invalid") from error
             cache._entries[entry.key_digest] = entry
         return cache
 
-    def put(self, key: ValidationKey, *, status: str, result: Any, command: Sequence[str] | None = None, fresh: bool = True, evidence: Sequence[str] = ()) -> ValidationResult:
+    def put(
+        self,
+        key: ValidationKey,
+        *,
+        status: str,
+        result: Any,
+        command: Sequence[str] | None = None,
+        fresh: bool = True,
+        evidence: Sequence[str] = (),
+        verified: bool = False,
+        provenance: Sequence[str] = (),
+    ) -> ValidationResult:
         result_digest = _digest(result)
-        entry = ValidationResult(key.digest, status, result_digest, tuple(command or key.command), fresh, tuple(evidence))
+        previous = self._entries.get(key.digest)
+        if previous is not None and previous.result_digest != result_digest:
+            evidence = tuple(sorted(set(evidence).union(previous.evidence, {"nondeterministic"})))
+            verified = False
+            provenance = ()
+            entry = ValidationResult(
+                key.digest, "partial", result_digest, tuple(command or key.command), False,
+                tuple(evidence), False, (), True,
+            )
+            self._entries[key.digest] = entry
+            return entry
+        if verified and not provenance:
+            raise ValidationCacheError("result_provenance_required")
+        entry = ValidationResult(
+            key.digest, status, result_digest, tuple(command or key.command), fresh,
+            tuple(evidence), verified, tuple(provenance), False,
+        )
         self._entries[key.digest] = entry
         return entry
 
-    def get(self, key: ValidationKey, *, require_fresh: bool = False) -> ValidationResult | None:
+    def get(
+        self,
+        key: ValidationKey,
+        *,
+        require_fresh: bool = False,
+        require_verified: bool = False,
+        reusable: bool = False,
+    ) -> ValidationResult | None:
         entry = self._entries.get(key.digest)
-        if entry is None or (require_fresh and not entry.fresh):
+        if (
+            entry is None
+            or (require_fresh and not entry.fresh)
+            or (require_verified and not entry.verified)
+            or (reusable and (not entry.verified or not entry.fresh or entry.nondeterministic))
+        ):
             return None
         return entry
 
@@ -162,12 +211,19 @@ class ValidationCache:
         if max_tests <= 0:
             raise ValidationCacheError("selection_budget_invalid")
         changed = set(changed_handles)
-        selected = sorted({test for handle, values in tests.items() if handle in changed for test in values})
+        selected_by_handle = {
+            handle: sorted(set(values)) for handle, values in tests.items() if handle in changed
+        }
+        selected = sorted({test for values in selected_by_handle.values() for test in values})
         complete = len(selected) <= max_tests
         return {
             "schema": "simplicio.fast.affected-validation/v1",
             "tests": selected[:max_tests],
             "changed_handles": sorted(changed),
+            "reason_paths": [
+                {"handle": handle, "tests": values, "reason": "changed_handle"}
+                for handle, values in sorted(selected_by_handle.items())
+            ],
             "complete": complete,
             "truncation_reasons": [] if complete else ["test_budget"],
         }

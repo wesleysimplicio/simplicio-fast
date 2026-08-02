@@ -44,3 +44,25 @@ def test_validation_cache_persistence_is_deterministic_and_tamper_evident(tmp_pa
     path.write_text(path.read_text(encoding="utf-8").replace("receipt:1", "receipt:2"), encoding="utf-8")
     with pytest.raises(ValidationCacheError, match="cache_digest_mismatch"):
         ValidationCache.load(path)
+
+
+def test_validation_cache_requires_provenance_for_reusable_verified_hits() -> None:
+    cache = ValidationCache()
+    item = cache.put(key(), status="pass", result={"ok": True}, fresh=True)
+    assert item.verified is False
+    assert cache.get(key(), reusable=True) is None
+    verified = cache.put(
+        key(), status="pass", result={"ok": True}, fresh=True,
+        verified=True, provenance=("runtime:receipt:1",), evidence=("receipt:1",),
+    )
+    assert cache.get(key(), reusable=True) == verified
+
+
+def test_validation_cache_demotes_conflicting_result_and_explains_affected_tests() -> None:
+    cache = ValidationCache()
+    cache.put(key(), status="pass", result={"ok": True}, fresh=True, verified=True, provenance=("r1",))
+    conflicting = cache.put(key(), status="pass", result={"ok": False}, fresh=True, verified=True, provenance=("r2",))
+    assert conflicting.nondeterministic is True
+    assert cache.get(key(), reusable=True) is None
+    affected = cache.affected(("h1",), {"h1": ("test/a", "test/a")})
+    assert affected["reason_paths"] == [{"handle": "h1", "tests": ["test/a"], "reason": "changed_handle"}]
