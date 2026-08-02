@@ -29,6 +29,42 @@ pub const MAX_SNAPSHOT_BYTES: usize = 512 * 1024 * 1024;
 pub const REQUIRED_SECTIONS: [&str; 5] = ["files", "symbols", "relations", "indexes", "strings"];
 pub const PROJECTION_SCHEMA: &str = "simplicio.fast.projection/v1";
 pub const PROJECTION_TYPES: [&str; 3] = ["code", "knowledge", "operations"];
+pub const PROJECTION_MAX_BYTES: usize = 8 * 1024 * 1024;
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct ProjectionEnvelope {
+    pub schema: String,
+    pub projection_type: String,
+    pub producer: String,
+    pub producer_schema: String,
+    pub generation: String,
+    pub stable_handle: String,
+    pub payload: serde_json::Value,
+    pub payload_sha256: String,
+    pub schema_version: String,
+    pub projection_type_version: String,
+    pub producer_version: String,
+    pub repository_scope: String,
+    pub tenant_scope: String,
+    pub domain_scope: String,
+    pub source_generation: String,
+    pub projection_generation: String,
+    pub config_fingerprint: String,
+    pub toolchain_fingerprint: String,
+    pub parser_fingerprint: String,
+    pub stable_handles: Vec<String>,
+    pub capabilities_required: Vec<String>,
+    pub budgets: Option<BTreeMap<String, u64>>,
+    pub truncation_reasons: Vec<String>,
+    pub parent_generation: Option<String>,
+    pub base_generation: Option<String>,
+    pub delta_generation: Option<String>,
+    pub tombstones: Vec<String>,
+    pub completeness: String,
+    pub fidelity: String,
+    pub observed_sequence: String,
+    pub conformance_digest: String,
+}
 
 #[derive(Debug)]
 pub enum SnapshotError {
@@ -797,6 +833,27 @@ pub fn projection_payload_digest(payload: &serde_json::Value) -> String {
     format!("sha256:{}", hex_bytes(&Sha256::digest(encoded)))
 }
 
+pub fn decode_projection(raw: &[u8]) -> Result<ProjectionEnvelope, SnapshotError> {
+    if raw.len() > PROJECTION_MAX_BYTES {
+        return Err(SnapshotError::Invalid("projection_size_limit".into()));
+    }
+    let value: serde_json::Value = serde_json::from_slice(raw)
+        .map_err(|_| SnapshotError::Invalid("projection_invalid_json".into()))?;
+    validate_projection(&value)?;
+    serde_json::from_value(value)
+        .map_err(|_| SnapshotError::Invalid("projection_fields_invalid".into()))
+}
+
+pub fn encode_projection(envelope: &ProjectionEnvelope) -> Result<Vec<u8>, SnapshotError> {
+    let value = serde_json::to_value(envelope)
+        .map_err(|_| SnapshotError::Invalid("projection_fields_invalid".into()))?;
+    validate_projection(&value)?;
+    let mut encoded = serde_json::to_vec(&value)
+        .map_err(|_| SnapshotError::Invalid("projection_not_json".into()))?;
+    encoded.push(b'\n');
+    Ok(encoded)
+}
+
 /// Validate the shared projection envelope without exposing mmap offsets.
 pub fn validate_projection(value: &serde_json::Value) -> Result<(), SnapshotError> {
     let object = value
@@ -814,7 +871,22 @@ pub fn validate_projection(value: &serde_json::Value) -> Result<(), SnapshotErro
     if !PROJECTION_TYPES.contains(&projection_type) {
         return Err(SnapshotError::Invalid("projection_type_unsupported".into()));
     }
-    for field in ["producer", "producer_schema", "generation", "stable_handle"] {
+    for field in [
+        "producer",
+        "producer_schema",
+        "generation",
+        "stable_handle",
+        "schema_version",
+        "projection_type_version",
+        "producer_version",
+        "repository_scope",
+        "tenant_scope",
+        "domain_scope",
+        "source_generation",
+        "projection_generation",
+        "completeness",
+        "fidelity",
+    ] {
         if object
             .get(field)
             .and_then(serde_json::Value::as_str)
@@ -835,6 +907,18 @@ pub fn validate_projection(value: &serde_json::Value) -> Result<(), SnapshotErro
         .ok_or_else(|| SnapshotError::Invalid("projection_digest_missing".into()))?;
     if projection_payload_digest(payload) != expected {
         return Err(SnapshotError::Invalid("projection_digest_mismatch".into()));
+    }
+    for field in [
+        "stable_handles",
+        "capabilities_required",
+        "truncation_reasons",
+        "tombstones",
+    ] {
+        if !object.get(field).is_some_and(serde_json::Value::is_array) {
+            return Err(SnapshotError::Invalid(format!(
+                "projection_{field}_invalid"
+            )));
+        }
     }
     Ok(())
 }
@@ -997,7 +1081,30 @@ mod tests {
             "generation": "g1",
             "stable_handle": "symbol:a",
             "payload": payload,
-            "payload_sha256": "sha256:747ca7714c7a2b81fcf1b9fac06f8888f25927e768aa57798492846de6a41575"
+            "payload_sha256": "sha256:747ca7714c7a2b81fcf1b9fac06f8888f25927e768aa57798492846de6a41575",
+            "schema_version": "1.0",
+            "projection_type_version": "1.0",
+            "producer_version": "test",
+            "repository_scope": "repo",
+            "tenant_scope": "tenant",
+            "domain_scope": "code",
+            "source_generation": "g1",
+            "projection_generation": "g1",
+            "config_fingerprint": "",
+            "toolchain_fingerprint": "",
+            "parser_fingerprint": "",
+            "stable_handles": ["symbol:a"],
+            "capabilities_required": [],
+            "budgets": null,
+            "truncation_reasons": [],
+            "parent_generation": null,
+            "base_generation": null,
+            "delta_generation": null,
+            "tombstones": [],
+            "completeness": "complete",
+            "fidelity": "exact",
+            "observed_sequence": "",
+            "conformance_digest": ""
         });
         assert!(validate_projection(&envelope).is_ok());
         envelope["payload"]["z"] = serde_json::json!(2);
@@ -1005,6 +1112,22 @@ mod tests {
             validate_projection(&envelope),
             Err(SnapshotError::Invalid(reason)) if reason == "projection_digest_mismatch"
         ));
+    }
+
+    #[test]
+    fn projection_decode_and_encode_round_trip_golden_envelope() {
+        let raw = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../fixtures/projection/v1/code-symbol.json"
+        ));
+        let envelope = decode_projection(raw).expect("golden envelope should decode");
+        assert_eq!(envelope.stable_handle, "code:symbol");
+        let encoded = encode_projection(&envelope).expect("golden envelope should encode");
+        assert_eq!(encoded.as_slice(), raw);
+        assert_eq!(
+            decode_projection(&encoded).expect("round trip").payload,
+            envelope.payload
+        );
     }
 
     fn empty_reader() -> SnapshotReader {

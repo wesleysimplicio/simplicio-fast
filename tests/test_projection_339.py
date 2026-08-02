@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from simplicio_fast.knowledge import KnowledgeFacade
@@ -49,6 +51,13 @@ def test_projection_bytes_are_deterministic_and_tamper_evident() -> None:
     tampered = first.encode().replace(b'"z":1', b'"z":2')
     with pytest.raises(ProjectionError, match="payload_digest_mismatch"):
         ProjectionEnvelope.decode(tampered)
+
+
+def test_shared_python_rust_projection_fixture_decodes() -> None:
+    fixture = Path("fixtures/projection/v1/code-symbol.json").read_bytes()
+    envelope = ProjectionEnvelope.decode(fixture)
+    assert envelope.stable_handle == "code:symbol"
+    assert envelope.encode() == fixture
 
 
 def test_projection_rejects_future_schema_and_private_offsets() -> None:
