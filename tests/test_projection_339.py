@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -72,6 +73,19 @@ def test_projection_rejects_future_schema_and_private_offsets() -> None:
             stable_handle="symbol:abc",
             payload={"items": [{"mmap_offset": 4}]},
         )
+
+
+def test_projection_dataclass_boundary_rejects_tampered_digest() -> None:
+    envelope = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper.context/v1",
+        generation="g1",
+        stable_handle="symbol:abc",
+        payload={"name": "abc"},
+    )
+    with pytest.raises(ProjectionError, match="payload_digest_mismatch"):
+        replace(envelope, payload_sha256="sha256:" + "0" * 64)
 
 
 def test_projection_manifest_and_provenance_fields_are_strict_and_deterministic() -> None:

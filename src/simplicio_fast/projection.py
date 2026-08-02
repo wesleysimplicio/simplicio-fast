@@ -109,6 +109,38 @@ class ProjectionEnvelope:
     observed_sequence: str = ""
     conformance_digest: str = ""
 
+    def __post_init__(self) -> None:
+        for value, name in (
+            (self.projection_type, "projection_type"),
+            (self.producer, "producer"),
+            (self.producer_schema, "producer_schema"),
+            (self.generation, "generation"),
+            (self.stable_handle, "stable_handle"),
+            (self.schema_version, "schema_version"),
+            (self.projection_type_version, "projection_type_version"),
+            (self.producer_version, "producer_version"),
+            (self.repository_scope, "repository_scope"),
+            (self.tenant_scope, "tenant_scope"),
+            (self.domain_scope, "domain_scope"),
+            (self.source_generation, "source_generation"),
+            (self.projection_generation, "projection_generation"),
+            (self.completeness, "completeness"),
+            (self.fidelity, "fidelity"),
+        ):
+            _validate_text(value, name)
+        if self.projection_type not in PROJECTION_TYPES:
+            raise ProjectionError("projection_type_unsupported")
+        if not isinstance(self.payload, Mapping):
+            raise ProjectionError("payload_invalid")
+        _reject_private_fields(self.payload)
+        if self.payload_sha256 != _digest(self.payload):
+            raise ProjectionError("payload_digest_mismatch")
+        if not self.stable_handles or self.stable_handle not in self.stable_handles:
+            raise ProjectionError("stable_handles_invalid")
+        _validate_sequence(self.capabilities_required, "capabilities_required")
+        _validate_sequence(self.truncation_reasons, "truncation_reasons")
+        _validate_sequence(self.tombstones, "tombstones")
+
     @classmethod
     def create(
         cls,
