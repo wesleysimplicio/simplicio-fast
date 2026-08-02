@@ -829,8 +829,49 @@ pub fn manifest() -> serde_json::Value {
 /// `serde_json::Map` is ordered by key in this crate, matching the Python
 /// projection canonicalizer for the ASCII contract surface.
 pub fn projection_payload_digest(payload: &serde_json::Value) -> String {
-    let encoded = serde_json::to_vec(payload).expect("JSON payload is serializable");
-    format!("sha256:{}", hex_bytes(&Sha256::digest(encoded)))
+    format!(
+        "sha256:{}",
+        hex_bytes(&Sha256::digest(projection_canonical_json(payload)))
+    )
+}
+
+fn projection_canonical_json(value: &serde_json::Value) -> Vec<u8> {
+    let raw = serde_json::to_string(value).expect("JSON value is serializable");
+    let mut result = String::with_capacity(raw.len());
+    let mut in_string = false;
+    let mut escaped = false;
+    for character in raw.chars() {
+        if !in_string {
+            result.push(character);
+            if character == '"' {
+                in_string = true;
+            }
+            continue;
+        }
+        if escaped {
+            result.push(character);
+            escaped = false;
+        } else if character == '\\' {
+            result.push(character);
+            escaped = true;
+        } else if character == '"' {
+            result.push(character);
+            in_string = false;
+        } else if character.is_ascii() {
+            result.push(character);
+        } else {
+            let code = character as u32;
+            if code <= 0xffff {
+                result.push_str(&format!("\\u{code:04x}"));
+            } else {
+                let adjusted = code - 0x1_0000;
+                let high = 0xd800 + (adjusted >> 10);
+                let low = 0xdc00 + (adjusted & 0x3ff);
+                result.push_str(&format!("\\u{high:04x}\\u{low:04x}"));
+            }
+        }
+    }
+    result.into_bytes()
 }
 
 pub fn decode_projection(raw: &[u8]) -> Result<ProjectionEnvelope, SnapshotError> {
@@ -848,8 +889,7 @@ pub fn encode_projection(envelope: &ProjectionEnvelope) -> Result<Vec<u8>, Snaps
     let value = serde_json::to_value(envelope)
         .map_err(|_| SnapshotError::Invalid("projection_fields_invalid".into()))?;
     validate_projection(&value)?;
-    let mut encoded = serde_json::to_vec(&value)
-        .map_err(|_| SnapshotError::Invalid("projection_not_json".into()))?;
+    let mut encoded = projection_canonical_json(&value);
     encoded.push(b'\n');
     Ok(encoded)
 }
@@ -1067,6 +1107,15 @@ mod tests {
         assert_eq!(
             projection_payload_digest(&value),
             "sha256:747ca7714c7a2b81fcf1b9fac06f8888f25927e768aa57798492846de6a41575"
+        );
+    }
+
+    #[test]
+    fn projection_digest_matches_python_unicode_canonical() {
+        let value = serde_json::json!({"text": "café 😀"});
+        assert_eq!(
+            projection_payload_digest(&value),
+            "sha256:f74ab2d3d42d1835c4a48b34c3f2430f236720909a51dc0aa8881b5f0573b012"
         );
     }
 

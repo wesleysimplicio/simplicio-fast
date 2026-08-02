@@ -15,10 +15,10 @@
     "cargo_fmt_check": "passed",
     "cargo_clippy_deny_warnings": "passed",
     "python_ruff": "passed",
-    "python_rust_golden_bytes": "passed"
+    "python_rust_golden_bytes": "passed",
+    "python_rust_unicode_digest": "passed"
   },
   "remaining": [
-    "Unicode canonical parity beyond the ASCII fixture",
     "Linux/macOS/ARM installed matrix",
     "fuzz/property/coverage receipts",
     "real Mapper Contract Registry and Runtime conformance"
