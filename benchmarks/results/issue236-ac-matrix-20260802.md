@@ -27,6 +27,7 @@ passes.
 | #339 | PARTIAL | typed Projection ABI, Python/Rust golden conformance including Unicode digest parity, federation, semantic diff/overlay, validation cache, Knowledge/Context/Operations projections, capability ranking, SDK facade, and synthetic cross-domain E2E are implemented across `340`–`349` child slices | Real Mapper/Runtime/Loop/Dev CLI contracts, cross-platform installed matrix, corpus/quality gates, resource benchmarks and rollout evidence |
 | #344 | PARTIAL | Knowledge projection now preserves conflict/tombstone lineage, rejects conflicted facts from retrieval, and exposes bounded metadata snapshot; 6 focused tests pass | Canonical MapperStore/Runtime adapters, trust/revocation matrix, real precedent corpus, installed consumers, coverage and cross-domain E2E |
 | #345 | PARTIAL | Universal context now emits per-item digest/trust/freshness/selection boundaries, pins source generations, detects conflicting duplicates, enforces domain caps and separates wrapper/source budgets; 7 focused tests pass | Real Code/Knowledge/Operations adapters, tokenizer/trust/freshness matrix, tool schemas, external consumers, Python/Rust parity, corpus recall and coverage |
+| #346 | PARTIAL | Capability ranking now separates hard-filter eligibility from advisory score, preserves owner policy eligibility/tenant scope, exposes score components, and labels unknown metrics; 8 focused tests pass | Real Loop/Runtime/Agent manifests, policy/health freshness, Pareto/quality dataset, Python/Rust parity, installed consumers and coverage |
 
 ## Closure rule
 
