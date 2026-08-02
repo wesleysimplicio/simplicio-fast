@@ -3,7 +3,7 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. Current master is `6de3eed`;
+owned by an external capability or service. Current master is `fb55789`;
 the full Python suite passes `603 passed, 67 subtests` with the 800s timeout,
 and release-integrity passes all checks.
 
@@ -15,7 +15,7 @@ and release-integrity passes all checks.
 | #239 | PARTIAL | `issue239-windows-20260801.json`; 30-run indexed receipts at 10k/100k/1M; `c06f34a` 20 readers | Cross-platform receipts, physical worktrees, installed package and final coverage |
 | #240 | PARTIAL | `6de3eed`; identifier-boundary normalization, confidence pruning, frozen corpus recall@20=1.0, 32-to-4 token regression, exact tokenizer receipt | Provider tokenizer matrix, real-task recall/token matrix, warm latency and coverage |
 | #241 | PARTIAL | `7be3c94`; 30-run binary/JSON/journal/Dev CLI receipt; installed CLI tests | Linux/Windows byte parity, all operations, recovery/adversarial matrix and final coverage |
-| #242 | PARTIAL | `b095cba`; 30-run 10k/100k receipts; prior 1M receipt; 21 delta/worktree tests; 1M/30 attempt exceeded 800s without receipt | 30-run 1M receipt, Linux receipt, CI regression gate and final coverage |
+| #242 | PARTIAL | `b095cba`; 30-run 10k/100k receipts; `fb55789` 1M/10 receipt with parity/resources; 21 delta/worktree tests | 30-run 1M receipt, Linux receipt, CI regression gate and final coverage |
 | #243 | BLOCKED | Local workflow contract/verifier pass; run `30723612138` has `startup_failure` and no jobs | GitHub Actions administrative/runner availability, then four native target builds and downloadable verification |
 | #244 | PARTIAL | `3e89acf`, `b1b4f89`; parser contract, fuzz corpus, 91% line / 88.2% branch receipt | Frozen real-corpus parity, installed cross-platform matrix and final coverage |
 | #246 | BLOCKED | Rust matrix receipts at 10k/100k/1M; Full cell reports `runtime_authorization_required` | Runtime-authorized Full, Loop standalone, real delivery tasks, concurrency and final regression gate |
