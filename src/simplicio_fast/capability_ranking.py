@@ -8,6 +8,8 @@ from typing import Any, Iterable, Sequence
 
 FACT_SCHEMA = "simplicio.fast.capability-fact/v1"
 CATALOG_SCHEMA = "simplicio.fast.capability-catalog-projection/v1"
+MAX_CANDIDATES = 100_000
+MAX_RESULTS = 10_000
 
 
 class CapabilityRankingError(ValueError):
@@ -84,7 +86,7 @@ def rank_capabilities(
         or any(not isinstance(item, str) or not item.strip() for item in required)
         or isinstance(max_results, bool)
         or not isinstance(max_results, int)
-        or max_results <= 0
+        or not 0 < max_results <= MAX_RESULTS
         or (
             required_scope is not None
             and (not isinstance(required_scope, str) or not required_scope.strip())
@@ -94,6 +96,8 @@ def rank_capabilities(
     required_set = set(required)
     facts: list[dict[str, Any]] = []
     for candidate in candidates:
+        if len(facts) >= MAX_CANDIDATES:
+            raise CapabilityRankingError("candidate_count_limit")
         matched = sorted(required_set.intersection(candidate.capabilities))
         missing = sorted(required_set.difference(candidate.capabilities))
         scope_match = required_scope is None or candidate.scope in {"*", required_scope}
@@ -153,15 +157,46 @@ def rank_capabilities(
             "provenance": list(candidate.provenance),
         })
     facts.sort(key=lambda item: (-item["eligible"], -item["score"], item["handle"], item["version"]))
+    measured = [
+        item for item in facts
+        if item["eligible"]
+        and item["estimated_cost"] is not None
+        and item["estimated_latency_ms"] is not None
+    ]
+    frontier = []
+    for item in measured:
+        dominated = any(
+            other is not item
+            and other["estimated_cost"] <= item["estimated_cost"]
+            and other["estimated_latency_ms"] <= item["estimated_latency_ms"]
+            and (
+                other["estimated_cost"] < item["estimated_cost"]
+                or other["estimated_latency_ms"] < item["estimated_latency_ms"]
+            )
+            for other in measured
+        )
+        if not dominated:
+            frontier.append({
+                "handle": item["handle"],
+                "version": item["version"],
+                "estimated_cost": item["estimated_cost"],
+                "estimated_latency_ms": item["estimated_latency_ms"],
+                "metric_class": item["metric_class"],
+            })
+    frontier.sort(key=lambda item: (item["handle"], item["version"]))
     return {
         "schema": CATALOG_SCHEMA,
         "required_capabilities": sorted(required_set),
         "required_scope": required_scope,
         "candidates": facts[:max_results],
+        "pareto_frontier": frontier,
         "truncated": len(facts) > max_results,
         "authority": "advisory_only",
         "authorization_owner": "agent-loop-runtime",
     }
 
 
-__all__ = ["CATALOG_SCHEMA", "CapabilityCandidate", "CapabilityRankingError", "FACT_SCHEMA", "rank_capabilities"]
+__all__ = [
+    "CATALOG_SCHEMA", "CapabilityCandidate", "CapabilityRankingError", "FACT_SCHEMA",
+    "MAX_CANDIDATES", "MAX_RESULTS", "rank_capabilities",
+]

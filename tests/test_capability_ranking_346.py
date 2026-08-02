@@ -86,3 +86,27 @@ def test_capability_ranking_explains_unavailable_candidates() -> None:
         ("query",),
     )
     assert result["candidates"][0]["selection_reason"] == "unavailable"
+
+
+def test_capability_ranking_exposes_pareto_frontier_without_auto_selecting() -> None:
+    result = rank_capabilities(
+        [
+            CapabilityCandidate("cheap", "worker", "1", ("query",), estimated_cost=1, estimated_latency_ms=10, policy_eligible=True, metric_class="measured"),
+            CapabilityCandidate("fast", "worker", "1", ("query",), estimated_cost=5, estimated_latency_ms=1, policy_eligible=True, metric_class="measured"),
+            CapabilityCandidate("dominated", "worker", "1", ("query",), estimated_cost=5, estimated_latency_ms=10, policy_eligible=True, metric_class="measured"),
+        ],
+        ("query",),
+    )
+    assert [item["handle"] for item in result["pareto_frontier"]] == ["cheap", "fast"]
+    assert result["candidates"][0]["handle"] in {"cheap", "fast"}
+    assert len(result["pareto_frontier"]) == 2
+
+
+def test_capability_ranking_bounds_candidate_stream(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("simplicio_fast.capability_ranking.MAX_CANDIDATES", 1)
+    candidates = [
+        CapabilityCandidate("a", "worker", "1", ("query",), policy_eligible=True),
+        CapabilityCandidate("b", "worker", "1", ("query",), policy_eligible=True),
+    ]
+    with pytest.raises(CapabilityRankingError, match="candidate_count_limit"):
+        rank_capabilities(candidates, ("query",))
