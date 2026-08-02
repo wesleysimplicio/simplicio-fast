@@ -81,6 +81,29 @@ def test_federation_delta_reuses_members_and_removes_tombstoned_edges() -> None:
     assert removed_receipt["tombstones"] == ["repo-b"]
 
 
+def test_federation_delta_rejects_split_brain_member_updates() -> None:
+    original = compile_federation([member("repo-a"), member("repo-b")])
+    with pytest.raises(FederationError, match="delta_split_brain"):
+        original.apply_delta([member("repo-b"), member("Repo-b", "g2")])
+    with pytest.raises(FederationError, match="delta_split_brain"):
+        original.apply_delta([member("repo-b")], removed_repositories=("repo-b",))
+
+
+def test_federation_queries_reject_invalid_or_oversized_budgets() -> None:
+    edge = FederatedEdge("repo-a:x", "repo-b:y", "depends", 1.0, ("fixture:1",))
+    federation = compile_federation([member("repo-a"), member("repo-b")], [edge])
+    with pytest.raises(FederationError, match="edge_budget_invalid"):
+        federation.consumers("repo-b:y", max_edges=True)
+    with pytest.raises(FederationError, match="byte_budget_invalid"):
+        federation.dependencies("repo-a:x", max_bytes=True)
+    with pytest.raises(FederationError, match="result_size_limit"):
+        federation.consumers("repo-b:y", max_bytes=1)
+    with pytest.raises(FederationError, match="edge_budget_exceeded"):
+        federation.traverse("repo-a:x", max_edges=0)
+    with pytest.raises(FederationError, match="result_size_limit"):
+        federation.traverse("repo-a:x", max_bytes=1)
+
+
 def test_federation_supports_twenty_concurrent_readers() -> None:
     edge = FederatedEdge("repo-a:schema/x", "repo-b:consumer/y", "depends", 1.0, ("fixture:1",))
     federation = compile_federation([member("repo-a"), member("repo-b")], [edge])

@@ -41,6 +41,12 @@ def _text(value: object, reason: str) -> str:
     return value
 
 
+def _budget(value: object, reason: str, *, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+        raise FederationError(reason)
+    return value
+
+
 def _digest(value: Any) -> str:
     return "sha256:" + hashlib.sha256(_canonical(value)).hexdigest()
 
@@ -184,6 +190,8 @@ class Federation:
         tombstones = set(removed)
         for member in changed_members:
             key = member.repository.casefold()
+            if key in removed or key in active_changes or key in tombstones:
+                raise FederationError("delta_split_brain")
             if member.tombstone:
                 tombstones.add(key)
             else:
@@ -228,35 +236,77 @@ class Federation:
         }
         return next_generation, receipt
 
-    def consumers(self, target_handle: str, *, max_edges: int = 1000) -> list[dict[str, Any]]:
+    @staticmethod
+    def _bounded_records(records: Iterable[dict[str, Any]], *, max_bytes: int) -> list[dict[str, Any]]:
+        used = 0
+        result: list[dict[str, Any]] = []
+        for record in records:
+            encoded = _canonical(record)
+            if used + len(encoded) > max_bytes:
+                raise FederationError("result_size_limit")
+            result.append(record)
+            used += len(encoded)
+        return result
+
+    def consumers(
+        self,
+        target_handle: str,
+        *,
+        max_edges: int = 1000,
+        max_bytes: int = MAX_BYTES,
+    ) -> list[dict[str, Any]]:
         _text(target_handle, "target_handle_invalid")
-        if max_edges < 0 or max_edges > MAX_EDGES:
-            raise FederationError("edge_budget_invalid")
-        return [edge.to_dict() for edge in self._consumers.get(target_handle, ())[:max_edges]]
+        _budget(max_edges, "edge_budget_invalid", minimum=0, maximum=MAX_EDGES)
+        _budget(max_bytes, "byte_budget_invalid", minimum=0, maximum=MAX_BYTES)
+        records = (edge.to_dict() for edge in self._consumers.get(target_handle, ())[:max_edges])
+        return self._bounded_records(records, max_bytes=max_bytes)
 
-    def dependencies(self, source_handle: str, *, max_edges: int = 1000) -> list[dict[str, Any]]:
+    def dependencies(
+        self,
+        source_handle: str,
+        *,
+        max_edges: int = 1000,
+        max_bytes: int = MAX_BYTES,
+    ) -> list[dict[str, Any]]:
         _text(source_handle, "source_handle_invalid")
-        if max_edges < 0 or max_edges > MAX_EDGES:
-            raise FederationError("edge_budget_invalid")
-        return [edge.to_dict() for edge in self._dependencies.get(source_handle, ())[:max_edges]]
+        _budget(max_edges, "edge_budget_invalid", minimum=0, maximum=MAX_EDGES)
+        _budget(max_bytes, "byte_budget_invalid", minimum=0, maximum=MAX_BYTES)
+        records = (edge.to_dict() for edge in self._dependencies.get(source_handle, ())[:max_edges])
+        return self._bounded_records(records, max_bytes=max_bytes)
 
-    def traverse(self, start_handle: str, *, max_depth: int = 8, max_nodes: int = 1000) -> dict[str, Any]:
+    def traverse(
+        self,
+        start_handle: str,
+        *,
+        max_depth: int = 8,
+        max_nodes: int = 1000,
+        max_edges: int = MAX_EDGES,
+        max_bytes: int = MAX_BYTES,
+    ) -> dict[str, Any]:
         _text(start_handle, "source_handle_invalid")
-        if max_depth < 0 or max_nodes <= 0 or max_nodes > MAX_EDGES:
-            raise FederationError("traversal_budget_invalid")
+        _budget(max_depth, "traversal_budget_invalid", minimum=0, maximum=MAX_EDGES)
+        _budget(max_nodes, "traversal_budget_invalid", minimum=1, maximum=MAX_EDGES)
+        _budget(max_edges, "edge_budget_invalid", minimum=0, maximum=MAX_EDGES)
+        _budget(max_bytes, "byte_budget_invalid", minimum=0, maximum=MAX_BYTES)
         queue: list[tuple[str, int]] = [(start_handle, 0)]
         visited: set[str] = set()
         paths: dict[str, list[str]] = {start_handle: [start_handle]}
         edges: list[dict[str, Any]] = []
+        used_bytes = 0
         while queue and len(visited) < max_nodes:
             current, depth = queue.pop(0)
             if current in visited or depth > max_depth:
                 continue
             visited.add(current)
             for edge in self._dependencies.get(current, ()):
-                if len(edges) >= MAX_EDGES:
+                if len(edges) >= max_edges:
                     raise FederationError("edge_budget_exceeded")
-                edges.append(edge.to_dict())
+                record = edge.to_dict()
+                record_bytes = len(_canonical(record))
+                if used_bytes + record_bytes > max_bytes:
+                    raise FederationError("result_size_limit")
+                edges.append(record)
+                used_bytes += record_bytes
                 if edge.target_handle not in visited and edge.target_handle not in paths:
                     paths[edge.target_handle] = paths[current] + [edge.target_handle]
                     queue.append((edge.target_handle, depth + 1))
