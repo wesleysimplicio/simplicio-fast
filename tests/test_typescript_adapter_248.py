@@ -29,13 +29,35 @@ def test_typescript_adapter_covers_modules_types_and_tests(tmp_path: Path) -> No
 def test_typescript_project_discovery_excludes_dependencies(tmp_path: Path) -> None:
     (tmp_path / "tsconfig.json").write_text("{}", encoding="utf-8")
     (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    for name in (
+        "npm-shrinkwrap.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "bun.lock",
+        ".npmrc",
+        ".yarnrc.yml",
+        ".node-version",
+        ".nvmrc",
+    ):
+        (tmp_path / name).write_text("", encoding="utf-8")
     dependencies = tmp_path / "node_modules"
     dependencies.mkdir()
     (dependencies / "tsconfig.json").write_text("{}", encoding="utf-8")
-    assert [path.name for path in discover_typescript_projects(tmp_path)] == [
+    generated = tmp_path / "generated"
+    generated.mkdir()
+    (generated / "tsconfig.json").write_text("{}", encoding="utf-8")
+    assert {path.name for path in discover_typescript_projects(tmp_path)} == {
+        ".node-version",
+        ".npmrc",
+        ".nvmrc",
+        ".yarnrc.yml",
+        "bun.lock",
+        "npm-shrinkwrap.json",
         "package.json",
+        "pnpm-lock.yaml",
         "tsconfig.json",
-    ]
+        "yarn.lock",
+    }
 
 
 def test_typescript_workspace_fingerprint_changes_with_config(tmp_path: Path) -> None:
