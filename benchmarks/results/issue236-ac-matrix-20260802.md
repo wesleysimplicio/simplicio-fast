@@ -3,7 +3,7 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. Current master is `f85792d`;
+owned by an external capability or service. Current master is `1fafdbb`;
 release-integrity passes all checks. The full-suite subprocess failures in
 this Windows shell are recorded separately and are not treated as functional
 passes.
@@ -33,7 +33,7 @@ passes.
 | #345 | PARTIAL | `56bb9d2`; context compiler rejects tenant-scope mismatches, invalid domain caps and boolean/non-integer hard budgets, preserves source/projection generations, records duplicate idempotence and bounded domain/byte/token truncation; Context/Projection/Knowledge/Operations/Capability block passes 25 focused tests, Ruff passes and `universal_context.py` measures 100% line/branch coverage | Real Code/Knowledge/Operations adapters, tokenizer/trust/freshness matrix, tool schemas, external consumers, Python/Rust parity and corpus recall |
 | #346 | PARTIAL | `8e1acef`; advisory ranking validates malformed/coercible requests and candidate facts, rejects invalid identity/capabilities/availability/cost/metrics, accepts explicit global scope, preserves hard-filter/policy explanations and unavailable-candidate reasons; capability/context/projection block passes 27 tests and `capability_ranking.py` measures 100% line/branch coverage | Real Loop/Runtime/Agent manifests, policy/health freshness, Pareto/quality dataset, Python/Rust parity and installed consumers |
 | #348 | PARTIAL | `f85792d`; ProjectionSDK supports scoped publish/delta/query/snapshot/save/open/context plus async query/context, `compile_delta` and `SDKError` contracts are covered, ProjectionStore serializes concurrent SDK access, and `capabilities()` publishes a machine-readable Python/Rust/session/CLI support matrix with conservative partial statuses; Projection/SDK/Context block passes 26 tests including 20 concurrent async queries, Ruff passes and `sdk.py` measures 100% line/branch coverage | Rust crate parity, resident verified transport, caps/cancellation/deadlines/backpressure, lifecycle/fork safety, installed cross-platform artifacts, upgrade/rollback and release receipts |
-| #349 | PARTIAL | `329ea39`; synthetic cross-domain E2E remains deterministic and handle-only; Universal Context rejects boolean/non-integer budgets fail-closed; Context/semantic-E2E/Projection block passes 19 focused tests | Real Mapper/Runtime/Loop/Dev CLI E2E, fault injection/corruption recovery, security review, Python/Rust/installed parity, resource benchmarks, AC receipts and rollout/rollback evidence |
+| #349 | PARTIAL | `1fafdbb`; synthetic cross-domain E2E remains deterministic and handle-only, and adversarial coverage rejects envelope tamper/tenant mismatch, hides same-generation revocation and excludes complete receipts with missing causal parents; Context/semantic-E2E/Projection/Knowledge/Operations block passes 38 focused tests with Ruff | Real Mapper/Runtime/Loop/Dev CLI E2E, fault injection/corruption recovery, security review, Python/Rust/installed parity, resource benchmarks, AC receipts and rollout/rollback evidence |
 
 ## Closure rule
 
