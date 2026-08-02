@@ -389,12 +389,33 @@ class DeliveryEngine:
             selected_spans = []
             selected_tokens = 0
             rejected_budget: list[str] = []
+            rejected_quality: list[str] = []
+            semantic_floor: float | None = None
+            if selection_mode == "semantic":
+                scores = [
+                    item.get("confidence")
+                    for item in ranking.get("selected", [])
+                    if isinstance(item, dict)
+                    and isinstance(item.get("confidence"), (int, float))
+                    and not isinstance(item.get("confidence"), bool)
+                ]
+                if scores:
+                    semantic_floor = max(0.12, max(scores) * 0.75)
             for item in ranking.get("selected", []):
                 if not isinstance(item, dict):
                     continue
                 handle = item.get("canonical_id")
                 span = spans_by_handle.get(handle)
                 if span is None:
+                    continue
+                confidence = item.get("confidence")
+                if (
+                    semantic_floor is not None
+                    and isinstance(confidence, (int, float))
+                    and not isinstance(confidence, bool)
+                    and confidence < semantic_floor
+                ):
+                    rejected_quality.append(str(handle))
                     continue
                 try:
                     token_count = (
@@ -530,6 +551,8 @@ class DeliveryEngine:
                         for span in selected_spans
                     ],
                     "rejected_budget_handles": rejected_budget,
+                    "rejected_quality_handles": rejected_quality,
+                    "quality_floor": semantic_floor,
                     "deduplicated_handles": deduplicated_handles,
                     "tokenizer": {
                         "mode": "exact" if tokenizer is not None else "estimated",

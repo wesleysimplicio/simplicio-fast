@@ -149,6 +149,50 @@ class DeliveryEngineTest(unittest.TestCase):
                 receipt["context"]["selection"]["fallback"]["reason_code"],
             )
 
+    def test_semantic_selection_rejects_low_confidence_context(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index in range(8):
+                (root / f"module_{index}.py").write_text(
+                    f"def user_note_{index}():\n    return 'user'\n",
+                    encoding="utf-8",
+                )
+            (root / "target.py").write_text(
+                "def authenticate_user(credentials):\n    return credentials\n",
+                encoding="utf-8",
+            )
+            snapshot = root / "project.sfast"
+            build_snapshot(root, snapshot)
+            receipt = DeliveryEngine(root, snapshot).prepare(
+                "authenticate user",
+                profile="loop-standalone",
+                engine_receipt=select_engine("python").receipt(),
+                tokenizer_id="test-exact-v1",
+                tokenizer=lambda text: len(text.split()),
+            )
+            legacy = DeliveryEngine(root, snapshot).prepare(
+                "authenticate user",
+                profile="loop-standalone",
+                engine_receipt=select_engine("python").receipt(),
+                selection_mode="legacy-regex",
+                tokenizer_id="test-exact-v1",
+                tokenizer=lambda text: len(text.split()),
+            )
+            self.assertEqual(
+                ["target.py"],
+                [item["file"] for item in receipt["context"]["selected"]],
+            )
+            self.assertEqual(32, legacy["context"]["tokens"])
+            self.assertEqual(4, receipt["context"]["tokens"])
+            self.assertLessEqual(
+                receipt["context"]["tokens"],
+                legacy["context"]["tokens"] * 0.5,
+            )
+            self.assertGreater(
+                len(receipt["context"]["rejected_quality_handles"]),
+                0,
+            )
+
     def test_context_many_reuses_one_source_read_across_terms(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
