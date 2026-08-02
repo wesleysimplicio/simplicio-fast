@@ -43,10 +43,12 @@ class CapabilityCandidate:
             raise CapabilityRankingError("candidate_capabilities_invalid")
         if any(not isinstance(item, str) or not item.strip() for item in self.capabilities):
             raise CapabilityRankingError("candidate_capabilities_invalid")
+        object.__setattr__(self, "capabilities", tuple(self.capabilities))
         if not isinstance(self.provenance, (tuple, list)):
             raise CapabilityRankingError("candidate_provenance_invalid")
         if any(not isinstance(item, str) or not item.strip() for item in self.provenance):
             raise CapabilityRankingError("candidate_provenance_invalid")
+        object.__setattr__(self, "provenance", tuple(self.provenance))
         if not isinstance(self.scope, str) or not self.scope.strip():
             raise CapabilityRankingError("candidate_scope_invalid")
         if not isinstance(self.available, bool):
