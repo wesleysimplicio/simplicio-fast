@@ -322,12 +322,19 @@ class Federation:
         paths: dict[str, list[str]] = {start_handle: [start_handle]}
         edges: list[dict[str, Any]] = []
         used_bytes = 0
+        truncation_reasons: set[str] = set()
         while queue and len(visited) < max_nodes:
             current, depth = queue.pop(0)
-            if current in visited or depth > max_depth:
+            if current in visited:
+                continue
+            if depth > max_depth:
+                truncation_reasons.add("max_depth")
                 continue
             visited.add(current)
-            for edge in self._dependencies.get(current, ()):
+            outgoing = self._dependencies.get(current, ())
+            if depth == max_depth and outgoing:
+                truncation_reasons.add("max_depth")
+            for edge in outgoing:
                 if len(edges) >= max_edges:
                     raise FederationError("edge_budget_exceeded")
                 record = edge.to_dict()
@@ -336,15 +343,18 @@ class Federation:
                     raise FederationError("result_size_limit")
                 edges.append(record)
                 used_bytes += record_bytes
-                if edge.target_handle not in visited and edge.target_handle not in paths:
+                if depth < max_depth and edge.target_handle not in visited and edge.target_handle not in paths:
                     paths[edge.target_handle] = paths[current] + [edge.target_handle]
                     queue.append((edge.target_handle, depth + 1))
+        if queue:
+            truncation_reasons.add("max_nodes")
         result = {
             "start_handle": start_handle,
             "nodes": sorted(visited),
             "edges": edges,
             "paths": paths,
-            "complete": not queue,
+            "complete": not queue and not truncation_reasons,
+            "truncation_reasons": sorted(truncation_reasons),
         }
         if len(_canonical(result)) > max_bytes:
             raise FederationError("result_size_limit")

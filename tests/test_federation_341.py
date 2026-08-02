@@ -72,6 +72,20 @@ def test_federation_rejects_unbounded_traversal() -> None:
         compile_federation([member("repo")]).traverse("repo", max_nodes=0)
 
 
+def test_federation_reports_truncated_depth_and_node_closure() -> None:
+    edges = [
+        FederatedEdge("a", "b", "depends", 1.0),
+        FederatedEdge("b", "c", "depends", 1.0),
+    ]
+    federation = compile_federation([member("a"), member("b"), member("c")], edges)
+    depth_limited = federation.traverse("a", max_depth=0)
+    assert depth_limited["complete"] is False
+    assert depth_limited["truncation_reasons"] == ["max_depth"]
+    node_limited = federation.traverse("a", max_nodes=1)
+    assert node_limited["complete"] is False
+    assert node_limited["truncation_reasons"] == ["max_nodes"]
+
+
 def test_federation_rejects_edges_outside_pinned_members_and_duplicates() -> None:
     with pytest.raises(FederationError, match="edge_member_missing"):
         compile_federation(
