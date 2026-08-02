@@ -126,8 +126,18 @@ def compile_context(
                 or not (metadata_bound or payload_bound)
             ):
                 raise UniversalContextError("context_scope_mismatch")
-        if tenant_scope is not None and envelope.tenant_scope not in {"*", tenant_scope}:
-            raise UniversalContextError("context_scope_mismatch")
+        if tenant_scope is not None:
+            payload_tenant = envelope.payload.get("tenant")
+            metadata_matches = envelope.tenant_scope in {"*", tenant_scope}
+            payload_matches = payload_tenant in {None, tenant_scope}
+            metadata_bound = envelope.tenant_scope != "*"
+            payload_bound = payload_tenant is not None
+            if (
+                not metadata_matches
+                or not payload_matches
+                or not (metadata_bound or payload_bound)
+            ):
+                raise UniversalContextError("context_scope_mismatch")
         previous_digest = seen.get(envelope.stable_handle)
         if previous_digest is not None:
             if previous_digest != envelope.payload_sha256:
