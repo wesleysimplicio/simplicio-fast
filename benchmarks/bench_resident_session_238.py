@@ -8,21 +8,21 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import statistics
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
 
-from simplicio_fast.native_backend import ABI, ResidentRustSession, canonical
+from simplicio_fast.rust_session import RustCoreSession
+from simplicio_fast.snapshot import build_snapshot
 
 
 SCHEMA = "simplicio.fast.resident-session-benchmark/v1"
-PAYLOAD = {"hex": "616263"}
-OPERATION = "sha256"
+OPERATION = "query"
 
 
 def _summary(samples: list[float]) -> dict[str, Any]:
@@ -36,14 +36,10 @@ def _summary(samples: list[float]) -> dict[str, Any]:
     }
 
 
-def _one_shot(binary: Path) -> float:
-    request = canonical(
-        {"abi": ABI, "operation": OPERATION, "payload": PAYLOAD}
-    )
+def _one_shot(binary: Path, snapshot: Path) -> float:
     started = time.perf_counter()
     completed = subprocess.run(
-        [str(binary)],
-        input=request,
+        [str(binary), "--query", str(snapshot), "value_0", "--limit", "10"],
         capture_output=True,
         timeout=5,
         check=True,
@@ -59,15 +55,24 @@ def run(binary: Path, *, repetitions: int = 30) -> dict[str, Any]:
     binary = binary.resolve()
     if not binary.is_file():
         raise FileNotFoundError(binary)
-    one_shot = [_one_shot(binary) for _ in range(repetitions)]
-    with ResidentRustSession(binary, {}) as session:
-        session.call(OPERATION, PAYLOAD)
-        resident: list[float] = []
-        for _ in range(repetitions):
-            started = time.perf_counter()
-            session.call(OPERATION, PAYLOAD)
-            resident.append((time.perf_counter() - started) * 1000)
-        metrics = session.metrics()
+    with tempfile.TemporaryDirectory(prefix="simplicio-fast-238-") as directory:
+        root = Path(directory)
+        (root / "module.py").write_text(
+            "".join(f"def value_{index}():\n    return {index}\n" for index in range(10_000)),
+            encoding="utf-8",
+        )
+        snapshot = root / "project.sfast"
+        build_snapshot(root, snapshot)
+        one_shot = [_one_shot(binary, snapshot) for _ in range(repetitions)]
+        with RustCoreSession(binary) as session:
+            payload = {"snapshot": str(snapshot), "term": "value_0", "limit": 10}
+            session.call(OPERATION, payload)
+            resident: list[float] = []
+            for _ in range(repetitions):
+                started = time.perf_counter()
+                session.call(OPERATION, payload)
+                resident.append((time.perf_counter() - started) * 1000)
+            metrics = session.metrics()
     return {
         "schema": SCHEMA,
         "status": "pass",
@@ -76,9 +81,12 @@ def run(binary: Path, *, repetitions: int = 30) -> dict[str, Any]:
             "python": sys.version,
             "machine": platform.machine(),
             "executable": str(binary),
-            "cwd": os.getcwd(),
+            "workload": {"symbols": 10_000, "term": "value_0", "limit": 10},
         },
-        "request": {"operation": OPERATION, "payload": PAYLOAD},
+        "request": {
+            "operation": OPERATION,
+            "payload": {"term": "value_0", "limit": 10},
+        },
         "one_shot": _summary(one_shot),
         "resident": _summary(resident),
         "resident_metrics": metrics,
