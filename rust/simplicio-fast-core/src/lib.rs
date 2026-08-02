@@ -113,6 +113,18 @@ pub struct RustSymbol {
     pub signature: String,
 }
 
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+pub struct RustRelation {
+    pub origin: String,
+    pub destination: String,
+    pub kind: String,
+    pub confidence: f64,
+    #[serde(default)]
+    pub origin_id: String,
+    #[serde(default)]
+    pub destination_id: String,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct RustContextSpan {
     pub symbol: String,
@@ -475,6 +487,52 @@ impl SnapshotReader {
             result.push(self.symbol_at(index, strings)?);
         }
         Ok(result)
+    }
+
+    pub fn relations(&self) -> Result<Vec<RustRelation>, SnapshotError> {
+        let relations: Vec<RustRelation> = serde_json::from_slice(section_bytes(
+            self.bytes.as_slice(),
+            &self.sections["relations"],
+        ))
+        .map_err(|_| SnapshotError::Invalid("invalid relation JSON".into()))?;
+        if relations.iter().any(|relation| {
+            !relation.confidence.is_finite()
+                || !(0.0..=1.0).contains(&relation.confidence)
+                || relation.origin.is_empty()
+                || relation.destination.is_empty()
+                || relation.kind.is_empty()
+        }) {
+            return Err(SnapshotError::Invalid("invalid relation record".into()));
+        }
+        Ok(relations)
+    }
+
+    pub fn query_relations(
+        &self,
+        handle: Option<&str>,
+        kind: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<RustRelation>, SnapshotError> {
+        if limit == 0 {
+            return Err(SnapshotError::Invalid(
+                "relation limit must be positive".into(),
+            ));
+        }
+        Ok(self
+            .relations()?
+            .into_iter()
+            .filter(|relation| {
+                let handle_match = handle.map_or(true, |value| {
+                    relation.origin == value
+                        || relation.destination == value
+                        || relation.origin_id == value
+                        || relation.destination_id == value
+                });
+                let kind_match = kind.map_or(true, |value| relation.kind == value);
+                handle_match && kind_match
+            })
+            .take(limit)
+            .collect())
     }
 
     pub fn query(&self, term: &str, limit: usize) -> Result<Vec<RustSymbol>, SnapshotError> {

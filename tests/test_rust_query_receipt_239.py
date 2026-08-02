@@ -45,6 +45,7 @@ def _run_session(executable: Path, requests: list[dict[str, object]]) -> list[di
     assert handshake["abi"] == handshake["schema"]
     assert handshake["engine_version"]
     assert "simplicio.fast.context/v1" in handshake["schemas"]
+    assert "simplicio.fast.relations/v1" in handshake["schemas"]
     assert handshake["binary_digest"].startswith("sha256:")
     assert handshake["source_commit"]
     assert handshake["conformance_digest"].startswith("sha256:")
@@ -124,12 +125,24 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         "--limit",
         "1",
     )
+    relations = _run_json(
+        executable,
+        "--relations",
+        str(snapshot),
+        "--kind",
+        "definition",
+        "--limit",
+        "20",
+    )
     assert exact["planner"]["selected_index"] == "persisted.exact"
     assert prefix["planner"]["selected_index"] == "persisted.prefix"
     assert by_path["planner"]["selected_index"] == "persisted.exact+path"
     assert by_kind["planner"]["selected_index"] == "persisted.exact+kind"
     assert by_path["matches"][0]["file"] == "b.py"
     assert by_kind["matches"][0]["kind"] == "function"
+    assert relations["schema"] == "simplicio.fast.relations/v1"
+    assert relations["relations"]
+    assert all(item["kind"] == "definition" for item in relations["relations"])
     assert exact["planner"]["records_decoded"] == 1
     assert prefix["planner"]["records_decoded"] == 1
     with Snapshot(snapshot) as python_snapshot:
@@ -185,6 +198,10 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
                 "operation": "query",
                 "payload": {"snapshot": str(snapshot), "term": "help", "limit": 1},
             },
+            {
+                "operation": "relations",
+                "payload": {"snapshot": str(snapshot), "kind": "definition", "limit": 20},
+            },
             {"operation": "session_cache_stats", "payload": {}},
             {
                 "operation": "query",
@@ -198,8 +215,10 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         ],
     )
     assert session_responses[0]["ok"] and session_responses[1]["ok"]
-    assert session_responses[2] == {"ok": True, "result": {"snapshots": 1}}
-    assert session_responses[3] == {"ok": False, "reason": "generation_mismatch"}
+    assert session_responses[2]["ok"]
+    assert session_responses[2]["result"]["relations"]
+    assert session_responses[3] == {"ok": True, "result": {"snapshots": 1}}
+    assert session_responses[4] == {"ok": False, "reason": "generation_mismatch"}
 
     with RustCoreSession(executable) as session:
         result = session.call(
@@ -207,6 +226,11 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
             {"snapshot": str(snapshot), "term": "helper", "limit": 1},
         )
         assert result["planner"]["records_decoded"] == 1
+        relation_result = session.call(
+            "relations",
+            {"snapshot": str(snapshot), "kind": "definition", "limit": 20},
+        )
+        assert relation_result["relations"]
         assert session.call("session_cache_stats", {}) == {"snapshots": 1}
         process = session._process
         process.kill()
@@ -219,7 +243,7 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         assert metrics["reconnects"] == 1
         assert metrics["retries"] == 1
         assert metrics["failures"] == 1
-        assert metrics["requests"] == 4
+        assert metrics["requests"] == 5
         assert metrics["bytes_in"] > 0
         assert metrics["bytes_out"] > 0
         assert metrics["wall_ms"] >= 0

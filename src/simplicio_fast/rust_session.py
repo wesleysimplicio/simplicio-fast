@@ -14,7 +14,7 @@ from typing import Any, Mapping
 SESSION_SCHEMA = "simplicio.fast.engine-session/v1"
 MAX_FRAME_BYTES = 1 * 1024 * 1024
 MAX_READ_ONLY_RETRIES = 1
-READ_ONLY_OPERATIONS = frozenset({"stats", "query", "context", "session_cache_stats"})
+READ_ONLY_OPERATIONS = frozenset({"stats", "query", "relations", "context", "session_cache_stats"})
 
 
 class RustSessionError(RuntimeError):

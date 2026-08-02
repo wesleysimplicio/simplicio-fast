@@ -15,6 +15,7 @@ fn print_help() {
     println!("  simplicio-fast-rs --version [--json]");
     println!("  simplicio-fast-rs --stats <snapshot.sfast>");
     println!("  simplicio-fast-rs --query <snapshot.sfast> <term> [--path <file>] [--kind <kind>] [--limit <positive>] [--cursor <record-id>]");
+    println!("  simplicio-fast-rs --relations <snapshot.sfast> [--handle <handle>] [--kind <kind>] [--limit <positive>]");
     println!("  simplicio-fast-rs --context <snapshot.sfast> <repo> <term> [--limit <positive>] [--max-lines <positive>] [--max-bytes <positive>] [--max-tokens <positive>]");
     println!("  simplicio-fast-rs --publish-segments <snapshot.sfast> <directory>");
     println!("  simplicio-fast-rs --segment <directory> <name>");
@@ -95,6 +96,24 @@ fn session_execute(
                 }
             }))
         }
+        "relations" => {
+            let snapshot = payload
+                .get("snapshot")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "snapshot_missing".to_owned())?;
+            let handle = payload.get("handle").and_then(Value::as_str);
+            let kind = payload.get("kind").and_then(Value::as_str);
+            let limit = payload.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+            let expected_generation = payload.get("generation").and_then(Value::as_str);
+            let relations = session_snapshot(snapshots, snapshot, expected_generation)?
+                .query_relations(handle, kind, limit)
+                .map_err(|error| error.to_string())?;
+            let records_decoded = relations.len();
+            Ok(serde_json::json!({
+                "relations": relations,
+                "planner": {"records_decoded": records_decoded}
+            }))
+        }
         "context" => {
             let snapshot = payload
                 .get("snapshot")
@@ -161,8 +180,8 @@ fn session_handshake() -> Value {
         "engine": "rust",
         "engine_version": env!("CARGO_PKG_VERSION"),
         "status": "ready",
-        "schemas": ["simplicio.fast.engine-session/v1", "simplicio.fast.context/v1", "simplicio.fast.stats/v1"],
-        "capabilities": ["stats", "query", "context", "session_cache_stats"],
+        "schemas": ["simplicio.fast.engine-session/v1", "simplicio.fast.context/v1", "simplicio.fast.stats/v1", "simplicio.fast.relations/v1"],
+        "capabilities": ["stats", "query", "relations", "context", "session_cache_stats"],
         "binary_digest": binary_digest,
         "source_commit": conformance["source_commit"],
         "conformance_digest": conformance["digest"],
@@ -261,6 +280,52 @@ fn main() -> ExitCode {
                             "records_decoded": receipt.records_decoded,
                             "next_cursor": receipt.next_cursor,
                         }
+                    })
+                );
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                println!(
+                    "{}",
+                    serde_json::json!({"schema":"simplicio.fast.error/v1", "engine":"rust", "status":"error", "reason":error.to_string()})
+                );
+                ExitCode::from(2)
+            }
+        };
+    }
+    if let Some(index) = args.iter().position(|arg| arg == "--relations") {
+        let Some(snapshot_path) = args.get(index + 1) else {
+            eprintln!("missing snapshot path");
+            return ExitCode::from(2);
+        };
+        let limit = args
+            .iter()
+            .position(|arg| arg == "--limit")
+            .and_then(|position| args.get(position + 1))
+            .and_then(|value| value.parse::<usize>().ok())
+            .unwrap_or(100);
+        let handle = args
+            .iter()
+            .position(|arg| arg == "--handle")
+            .and_then(|position| args.get(position + 1))
+            .map(String::as_str);
+        let kind = args
+            .iter()
+            .position(|arg| arg == "--kind")
+            .and_then(|position| args.get(position + 1))
+            .map(String::as_str);
+        return match SnapshotReader::open(snapshot_path)
+            .and_then(|snapshot| snapshot.query_relations(handle, kind, limit))
+        {
+            Ok(relations) => {
+                let records_decoded = relations.len();
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "schema":"simplicio.fast.relations/v1",
+                        "engine":"rust",
+                        "relations":relations,
+                        "planner":{"records_decoded":records_decoded}
                     })
                 );
                 ExitCode::SUCCESS
