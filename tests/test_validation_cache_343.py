@@ -41,6 +41,21 @@ def test_validation_key_is_content_addressed_and_cache_respects_freshness() -> N
     assert cache.get(second, require_fresh=True) == fresh
 
 
+def test_validation_key_snapshots_mutable_command_and_environment_inputs() -> None:
+    command = ["pytest", "tests/a.py"]
+    environment = [["CI", "1"]]
+    item = ValidationKey("sha256:source", "sha256:lock", "python-3.14", command, environment)
+    digest = item.digest
+
+    command.append("--external")
+    environment[0][1] = "mutated"
+    environment.append(["NEW", "value"])
+
+    assert item.command == ("pytest", "tests/a.py")
+    assert item.environment == (("CI", "1"),)
+    assert item.digest == digest
+
+
 def test_affected_selection_is_deterministic_and_bounded() -> None:
     result = ValidationCache().affected(("h2", "h1"), {"h1": ("test/z", "test/a"), "h2": ("test/b",)}, max_tests=2)
     assert result["tests"] == ["test/a", "test/b"]

@@ -54,6 +54,16 @@ class ValidationKey:
     producer_schema: str = "simplicio.fast.validation/v1"
     freshness_class: str = "normal"
 
+    def __post_init__(self) -> None:
+        if isinstance(self.command, list):
+            object.__setattr__(self, "command", tuple(self.command))
+        if isinstance(self.environment, (tuple, list)):
+            object.__setattr__(
+                self,
+                "environment",
+                tuple(tuple(item) if isinstance(item, list) else item for item in self.environment),
+            )
+
     @property
     def digest(self) -> str:
         return _digest(self.to_dict())
