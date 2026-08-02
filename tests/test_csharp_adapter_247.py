@@ -44,3 +44,50 @@ def test_csharp_workspace_fingerprint_changes_with_project_inputs(tmp_path: Path
     project.write_text("<Project><PropertyGroup /></Project>", encoding="utf-8")
     second = csharp_workspace_fingerprint(tmp_path)
     assert first != second
+
+
+def test_csharp_multi_project_solution_preserves_partial_and_test_sources(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "Demo.sln").write_text("Microsoft Visual Studio Solution File\n", encoding="utf-8")
+    (tmp_path / "Directory.Build.props").write_text("<Project />", encoding="utf-8")
+    (tmp_path / "Directory.Packages.props").write_text("<Project />", encoding="utf-8")
+    for project in ("Core", "Web.Tests"):
+        project_root = tmp_path / "src" / project
+        project_root.mkdir(parents=True)
+        (project_root / f"{project}.csproj").write_text(
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup>"
+            "<TargetFramework>net8.0</TargetFramework></PropertyGroup></Project>",
+            encoding="utf-8",
+        )
+    source = tmp_path / "src" / "Core" / "User.cs"
+    source.write_text(
+        "namespace Demo;\n"
+        "public partial class User {\n"
+        "    public string Name { get; set; }\n"
+        "    public void Save() {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    test_source = tmp_path / "src" / "Web.Tests" / "UserTests.cs"
+    test_source.write_text(
+        "using Demo;\n"
+        "public class UserTests {\n"
+        "    [Fact]\n"
+        "    public void Saves() {}\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    discovered = [path.relative_to(tmp_path).as_posix() for path in discover_csharp_projects(tmp_path)]
+    assert discovered == [
+        "Demo.sln",
+        "Directory.Build.props",
+        "Directory.Packages.props",
+        "src/Core/Core.csproj",
+        "src/Web.Tests/Web.Tests.csproj",
+    ]
+    symbols = parse_path(source, "src/Core/User.cs")
+    test_symbols = parse_path(test_source, "src/Web.Tests/UserTests.cs")
+    assert {symbol.name for symbol in symbols} >= {"Demo", "User", "Name", "Save"}
+    assert {symbol.name for symbol in test_symbols} >= {"Demo", "UserTests", "Saves"}
