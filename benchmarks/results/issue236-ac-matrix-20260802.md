@@ -1,0 +1,27 @@
+# Simplicio Fast epic AC matrix — 2026-08-02
+
+This matrix is an evidence index, not a closure claim. `PROVEN` means the
+named local check produced current evidence; `PARTIAL` means at least one
+required acceptance criterion remains; `BLOCKED` means the missing proof is
+owned by an external capability or service.
+
+| Issue | Current state | Current evidence | Remaining authoritative gate |
+| --- | --- | --- | --- |
+| #236 | PARTIAL | Focused child suite: 89 tests + 16 subtests; receipts below | Final AC matrix, full coverage, Linux/Windows assets, 10 worktrees/20 readers, installed S3/S4/S5 delivery |
+| #237 | PARTIAL | `766387c`, `c340cd1`; Mapper 0.26.9 installed E2E, Mapper→SFAST sidecar, 20 concurrent readers | Linux/Windows compatibility, physical worktree isolation, final coverage and installed package matrix |
+| #238 | PARTIAL | `0b6ae3a`; 30-run Rust-core one-shot vs resident receipt; focused session tests | Unix/Windows transport matrix, crash/concurrency/installed package and final coverage |
+| #239 | PARTIAL | `issue239-windows-20260801.json`; 30-run indexed receipts at 10k/100k/1M; `c06f34a` 20 readers | Cross-platform receipts, physical worktrees, installed package and final coverage |
+| #240 | PARTIAL | `93eb225`; semantic default, explicit legacy fallback, optional exact tokenizer CLI, focused tests | Provider tokenizer matrix, frozen real-task recall/token reduction, warm latency and coverage |
+| #241 | PARTIAL | `7be3c94`; 30-run binary/JSON/journal/Dev CLI receipt; installed CLI tests | Linux/Windows byte parity, all operations, recovery/adversarial matrix and final coverage |
+| #242 | PARTIAL | `b095cba`; 30-run 10k/100k receipts; prior 1M receipt; 21 delta/worktree tests | 30-run 1M receipt, Linux receipt, CI regression gate and final coverage |
+| #243 | BLOCKED | Local workflow contract/verifier pass; run `30723612138` has `startup_failure` and no jobs | GitHub Actions administrative/runner availability, then four native target builds and downloadable verification |
+| #244 | PARTIAL | `3e89acf`, `b1b4f89`; parser contract, fuzz corpus, 91% line / 88.2% branch receipt | Frozen real-corpus parity, installed cross-platform matrix and final coverage |
+| #246 | BLOCKED | Rust matrix receipts at 10k/100k/1M; Full cell reports `runtime_authorization_required` | Runtime-authorized Full, Loop standalone, real delivery tasks, concurrency and final regression gate |
+| #247 | PARTIAL | `3515bb5`; C# multi-project/partial/test-symbol E2E, 4 tests | Roslyn/native relations, affected-project invalidation, installed Linux/Windows E2E and coverage |
+| #248 | PARTIAL | `dffc0b1`; TS monorepo/project refs/aliases/TSX E2E, 4 tests | Native compiler relations, bounded invalidation, Node/React installed E2E and coverage |
+| #249 | PARTIAL | `d1ac156`; multi-crate Cargo discovery/symbol E2E, 5 tests | Native parser parity, Cargo relation/invalidation E2E, installed matrix and coverage |
+
+## Closure rule
+
+No issue is closed by this document. A row can move to `PROVEN` only after its
+remaining gate has a current receipt or test that covers the stated scope.
