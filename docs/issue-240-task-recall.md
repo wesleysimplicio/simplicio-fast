@@ -6,6 +6,14 @@ real `DeliveryEngine` in standalone bootstrap mode, deduplicates selected
 spans by file, and records cold/warm wall time, p95 and recall/precision for
 the expected files.
 
-The receipt intentionally reports `status=partial`: this local fixture is not
-presented as historical user traffic, downstream consumer success, or an
-installed cross-platform result. Those gates remain explicitly unverified.
+The receipt intentionally reports `status=partial`: `downstream_success` is
+measured only for the bounded `bounded-source-reader/v1` consumer that reads
+selected files and checks required-file inclusion in this frozen fixture. This
+is not a historical task oracle and does not claim installed consumer parity;
+historical recall and installed cross-platform results remain unverified.
+
+`benchmarks/bench_delivery_240_100k.py` separately measures the required
+100k-symbol warm-preparation gate with 10 repetitions and records the raw
+samples, p95 and the <=25 ms decision. Its fixture is synthetic and the
+receipt remains partial until the measured gate, historical corpus and
+installed consumer evidence all pass.

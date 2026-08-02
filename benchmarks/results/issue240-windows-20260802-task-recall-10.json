@@ -1,10 +1,11 @@
 {
   "aggregate": {
-    "downstream_success": null,
-    "downstream_success_reason": "consumer_not_present_in_frozen_source_fixture",
+    "downstream_consumer": "bounded-source-reader/v1",
+    "downstream_success": true,
+    "downstream_success_scope": "frozen-source-task-fixture",
     "precision_median": 0.75,
     "recall_median": 1.0,
-    "warm_p95_max_ms": 297.9882349999999
+    "warm_p95_max_ms": 611.337335
   },
   "dataset_id": "issue240-fast-source-task-recall-v1",
   "dataset_sha256": "6080fd9eac18b14d39725b9f1c818c9b28f5056885924eb8a2e5db856bd4c3d2",
@@ -14,8 +15,74 @@
   },
   "results": [
     {
-      "cold_median_ms": 214.4315,
-      "cold_p95_ms": 267.2024399999999,
+      "cold_median_ms": 517.6294,
+      "cold_p95_ms": 783.6258799999998,
+      "downstream": {
+        "consumer": "bounded-source-reader/v1",
+        "runs": [
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 11861,
+            "selected_count": 1,
+            "success": true
+          }
+        ],
+        "success": true
+      },
       "expected_files": [
         "src/simplicio_fast/rust_session.py"
       ],
@@ -23,16 +90,16 @@
       "precision": 1.0,
       "raw": {
         "cold_ms": [
-          223.0469,
-          215.2045,
-          213.6585,
-          303.3297,
-          213.1993,
-          208.1395,
-          219.8773,
-          207.3287,
-          208.2413,
-          216.8467
+          551.7218,
+          857.1512,
+          586.6805,
+          483.537,
+          575.533,
+          693.7616,
+          362.0351,
+          255.0156,
+          245.5449,
+          233.0233
         ],
         "precision": [
           1.0,
@@ -59,16 +126,16 @@
           1.0
         ],
         "warm_ms": [
-          239.5774,
-          238.4273,
-          212.8874,
-          212.5502,
-          216.6202,
-          210.4564,
-          207.3686,
-          208.404,
-          210.993,
-          205.6584
+          589.0267,
+          525.3895,
+          427.1433,
+          605.6846,
+          615.9623,
+          297.8043,
+          390.7484,
+          224.7288,
+          243.8182,
+          238.3171
         ]
       },
       "recall": 1.0,
@@ -77,12 +144,78 @@
         "src/simplicio_fast/rust_session.py"
       ],
       "text": "RustCoreSession allow_nan false JSON frame",
-      "warm_median_ms": 211.77159999999998,
-      "warm_p95_ms": 239.059855
+      "warm_median_ms": 408.94585,
+      "warm_p95_ms": 611.337335
     },
     {
-      "cold_median_ms": 210.21460000000002,
-      "cold_p95_ms": 337.5450049999999,
+      "cold_median_ms": 227.09695,
+      "cold_p95_ms": 256.616735,
+      "downstream": {
+        "consumer": "bounded-source-reader/v1",
+        "runs": [
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 71845,
+            "selected_count": 2,
+            "success": true
+          }
+        ],
+        "success": true
+      },
       "expected_files": [
         "src/simplicio_fast/delivery.py"
       ],
@@ -90,16 +223,16 @@
       "precision": 0.5,
       "raw": {
         "cold_ms": [
-          291.4489,
-          207.7118,
-          215.6405,
-          207.6725,
-          205.6653,
-          213.8996,
-          205.5506,
-          375.26,
-          209.1234,
-          211.3058
+          245.3736,
+          231.0122,
+          221.7711,
+          250.6351,
+          261.5108,
+          227.2057,
+          226.9882,
+          212.6335,
+          216.9054,
+          208.633
         ],
         "precision": [
           0.5,
@@ -126,16 +259,16 @@
           1.0
         ],
         "warm_ms": [
-          237.496,
-          205.1181,
-          205.3388,
-          287.0117,
-          202.8952,
-          288.6934,
-          287.9022,
-          206.5964,
-          206.441,
-          204.2695
+          256.8614,
+          228.617,
+          219.6322,
+          273.1212,
+          257.7231,
+          235.3232,
+          304.3659,
+          208.8133,
+          208.6204,
+          215.3346
         ]
       },
       "recall": 1.0,
@@ -145,12 +278,78 @@
         "src/simplicio_fast/delivery.py"
       ],
       "text": "DeliveryEngine tokenizer_id exact tokenizer",
-      "warm_median_ms": 206.5187,
-      "warm_p95_ms": 288.33736
+      "warm_median_ms": 231.9701,
+      "warm_p95_ms": 290.30578499999996
     },
     {
-      "cold_median_ms": 206.08265,
-      "cold_p95_ms": 212.54713999999998,
+      "cold_median_ms": 226.1672,
+      "cold_p95_ms": 366.5162849999999,
+      "downstream": {
+        "consumer": "bounded-source-reader/v1",
+        "runs": [
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 62844,
+            "selected_count": 2,
+            "success": true
+          }
+        ],
+        "success": true
+      },
       "expected_files": [
         "src/simplicio_fast/binary_changeset.py"
       ],
@@ -158,16 +357,16 @@
       "precision": 0.5,
       "raw": {
         "cold_ms": [
-          216.4076,
-          201.4871,
-          205.5935,
-          203.0217,
-          207.8288,
-          207.1995,
-          203.341,
-          206.7659,
-          206.5718,
-          201.198
+          398.5746,
+          211.6892,
+          225.7074,
+          246.7226,
+          327.3339,
+          226.627,
+          232.4081,
+          225.6643,
+          209.4177,
+          217.505
         ],
         "precision": [
           0.5,
@@ -194,16 +393,16 @@
           1.0
         ],
         "warm_ms": [
-          230.4544,
-          206.4912,
-          206.6525,
-          206.3683,
-          209.1811,
-          207.6712,
-          205.5462,
-          211.6993,
-          207.2406,
-          204.6557
+          236.5138,
+          216.7584,
+          230.373,
+          223.7668,
+          216.2453,
+          205.4759,
+          214.0933,
+          292.7847,
+          210.4847,
+          299.6618
         ]
       },
       "recall": 1.0,
@@ -213,12 +412,78 @@
         "tests/test_binary_changeset_232.py"
       ],
       "text": "BinaryChangeSet reconcile_unknown_effect journal unknown",
-      "warm_median_ms": 206.94655,
-      "warm_p95_ms": 222.01460499999996
+      "warm_median_ms": 220.2626,
+      "warm_p95_ms": 296.567105
     },
     {
-      "cold_median_ms": 217.21665000000002,
-      "cold_p95_ms": 294.59902,
+      "cold_median_ms": 213.5299,
+      "cold_p95_ms": 249.314405,
+      "downstream": {
+        "consumer": "bounded-source-reader/v1",
+        "runs": [
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          },
+          {
+            "failures": [],
+            "read_bytes": 16766,
+            "selected_count": 1,
+            "success": true
+          }
+        ],
+        "success": true
+      },
       "expected_files": [
         "src/simplicio_fast/capability_ranking.py"
       ],
@@ -226,16 +491,16 @@
       "precision": 1.0,
       "raw": {
         "cold_ms": [
-          217.9801,
-          206.9299,
-          302.2249,
-          285.2785,
-          211.3394,
-          221.6141,
-          210.4072,
-          217.1927,
-          217.2406,
-          210.7746
+          243.9931,
+          253.6682,
+          216.0149,
+          214.9367,
+          212.1231,
+          205.812,
+          209.855,
+          231.92,
+          208.8674,
+          206.4034
         ],
         "precision": [
           1.0,
@@ -262,16 +527,16 @@
           1.0
         ],
         "warm_ms": [
-          230.5717,
-          316.9151,
-          245.6015,
-          274.8554,
-          209.8947,
-          217.5808,
-          210.9571,
-          212.2572,
-          210.8533,
-          214.8802
+          385.2521,
+          234.828,
+          218.3878,
+          205.3045,
+          209.3052,
+          206.575,
+          210.3231,
+          209.9406,
+          208.6876,
+          209.5087
         ]
       },
       "recall": 1.0,
@@ -280,8 +545,8 @@
         "src/simplicio_fast/capability_ranking.py"
       ],
       "text": "CapabilityCandidate rank_capabilities advisory_only",
-      "warm_median_ms": 216.2305,
-      "warm_p95_ms": 297.9882349999999
+      "warm_median_ms": 209.72465,
+      "warm_p95_ms": 317.56125499999985
     }
   ],
   "schema": "simplicio.fast.delivery-task-recall-receipt/v1",
@@ -289,7 +554,6 @@
   "status": "partial",
   "unverified": [
     "real_historical_task_recall",
-    "downstream_consumer_success",
     "installed_cross_platform"
   ]
 }

@@ -241,6 +241,16 @@ class DeliveryEngine:
         self.cache = (
             cache or self.root / ".simplicio-fast" / "delivery-cache"
         ).resolve()
+        self._source_commit_cache: tuple[str | None, str | None] | None = None
+
+    def _source_commit_receipt(self) -> tuple[str | None, str | None]:
+        """Avoid repeating failed Git discovery for immutable non-Git fixtures."""
+        if self._source_commit_cache is not None:
+            return self._source_commit_cache
+        result = _source_commit(self.root)
+        if result[1] == "not_a_git_checkout":
+            self._source_commit_cache = result
+        return result
 
     def cache_stats(self) -> dict[str, Any]:
         """Return deterministic size telemetry for the disposable delivery cache."""
@@ -330,7 +340,7 @@ class DeliveryEngine:
             if mode == "integrated":
                 raise MapperIngestError("bootstrap_not_allowed")
             build_snapshot(self.root, self.snapshot)
-        commit, commit_reason = _source_commit(self.root)
+        commit, commit_reason = self._source_commit_receipt()
         with Snapshot(self.snapshot) as snapshot:
             key_material = {
                 "task": task,
