@@ -164,6 +164,22 @@ def test_knowledge_projection_rejects_boolean_budgets_and_enforces_fact_cap(monk
             projection.query("contract", **kwargs)
 
 
+def test_knowledge_projection_applies_trust_floor_before_ranking() -> None:
+    projection = KnowledgeProjection("repo", "tenant", "g1")
+    derived = KnowledgeFact(
+        "adr", "mapper", "derived", "v1", ("mapper:derived",),
+        "derived_fact", "sha256:" + "d" * 64, "parser contract", "repo", "tenant",
+    )
+    verified = fact("verified", "parser contract")
+    projection.apply_delta([derived, verified])
+
+    result = projection.query("parser contract", trust_floor="verified")
+    assert result["trust_floor"] == "verified"
+    assert result["handles"] == ["verified"]
+    with pytest.raises(KnowledgeProjectionError, match="query_trust_invalid"):
+        projection.query("parser contract", trust_floor="unknown")
+
+
 def test_knowledge_projection_rejects_untyped_delta_and_query_inputs() -> None:
     projection = KnowledgeProjection("repo", "tenant", "g1")
     with pytest.raises(KnowledgeProjectionError, match="fact_type_invalid"):
