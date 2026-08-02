@@ -180,8 +180,16 @@ class ChangesetCli241Test(unittest.TestCase):
             error = stderr_path.read_text(encoding="utf-8")
             output = stdout_path.read_text(encoding="utf-8")
         self.assertEqual(0, result.returncode, error)
-        self.assertIn("materialize", output)
-        self.assertIn("recover", output)
+        for command in (
+            "prepare",
+            "validate",
+            "seal",
+            "inspect",
+            "export-json",
+            "materialize",
+            "recover",
+        ):
+            self.assertIn(command, output)
 
     def test_installed_console_materializes_a_real_changeset(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
