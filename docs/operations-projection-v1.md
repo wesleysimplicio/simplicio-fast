@@ -9,3 +9,8 @@ Fast does not read SQLite, own queues or journals, schedule work, grant leases,
 reduce effects, or become completion authority. Mapper, Loop, Runtime, Dev CLI
 and Resource Fabric remain canonical producers; their receipt contracts and
 cross-platform operational fixtures are required before #347 can close.
+
+The projection also exposes bounded slot/attempt queries, producer-reported
+lease facts with derived `active` status at an explicit observation time, and
+read-only status/kind statistics. It never acquires, renews, fences or releases
+a lease; the producer remains authoritative.

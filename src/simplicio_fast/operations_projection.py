@@ -75,6 +75,51 @@ class OperationsProjection:
         values = [item for item in self._receipts.values() if (status is None or item.status == status) and (kind is None or item.kind == kind)]
         return [item.to_dict() for item in sorted(values, key=lambda item: (item.sequence, item.handle), reverse=True)[:max_results]]
 
+    def query_slots(self, *, status: str | None = None, max_results: int = 1000) -> list[dict[str, Any]]:
+        """Read slot/attempt facts without accepting or mutating leases."""
+        values = [
+            item for item in self._receipts.values()
+            if item.kind in {"slot", "attempt", "lease"}
+            and (status is None or item.status == status)
+        ]
+        if max_results <= 0:
+            raise OperationsProjectionError("query_budget_invalid")
+        return [item.to_dict() for item in sorted(values, key=lambda item: (item.sequence, item.handle), reverse=True)[:max_results]]
+
+    def query_leases(self, observed_at: int, *, max_results: int = 1000) -> list[dict[str, Any]]:
+        """Return producer-reported lease facts with derived temporal status."""
+        if isinstance(observed_at, bool) or not isinstance(observed_at, int) or observed_at < 0 or max_results <= 0:
+            raise OperationsProjectionError("lease_query_invalid")
+        result: list[dict[str, Any]] = []
+        for receipt in sorted(self._receipts.values(), key=lambda item: (item.sequence, item.handle), reverse=True):
+            lease = receipt.payload.get("lease")
+            if receipt.kind != "lease" and not isinstance(lease, dict):
+                continue
+            lease = lease if isinstance(lease, dict) else receipt.payload
+            expires_at = lease.get("expires_at")
+            if isinstance(expires_at, bool) or not isinstance(expires_at, int):
+                raise OperationsProjectionError("lease_expiry_invalid")
+            item = receipt.to_dict()
+            item["lease"] = {
+                "owner": lease.get("owner"),
+                "fence": lease.get("fence"),
+                "expires_at": expires_at,
+                "active": observed_at < expires_at,
+                "authority": "producer",
+            }
+            result.append(item)
+            if len(result) >= max_results:
+                break
+        return result
+
+    def stats(self) -> dict[str, Any]:
+        statuses: dict[str, int] = {}
+        kinds: dict[str, int] = {}
+        for receipt in self._receipts.values():
+            statuses[receipt.status] = statuses.get(receipt.status, 0) + 1
+            kinds[receipt.kind] = kinds.get(receipt.kind, 0) + 1
+        return {"schema": "simplicio.fast.operations-stats/v1", "repository": self.repository, "generation": self.generation, "receipts": len(self._receipts), "statuses": dict(sorted(statuses.items())), "kinds": dict(sorted(kinds.items())), "authority": "derived_read_only"}
+
     def snapshot(self) -> dict[str, Any]:
         return {"schema": PROJECTION_SCHEMA, "repository": self.repository, "generation": self.generation, "receipts": self.query()}
 
