@@ -71,7 +71,11 @@ class FederationMember:
             (self.scope, "member_scope_invalid"),
         ):
             _text(value, reason)
-        if not self.digest.startswith("sha256:"):
+        digest = self.digest.removeprefix("sha256:")
+        if (
+            len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
             raise FederationError("member_digest_invalid")
 
     def to_dict(self) -> dict[str, Any]:

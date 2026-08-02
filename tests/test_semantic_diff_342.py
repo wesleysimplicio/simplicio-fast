@@ -54,7 +54,7 @@ def test_diff_rejects_incoherent_shapes_and_duplicate_overlay_records() -> None:
 def test_federated_impact_requires_and_records_pinned_manifest() -> None:
     result = diff_generations({"repo-a:schema": {}}, {"repo-a:schema": {"v": 2}}, source_generation="g1", proposed_generation="g2")
     federation = compile_federation(
-        [FederationMember("repo-a", "commit-a", "g1", "projection/v1", "sha256:a"), FederationMember("repo-b", "commit-b", "g1", "projection/v1", "sha256:b")],
+        [FederationMember("repo-a", "commit-a", "g1", "projection/v1", "sha256:" + "a" * 64), FederationMember("repo-b", "commit-b", "g1", "projection/v1", "sha256:" + "b" * 64)],
         [FederatedEdge("repo-a:schema", "repo-b:consumer", "depends", 1.0, ("fixture:edge",))],
     )
     impact = result.impact_federated(federation)

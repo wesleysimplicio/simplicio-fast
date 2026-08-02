@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+import hashlib
 import math
 
 import pytest
@@ -13,7 +14,8 @@ from simplicio_fast.federation import (
 
 
 def member(repo: str, generation: str = "g1") -> FederationMember:
-    return FederationMember(repo, "commit-" + repo, generation, "projection/v1", "sha256:" + repo)
+    digest = hashlib.sha256(repo.encode("utf-8")).hexdigest()
+    return FederationMember(repo, "commit-" + repo, generation, "projection/v1", "sha256:" + digest)
 
 
 def test_federation_is_pinned_deterministic_and_bounded() -> None:
@@ -41,7 +43,7 @@ def test_federation_rejects_duplicate_scope_tombstone_and_unproven_edge() -> Non
     with pytest.raises(FederationError, match="duplicate_member_repository"):
         compile_federation([member("Repo"), member("repo")])
     with pytest.raises(FederationError, match="member_tombstone_present"):
-        compile_federation([FederationMember("repo", "c", "g", "s", "sha256:x", tombstone=True)])
+        compile_federation([FederationMember("repo", "c", "g", "s", "sha256:" + "a" * 64, tombstone=True)])
     with pytest.raises(FederationError, match="derived_edge_evidence_missing"):
         FederatedEdge("a", "b", "depends", 1.0, derived=True)
     with pytest.raises(FederationError, match="edge_confidence_invalid"):
@@ -52,6 +54,8 @@ def test_federation_rejects_duplicate_scope_tombstone_and_unproven_edge() -> Non
         FederatedEdge("a", "b", "depends", 1.0, ("",))
     with pytest.raises(FederationError, match="member_digest_invalid"):
         FederationMember("repo", "commit", "generation", "schema", "digest")
+    with pytest.raises(FederationError, match="member_digest_invalid"):
+        FederationMember("repo", "commit", "generation", "schema", "sha256:" + "g" * 64)
 
 
 def test_federation_rejects_invalid_canonical_values_and_member_limits() -> None:
@@ -84,7 +88,7 @@ def test_federation_delta_reuses_members_and_removes_tombstoned_edges() -> None:
         [member("repo-a"), member("repo-b")],
         [FederatedEdge("repo-a:x", "repo-b:y", "depends", 1.0, ("fixture:1",))],
     )
-    replacement = FederationMember("repo-b", "commit-b2", "g2", "projection/v1", "sha256:b2")
+    replacement = FederationMember("repo-b", "commit-b2", "g2", "projection/v1", "sha256:" + "b" * 64)
     updated, receipt = original.apply_delta([replacement], added_edges=())
     assert updated.members[1].commit == "commit-b2"
     assert receipt["changed_repositories"] == ["repo-b"]

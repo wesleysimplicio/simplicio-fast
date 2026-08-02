@@ -20,7 +20,7 @@ def test_synthetic_cross_domain_e2e_is_deterministic_and_handle_only() -> None:
     operation_index = OperationsProjection("repo-a", "g1")
     operation_index.ingest([OperationReceipt("operations:attempt", "attempt", "done", "g1", 1, "runtime.receipt/v1", {})])
     federation = compile_federation(
-        [FederationMember("repo-a", "commit-a", "g1", "projection/v1", "sha256:a"), FederationMember("repo-b", "commit-b", "g1", "projection/v1", "sha256:b")],
+        [FederationMember("repo-a", "commit-a", "g1", "projection/v1", "sha256:" + "a" * 64), FederationMember("repo-b", "commit-b", "g1", "projection/v1", "sha256:" + "b" * 64)],
         [FederatedEdge("repo-a:contract", "repo-b:consumer", "depends", 1.0, ("fixture:e1",))],
     )
     context = compile_context([operations, knowledge, code], repository_scope="repo-a")
