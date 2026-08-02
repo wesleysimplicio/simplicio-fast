@@ -1169,6 +1169,11 @@ fn validate_persisted_indexes(
                 "persisted index record out of bounds".into(),
             ));
         }
+        if values.windows(2).any(|pair| pair[0] >= pair[1]) {
+            return Err(SnapshotError::Invalid(
+                "persisted index records not strictly ordered".into(),
+            ));
+        }
     }
     Ok(())
 }
@@ -1427,6 +1432,25 @@ mod tests {
             Err(SnapshotError::Invalid(reason))
                 if reason == "persisted index record out of bounds"
         ));
+    }
+
+    #[test]
+    fn rejects_unordered_or_duplicate_persisted_index_records() {
+        for values in [vec![2, 1], vec![1, 1]] {
+            let mut indexes = PersistedIndexes {
+                exact: BTreeMap::new(),
+                names: BTreeMap::new(),
+                paths: BTreeMap::new(),
+                kinds: BTreeMap::new(),
+            };
+            indexes.exact.insert("helper".into(), values);
+            let result = validate_persisted_indexes(&indexes, 3);
+            assert!(matches!(
+                result,
+                Err(SnapshotError::Invalid(reason))
+                    if reason == "persisted index records not strictly ordered"
+            ));
+        }
     }
 
     #[test]
