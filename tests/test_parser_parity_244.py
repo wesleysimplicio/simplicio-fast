@@ -9,6 +9,7 @@ import pytest
 from benchmarks.parser_parity_244 import (
     ParserParityError,
     build_receipt,
+    main,
     validate_receipt,
 )
 
@@ -67,3 +68,8 @@ def test_receipt_validator_rejects_tampered_parity_status() -> None:
     receipt["python_legacy_parity"]["status"] = "fail"
     with pytest.raises(ParserParityError, match="receipt_parity_invalid"):
         validate_receipt(receipt)
+
+
+def test_cli_fails_closed_when_native_parsers_are_pending(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("sys.argv", ["parser_parity_244"])
+    assert main() == 1
