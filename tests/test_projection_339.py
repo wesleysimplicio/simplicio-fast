@@ -93,7 +93,7 @@ def test_projection_dataclass_boundary_rejects_tampered_digest() -> None:
 
 
 def test_projection_dataclass_normalizes_mutable_contract_fields() -> None:
-    payload = {"name": "abc"}
+    payload = {"name": "abc", "nested": {"items": ["stable"]}}
     base = ProjectionEnvelope.create(
         "code",
         producer="mapper",
@@ -117,7 +117,9 @@ def test_projection_dataclass_normalizes_mutable_contract_fields() -> None:
     assert envelope.tombstones == ("symbol:old",)
     assert envelope.budgets == {"bytes": 1024}
     payload["mutated"] = True
+    payload["nested"]["items"].append("external")
     assert "mutated" not in envelope.payload
+    assert envelope.payload["nested"] == {"items": ["stable"]}
 
 
 def test_projection_manifest_and_provenance_fields_are_strict_and_deterministic() -> None:

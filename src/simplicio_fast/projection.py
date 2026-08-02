@@ -7,6 +7,7 @@ cross-repository data without exposing mmap implementation details.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 import hashlib
 import json
@@ -187,7 +188,7 @@ class ProjectionEnvelope:
             )
         ):
             raise ProjectionError("budgets_invalid")
-        object.__setattr__(self, "payload", dict(self.payload))
+        object.__setattr__(self, "payload", deepcopy(self.payload))
         object.__setattr__(self, "stable_handles", stable_handles)
         object.__setattr__(self, "capabilities_required", capabilities_required)
         object.__setattr__(self, "truncation_reasons", truncation_reasons)
