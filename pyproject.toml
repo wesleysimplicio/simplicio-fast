@@ -14,6 +14,7 @@ integrated = [
 
 [project.scripts]
 simplicio-fast = "simplicio_fast.cli:main"
+simplicio-fast-cross-repo = "simplicio_fast.cross_repo_cli:main"
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "."]
