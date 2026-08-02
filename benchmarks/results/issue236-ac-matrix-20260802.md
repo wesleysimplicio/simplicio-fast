@@ -3,7 +3,7 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. Current master is `2c09ea2`;
+owned by an external capability or service. Current master is `51340c0`;
 the full Python suite passes `614 passed, 67 subtests` in 116.42s,
 and release-integrity passes all checks.
 
