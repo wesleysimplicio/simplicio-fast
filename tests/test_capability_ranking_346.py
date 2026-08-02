@@ -65,3 +65,24 @@ def test_capability_ranking_rejects_coercible_invalid_types() -> None:
         rank_capabilities([], ("query",), max_results=True)
     with pytest.raises(CapabilityRankingError, match="ranking_request_invalid"):
         rank_capabilities([], ("query",), required_scope=True)
+
+
+def test_capability_ranking_rejects_invalid_candidate_contract_edges() -> None:
+    with pytest.raises(CapabilityRankingError, match="candidate_identity_invalid"):
+        CapabilityCandidate("", "tool", "1", ("query",))
+    with pytest.raises(CapabilityRankingError, match="candidate_capabilities_invalid"):
+        CapabilityCandidate("tool", "tool", "1", ("",))
+    with pytest.raises(CapabilityRankingError, match="candidate_availability_invalid"):
+        CapabilityCandidate("tool", "tool", "1", ("query",), available=1)
+    with pytest.raises(CapabilityRankingError, match="candidate_cost_invalid"):
+        CapabilityCandidate("tool", "tool", "1", ("query",), estimated_latency_ms=-1)
+    with pytest.raises(CapabilityRankingError, match="candidate_metric_class_invalid"):
+        CapabilityCandidate("tool", "tool", "1", ("query",), metric_class="measured-ish")
+
+
+def test_capability_ranking_explains_unavailable_candidates() -> None:
+    result = rank_capabilities(
+        [CapabilityCandidate("offline", "worker", "1", ("query",), available=False)],
+        ("query",),
+    )
+    assert result["candidates"][0]["selection_reason"] == "unavailable"
