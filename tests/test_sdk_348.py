@@ -1,7 +1,7 @@
 import asyncio
 
 from simplicio_fast.projection import ProjectionEnvelope
-from simplicio_fast.sdk import ProjectionSDK
+from simplicio_fast.sdk import ProjectionSDK, SDKError
 
 
 def envelope(handle: str) -> ProjectionEnvelope:
@@ -51,3 +51,13 @@ def test_sdk_supports_twenty_concurrent_async_queries(tmp_path) -> None:
         assert receipt["records"] == 1
 
     asyncio.run(run())
+
+
+def test_sdk_delta_and_error_contract_are_explicit() -> None:
+    error = SDKError("contract_invalid")
+    assert error.reason_code == "contract_invalid"
+    assert str(error) == "contract_invalid"
+    sdk = ProjectionSDK("repo")
+    result = sdk.compile_delta("g1", changed=(envelope("symbol:a"),), closure_handles=("symbol:downstream",))
+    assert result["changed_handles"] == ["symbol:a"]
+    assert result["closure_handles"] == ["symbol:a", "symbol:downstream"]
