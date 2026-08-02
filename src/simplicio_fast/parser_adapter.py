@@ -10,7 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import subprocess
 from typing import Any, Iterable, Mapping
@@ -393,8 +393,18 @@ def _digest(value: Any) -> str:
 
 
 def _safe_relative(path: str) -> str:
-    candidate = Path(path)
-    if candidate.is_absolute() or ".." in candidate.parts or not path:
+    if not isinstance(path, str) or not path or "\0" in path or ":" in path:
+        raise ParserAdapterError("path_escape", path)
+    normalized = path.replace("\\", "/")
+    raw_parts = normalized.split("/")
+    if (
+        not normalized
+        or normalized.startswith("/")
+        or any(not part or part in {".", ".."} for part in raw_parts)
+    ):
+        raise ParserAdapterError("path_escape", path)
+    candidate = PurePosixPath(normalized)
+    if candidate.is_absolute():
         raise ParserAdapterError("path_escape", path)
     return candidate.as_posix()
 

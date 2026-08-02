@@ -709,6 +709,9 @@ class ParserAdapter244Test(unittest.TestCase):
                 validate_payload(broken)
             with self.assertRaisesRegex(ParserAdapterError, "path_escape"):
                 build_payload(root, changed_paths=["../outside.py"])
+            for alias in ("one/./service.py", "one//service.py", "one\\..\\service.py"):
+                with self.subTest(alias=alias), self.assertRaisesRegex(ParserAdapterError, "path_escape"):
+                    build_payload(root, changed_paths=[alias])
 
     def test_previous_payload_reuses_unchanged_files_and_reports_deletion(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
