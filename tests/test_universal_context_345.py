@@ -96,3 +96,10 @@ def test_universal_context_rejects_tenant_scope_mismatch() -> None:
     )
     with pytest.raises(UniversalContextError, match="context_scope_mismatch"):
         compile_context([item], repository_scope="repo", tenant_scope="tenant-b")
+
+
+def test_universal_context_rejects_boolean_budget_values() -> None:
+    with pytest.raises(UniversalContextError, match="context_budget_invalid"):
+        compile_context([], max_tokens=True)
+    with pytest.raises(UniversalContextError, match="context_budget_invalid"):
+        compile_context([], wrapper_bytes=False)

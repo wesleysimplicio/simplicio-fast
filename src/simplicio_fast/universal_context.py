@@ -35,10 +35,20 @@ def compile_context(
 ) -> dict[str, Any]:
     """Compile a deterministic context packet; inputs remain immutable."""
     if (
-        max_bytes <= 0
+        isinstance(max_bytes, bool)
+        or not isinstance(max_bytes, int)
+        or max_bytes <= 0
+        or isinstance(max_tokens, bool)
+        or not isinstance(max_tokens, int)
         or max_tokens <= 0
+        or isinstance(max_items, bool)
+        or not isinstance(max_items, int)
         or max_items <= 0
+        or isinstance(wrapper_bytes, bool)
+        or not isinstance(wrapper_bytes, int)
         or wrapper_bytes < 0
+        or isinstance(wrapper_tokens, bool)
+        or not isinstance(wrapper_tokens, int)
         or wrapper_tokens < 0
         or wrapper_bytes > max_bytes
         or wrapper_tokens > max_tokens
