@@ -979,6 +979,25 @@ class PrismArena:
             "draining": self._draining,
         }
 
+    def projection(self):
+        """Return the read-only operations view in the shared projection ABI."""
+        from .projection import ProjectionEnvelope
+
+        metrics = self.metrics()
+        payload = {
+            "repository": self.repo,
+            "arena_id": self.arena_id,
+            "metrics": metrics,
+        }
+        return ProjectionEnvelope.create(
+            "operations",
+            producer="simplicio-fast.prism-arena",
+            producer_schema=METRICS_SCHEMA,
+            generation=self.generation,
+            stable_handle=f"arena:{self.arena_id}:{self.generation}",
+            payload=payload,
+        )
+
     def close(self) -> None:
         if self._closed:
             return

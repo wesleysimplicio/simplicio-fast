@@ -195,6 +195,20 @@ class KnowledgeFacade:
         """Compatibility alias for callers that use the catalog vocabulary."""
         return self.expand_handles(handles, **kwargs)
 
+    def projection(self, task: str, **kwargs: Any):
+        """Return the bounded knowledge view in the shared projection ABI."""
+        from .projection import ProjectionEnvelope
+
+        resolved = self.resolve(task, **kwargs)
+        return ProjectionEnvelope.create(
+            "knowledge",
+            producer="simplicio-fast.knowledge",
+            producer_schema=KNOWLEDGE_RESOLUTION_SCHEMA,
+            generation=self.generation,
+            stable_handle=f"knowledge:{self.generation}:{resolved['receipt_digest']}",
+            payload=resolved,
+        )
+
 
 __all__ = [
     "KNOWLEDGE_MATERIALIZATION_SCHEMA",

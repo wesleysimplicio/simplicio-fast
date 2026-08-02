@@ -1,6 +1,9 @@
 import pytest
 
+from simplicio_fast.knowledge import KnowledgeFacade
+from simplicio_fast.prism_arena import PrismArena
 from simplicio_fast.projection import ProjectionEnvelope, ProjectionError
+from simplicio_fast.skills import SkillCatalog
 
 
 def test_code_knowledge_and_operations_share_deterministic_envelope() -> None:
@@ -54,3 +57,21 @@ def test_projection_rejects_future_schema_and_private_offsets() -> None:
             stable_handle="symbol:abc",
             payload={"items": [{"mmap_offset": 4}]},
         )
+
+
+def test_knowledge_and_operations_producers_use_the_same_abi(tmp_path) -> None:
+    catalog = SkillCatalog(tmp_path, generation="g1", scope="repo")
+    knowledge = KnowledgeFacade(catalog)
+    knowledge_projection = knowledge.projection("find parser", sources=("skills",))
+    assert knowledge_projection.projection_type == "knowledge"
+    assert ProjectionEnvelope.decode(knowledge_projection.encode()) == knowledge_projection
+
+    arena = PrismArena.publish(
+        tmp_path / "arena", "org/repo", "source-1", {"a.py": b"value = 1\n"}
+    )
+    try:
+        operations_projection = arena.projection()
+        assert operations_projection.projection_type == "operations"
+        assert ProjectionEnvelope.decode(operations_projection.encode()) == operations_projection
+    finally:
+        arena.close()
