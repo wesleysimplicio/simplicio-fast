@@ -231,3 +231,23 @@ def test_validation_cache_contract_boundaries_and_lease_lifecycle(tmp_path) -> N
     valid_path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(ValidationCacheError, match="cache_entries_invalid"):
         ValidationCache.load(valid_path)
+
+
+def test_validation_cache_load_rejects_type_coercion_and_duplicate_entries(tmp_path) -> None:
+    cache = ValidationCache()
+    cache.put(key(), status="pass", result={"ok": True})
+    path = tmp_path / "poisoned.json"
+    cache.save(path)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["body"]["entries"][0]["fresh"] = "false"
+    document["cache_sha256"] = _digest(document["body"])
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValidationCacheError, match="cache_entry_invalid"):
+        ValidationCache.load(path)
+    cache.save(path)
+    document = json.loads(path.read_text(encoding="utf-8"))
+    document["body"]["entries"].append(dict(document["body"]["entries"][0]))
+    document["cache_sha256"] = _digest(document["body"])
+    path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValidationCacheError, match="cache_duplicate_entry"):
+        ValidationCache.load(path)

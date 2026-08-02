@@ -22,6 +22,12 @@ class ValidationCacheError(ValueError):
         super().__init__(reason_code)
 
 
+def _validate_string_sequence(value: object, reason: str) -> tuple[str, ...]:
+    if not isinstance(value, (tuple, list)) or any(not isinstance(item, str) or not item for item in value):
+        raise ValidationCacheError(reason)
+    return tuple(value)
+
+
 def _canonical(value: Any) -> bytes:
     try:
         return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -52,9 +58,26 @@ class ValidationKey:
         return _digest(self.to_dict())
 
     def to_dict(self) -> dict[str, Any]:
-        if not self.source_merkle or not self.lockfiles_digest or not self.toolchain or not self.command:
+        if any(
+            not isinstance(value, str) or not value.strip()
+            for value in (
+                self.source_merkle,
+                self.lockfiles_digest,
+                self.toolchain,
+                self.platform,
+                self.producer_schema,
+                self.freshness_class,
+            )
+        ) or not isinstance(self.command, (tuple, list)) or not self.command or any(not isinstance(item, str) or not item for item in self.command):
             raise ValidationCacheError("cache_key_required_missing")
-        if any(not isinstance(name, str) or not name or not isinstance(value, str) for name, value in self.environment):
+        if not isinstance(self.environment, (tuple, list)) or any(
+            not isinstance(item, (tuple, list))
+            or len(item) != 2
+            or not isinstance(item[0], str)
+            or not item[0]
+            or not isinstance(item[1], str)
+            for item in self.environment
+        ):
             raise ValidationCacheError("cache_environment_invalid")
         return {
             "schema": CACHE_KEY_SCHEMA,
@@ -86,10 +109,17 @@ class ValidationResult:
     generation: str = ""
 
     def __post_init__(self) -> None:
-        if self.status not in {"pass", "fail", "partial"}:
+        if not isinstance(self.status, str) or self.status not in {"pass", "fail", "partial"}:
             raise ValidationCacheError("result_status_invalid")
-        if not self.key_digest or not self.result_digest:
+        if not isinstance(self.key_digest, str) or not self.key_digest or not isinstance(self.result_digest, str) or not self.result_digest:
             raise ValidationCacheError("result_digest_invalid")
+        _validate_string_sequence(self.command, "result_command_invalid")
+        _validate_string_sequence(self.evidence, "result_evidence_invalid")
+        _validate_string_sequence(self.provenance, "result_provenance_invalid")
+        if not isinstance(self.fresh, bool) or not isinstance(self.verified, bool) or not isinstance(self.nondeterministic, bool):
+            raise ValidationCacheError("result_flags_invalid")
+        if not isinstance(self.generation, str):
+            raise ValidationCacheError("result_generation_invalid")
         if self.verified and not self.provenance:
             raise ValidationCacheError("result_provenance_required")
 
@@ -164,18 +194,27 @@ class ValidationCache:
         if not isinstance(entries, list):
             raise ValidationCacheError("cache_entries_invalid")
         cache = cls()
+        seen: set[str] = set()
         for raw in entries:
             if not isinstance(raw, Mapping):
                 raise ValidationCacheError("cache_entries_invalid")
             try:
+                command = raw["command"]
+                evidence = raw.get("evidence", [])
+                provenance = raw.get("provenance", [])
+                if not isinstance(command, list) or not isinstance(evidence, list) or not isinstance(provenance, list):
+                    raise ValidationCacheError("cache_entry_invalid")
                 entry = ValidationResult(
-                    str(raw["key_digest"]), str(raw["status"]), str(raw["result_digest"]),
-                    tuple(raw["command"]), bool(raw["fresh"]), tuple(raw.get("evidence", ())),
-                    bool(raw.get("verified", False)), tuple(raw.get("provenance", ())),
-                    bool(raw.get("nondeterministic", False)), str(raw.get("generation", "")),
+                    raw["key_digest"], raw["status"], raw["result_digest"],
+                    tuple(command), raw["fresh"], tuple(evidence),
+                    raw.get("verified", False), tuple(provenance),
+                    raw.get("nondeterministic", False), raw.get("generation", ""),
                 )
-            except (KeyError, TypeError, ValueError) as error:
+            except (KeyError, TypeError, ValueError, ValidationCacheError) as error:
                 raise ValidationCacheError("cache_entry_invalid") from error
+            if entry.key_digest in seen:
+                raise ValidationCacheError("cache_duplicate_entry")
+            seen.add(entry.key_digest)
             cache._entries[entry.key_digest] = entry
         return cache
 
@@ -256,7 +295,7 @@ class ValidationCache:
         dry_run: bool = True,
     ) -> dict[str, Any]:
         """Plan or apply bounded removal of unleased generations."""
-        if max_entries < 1:
+        if isinstance(max_entries, bool) or not isinstance(max_entries, int) or max_entries < 1:
             raise ValidationCacheError("gc_budget_invalid")
         keep = {str(generation) for generation in keep_generations if str(generation)}
         with self._lock:
@@ -302,7 +341,7 @@ class ValidationCache:
             return entry
 
     def affected(self, changed_handles: Sequence[str], tests: Mapping[str, Sequence[str]], *, max_tests: int = 1000) -> dict[str, Any]:
-        if max_tests <= 0:
+        if isinstance(max_tests, bool) or not isinstance(max_tests, int) or max_tests <= 0:
             raise ValidationCacheError("selection_budget_invalid")
         changed = set(changed_handles)
         selected_by_handle = {
