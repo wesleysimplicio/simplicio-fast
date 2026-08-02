@@ -34,11 +34,27 @@ class CapabilityCandidate:
     def __post_init__(self) -> None:
         if not self.handle or not self.kind or not self.version:
             raise CapabilityRankingError("candidate_identity_invalid")
-        if any(not item for item in self.capabilities):
+        if any(not isinstance(item, str) or not item.strip() for item in self.capabilities):
             raise CapabilityRankingError("candidate_capabilities_invalid")
+        if not isinstance(self.scope, str) or not self.scope.strip():
+            raise CapabilityRankingError("candidate_scope_invalid")
+        if not isinstance(self.available, bool):
+            raise CapabilityRankingError("candidate_availability_invalid")
         if (
-            (self.estimated_cost is not None and self.estimated_cost < 0)
-            or (self.estimated_latency_ms is not None and self.estimated_latency_ms < 0)
+            (
+                self.estimated_cost is not None
+                and (
+                    isinstance(self.estimated_cost, bool)
+                    or self.estimated_cost < 0
+                )
+            )
+            or (
+                self.estimated_latency_ms is not None
+                and (
+                    isinstance(self.estimated_latency_ms, bool)
+                    or self.estimated_latency_ms < 0
+                )
+            )
         ):
             raise CapabilityRankingError("candidate_cost_invalid")
         if self.metric_class not in {"unknown", "estimated", "measured", "simulated"}:
@@ -52,14 +68,19 @@ def rank_capabilities(
     max_results: int = 32,
     required_scope: str | None = None,
 ) -> dict[str, Any]:
-    if not required or max_results <= 0:
+    if (
+        not required
+        or any(not isinstance(item, str) or not item.strip() for item in required)
+        or max_results <= 0
+        or (required_scope is not None and not required_scope.strip())
+    ):
         raise CapabilityRankingError("ranking_request_invalid")
     required_set = set(required)
     facts: list[dict[str, Any]] = []
     for candidate in candidates:
         matched = sorted(required_set.intersection(candidate.capabilities))
         missing = sorted(required_set.difference(candidate.capabilities))
-        scope_match = required_scope is None or candidate.scope == required_scope
+        scope_match = required_scope is None or candidate.scope in {"*", required_scope}
         policy = (
             "eligible"
             if candidate.policy_eligible is True

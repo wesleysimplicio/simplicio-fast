@@ -40,3 +40,15 @@ def test_capability_ranking_separates_hard_filters_and_unknown_metrics() -> None
     assert by_handle["unknown"]["selection_reason"] == "policy_unknown"
     assert by_handle["unknown"]["metric_class"] == "unknown"
     assert by_handle["other-tenant"]["selection_reason"] == "scope_mismatch"
+
+
+def test_capability_ranking_accepts_explicit_global_scope_and_rejects_bad_inputs() -> None:
+    global_candidate = CapabilityCandidate(
+        "global", "tool", "1", ("query",), policy_eligible=True, scope="*"
+    )
+    result = rank_capabilities([global_candidate], ("query",), required_scope="tenant-a")
+    assert result["candidates"][0]["eligible"] is True
+    with pytest.raises(CapabilityRankingError, match="ranking_request_invalid"):
+        rank_capabilities([], (1,))
+    with pytest.raises(CapabilityRankingError, match="candidate_scope_invalid"):
+        CapabilityCandidate("bad", "tool", "1", ("query",), scope="")
