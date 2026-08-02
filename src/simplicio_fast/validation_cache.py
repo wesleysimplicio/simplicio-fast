@@ -71,6 +71,11 @@ class ValidationKey:
             )
         ) or not isinstance(self.command, (tuple, list)) or not self.command or any(not isinstance(item, str) or not item for item in self.command):
             raise ValidationCacheError("cache_key_required_missing")
+        if any(
+            not isinstance(value, str)
+            for value in (self.config_digest, self.fixture_digest, self.generation)
+        ):
+            raise ValidationCacheError("cache_key_optional_field_invalid")
         if not isinstance(self.environment, (tuple, list)) or any(
             not isinstance(item, (tuple, list))
             or len(item) != 2
@@ -114,9 +119,12 @@ class ValidationResult:
             raise ValidationCacheError("result_status_invalid")
         if not isinstance(self.key_digest, str) or not self.key_digest or not isinstance(self.result_digest, str) or not self.result_digest:
             raise ValidationCacheError("result_digest_invalid")
-        _validate_string_sequence(self.command, "result_command_invalid")
-        _validate_string_sequence(self.evidence, "result_evidence_invalid")
-        _validate_string_sequence(self.provenance, "result_provenance_invalid")
+        command = _validate_string_sequence(self.command, "result_command_invalid")
+        evidence = _validate_string_sequence(self.evidence, "result_evidence_invalid")
+        provenance = _validate_string_sequence(self.provenance, "result_provenance_invalid")
+        object.__setattr__(self, "command", command)
+        object.__setattr__(self, "evidence", evidence)
+        object.__setattr__(self, "provenance", provenance)
         if not isinstance(self.fresh, bool) or not isinstance(self.verified, bool) or not isinstance(self.nondeterministic, bool):
             raise ValidationCacheError("result_flags_invalid")
         if not isinstance(self.generation, str):
