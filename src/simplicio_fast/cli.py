@@ -663,7 +663,7 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
+def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
     try:
@@ -671,7 +671,7 @@ def main() -> None:
         bridged = _rust_bridge(selection, args)
         if bridged is not None:
             emit(bridged)
-            return
+            return 0
         if args.command in {"build", "refresh", "ingest"}:
             processor = ProjectProcessor(Path(args.root), Path(args.output))
             if args.command == "ingest":
@@ -681,7 +681,7 @@ def main() -> None:
                         max_file_bytes=args.max_file_bytes,
                     )
                 )
-                return
+                return 0
             emit(
                 {
                     "schema": "simplicio.fast.build/v1",
@@ -848,7 +848,9 @@ def main() -> None:
                         lease_id=changeset.lease_id,
                         fencing_token=changeset.fencing_token,
                     )
-                    emit(materialize(changeset, Path(args.root), journal))
+                    receipt = materialize(changeset, Path(args.root), journal)
+                    emit(receipt)
+                    return 0 if receipt.get("status") in {"applied", "idempotent"} else 1
             elif action == "reconcile":
                 changeset = read_binary(Path(args.binary))
                 journal = BinaryChangeJournal(
@@ -857,7 +859,9 @@ def main() -> None:
                     lease_id=changeset.lease_id,
                     fencing_token=changeset.fencing_token,
                 )
-                emit(reconcile_unknown_effect(changeset, Path(args.root), journal))
+                receipt = reconcile_unknown_effect(changeset, Path(args.root), journal)
+                emit(receipt)
+                return 0 if receipt.get("status") == "reconciled" else 1
             else:
                 journal = BinaryChangeJournal(
                     Path(args.journal),
@@ -1257,6 +1261,8 @@ def main() -> None:
                     "overlay": asdict(overlay_value) if overlay_value else None,
                 }
             )
+        return 0
+
     except EngineSelectionError as error:
         emit(error.receipt)
         raise SystemExit(2) from error
@@ -1285,4 +1291,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
