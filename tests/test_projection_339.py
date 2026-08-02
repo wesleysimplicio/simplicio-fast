@@ -370,6 +370,30 @@ def test_projection_envelope_rejects_budget_and_payload_contract_edges() -> None
     invalid_payload["payload"] = []
     with pytest.raises(ProjectionError, match="payload_invalid"):
         ProjectionEnvelope.decode(json.dumps(invalid_payload).encode())
+    with pytest.raises(ProjectionError, match="projection_invalid_json"):
+        ProjectionEnvelope.decode(None)  # type: ignore[arg-type]
+    with pytest.raises(ProjectionError, match="payload_not_json"):
+        ProjectionEnvelope.create(
+            "code",
+            producer="mapper",
+            producer_schema="mapper/v1",
+            generation="g1",
+            stable_handle="x",
+            payload={"score": float("nan")},
+        )
+    with pytest.raises(ProjectionError, match="payload_not_json"):
+        ProjectionEnvelope.create(
+            "code",
+            producer="mapper",
+            producer_schema="mapper/v1",
+            generation="g1",
+            stable_handle="x",
+            payload={1: "not-a-json-object-key"},  # type: ignore[dict-item]
+        )
+    with pytest.raises(ProjectionError, match="payload_not_json"):
+        _canonical({1: "not-a-json-object-key"})  # type: ignore[dict-item]
+    with pytest.raises(ProjectionError, match="payload_sha256_invalid"):
+        replace(envelope, payload_sha256="sha256:short")
 
 
 def test_projection_store_rejects_conflicts_invalid_deltas_and_loads(tmp_path) -> None:

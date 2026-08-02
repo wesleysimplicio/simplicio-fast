@@ -39,15 +39,31 @@ class ProjectionError(ValueError):
 
 
 def _canonical(value: Any) -> bytes:
+    _validate_json_object_keys(value)
     try:
         encoded = json.dumps(
-            value, ensure_ascii=True, sort_keys=True, separators=(",", ":")
+            value,
+            allow_nan=False,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
         ).encode("utf-8")
-    except (TypeError, ValueError) as error:
+    except (TypeError, ValueError, OverflowError) as error:
         raise ProjectionError("payload_not_json") from error
     if len(encoded) > _MAX_ENCODED_BYTES:
         raise ProjectionError("projection_size_limit")
     return encoded
+
+
+def _validate_json_object_keys(value: Any) -> None:
+    if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise ProjectionError("payload_not_json")
+        for child in value.values():
+            _validate_json_object_keys(child)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            _validate_json_object_keys(child)
 
 
 def _reject_private_fields(value: Any, *, depth: int = 0, items: list[int] | None = None) -> None:
@@ -56,6 +72,8 @@ def _reject_private_fields(value: Any, *, depth: int = 0, items: list[int] | Non
     if items is None:
         items = [0]
     if isinstance(value, Mapping):
+        if any(not isinstance(key, str) for key in value):
+            raise ProjectionError("payload_not_json")
         items[0] += len(value)
         if _FORBIDDEN_KEYS.intersection(value):
             raise ProjectionError("projection_exposes_offset")
@@ -134,6 +152,7 @@ class ProjectionEnvelope:
         if not isinstance(self.payload, Mapping):
             raise ProjectionError("payload_invalid")
         _reject_private_fields(self.payload)
+        _validate_sha256_digest(self.payload_sha256, "payload_sha256")
         if self.payload_sha256 != _digest(self.payload):
             raise ProjectionError("payload_digest_mismatch")
         _validate_sequence(self.stable_handles, "stable_handles")
@@ -349,6 +368,8 @@ class ProjectionEnvelope:
 
     @classmethod
     def decode(cls, raw: bytes) -> "ProjectionEnvelope":
+        if not isinstance(raw, (bytes, bytearray)):
+            raise ProjectionError("projection_invalid_json")
         try:
             value = json.loads(raw)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -630,6 +651,16 @@ def _validate_text(value: object, field: str) -> None:
 
 def _validate_optional_text(value: object, field: str) -> None:
     if not isinstance(value, str):
+        raise ProjectionError(f"{field}_invalid")
+
+
+def _validate_sha256_digest(value: object, field: str) -> None:
+    if (
+        not isinstance(value, str)
+        or len(value) != len("sha256:") + 64
+        or not value.startswith("sha256:")
+        or any(character not in "0123456789abcdef" for character in value[7:])
+    ):
         raise ProjectionError(f"{field}_invalid")
 
 
