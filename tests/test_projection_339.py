@@ -92,6 +92,34 @@ def test_projection_dataclass_boundary_rejects_tampered_digest() -> None:
         replace(envelope, payload_sha256="sha256:" + "0" * 64)
 
 
+def test_projection_dataclass_normalizes_mutable_contract_fields() -> None:
+    payload = {"name": "abc"}
+    base = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper.context/v1",
+        generation="g1",
+        stable_handle="symbol:abc",
+        payload=payload,
+    )
+    envelope = replace(
+        base,
+        payload=payload,
+        stable_handles=["symbol:abc"],
+        capabilities_required=["projection.decode.v1"],
+        truncation_reasons=["budget"],
+        tombstones=["symbol:old"],
+        budgets={"bytes": 1024},
+    )
+    assert envelope.stable_handles == ("symbol:abc",)
+    assert envelope.capabilities_required == ("projection.decode.v1",)
+    assert envelope.truncation_reasons == ("budget",)
+    assert envelope.tombstones == ("symbol:old",)
+    assert envelope.budgets == {"bytes": 1024}
+    payload["mutated"] = True
+    assert "mutated" not in envelope.payload
+
+
 def test_projection_manifest_and_provenance_fields_are_strict_and_deterministic() -> None:
     manifest = contract_manifest()
     assert manifest["envelope"]["schema"] == "simplicio.fast.projection/v1"
