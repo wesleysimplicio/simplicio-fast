@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import subprocess
 import threading
@@ -25,8 +26,13 @@ def _canonical(value: Any) -> str:
 class RustCoreSession:
     """One verified Rust child reused for read-only stats/query/context calls."""
 
-    def __init__(self, executable: str | Path) -> None:
+    def __init__(
+        self,
+        executable: str | Path,
+        expected_manifest: Mapping[str, Any] | None = None,
+    ) -> None:
         self.executable = str(executable)
+        self._expected_manifest = dict(expected_manifest or {})
         self._lock = threading.Lock()
         self._metrics: dict[str, int | float] = {
             "starts": 1,
@@ -54,14 +60,18 @@ class RustCoreSession:
             self.close()
             raise RustSessionError(f"session_start_failed:{type(error).__name__}") from error
         try:
-            self._validate_handshake(handshake)
+            self._validate_handshake(handshake, self._expected_manifest, self.executable)
         except RustSessionError:
             self.close()
             raise
         self.handshake = handshake
 
     @staticmethod
-    def _validate_handshake(handshake: dict[str, Any]) -> None:
+    def _validate_handshake(
+        handshake: dict[str, Any],
+        expected_manifest: Mapping[str, Any] | None = None,
+        executable: str | Path | None = None,
+    ) -> None:
         if (
             handshake.get("schema") != SESSION_SCHEMA
             or handshake.get("abi") != SESSION_SCHEMA
@@ -83,6 +93,35 @@ class RustCoreSession:
             "context",
         }.issubset(capabilities):
             raise RustSessionError("session_capabilities_invalid")
+        expected = dict(expected_manifest or {})
+        expected_version = expected.get("version")
+        if isinstance(expected_version, str) and handshake["engine_version"] != expected_version:
+            raise RustSessionError("session_version_mismatch")
+        expected_commit = expected.get("source_commit")
+        conformance = expected.get("conformance")
+        if isinstance(conformance, Mapping):
+            expected_commit = conformance.get("source_commit", expected_commit)
+            expected_conformance = conformance.get("digest")
+            if (
+                isinstance(expected_conformance, str)
+                and handshake["conformance_digest"] != expected_conformance
+            ):
+                raise RustSessionError("session_conformance_mismatch")
+        if isinstance(expected_commit, str) and handshake["source_commit"] != expected_commit:
+            raise RustSessionError("session_source_commit_mismatch")
+        expected_digest = expected.get("sha256")
+        if isinstance(conformance, Mapping):
+            engine_digests = conformance.get("engine_sha256")
+            if isinstance(engine_digests, Mapping):
+                expected_digest = engine_digests.get("rust", expected_digest)
+        if isinstance(expected_digest, str) and executable is not None:
+            try:
+                actual = hashlib.sha256(Path(executable).read_bytes()).hexdigest()
+            except OSError as error:
+                raise RustSessionError("session_binary_unreadable") from error
+            normalized = expected_digest.removeprefix("sha256:")
+            if normalized != actual or handshake["binary_digest"] != f"sha256:{actual}":
+                raise RustSessionError("session_binary_digest_mismatch")
 
     def _readline(self) -> dict[str, Any]:
         line = self._process.stdout.readline() if self._process.stdout else ""
@@ -151,7 +190,9 @@ class RustCoreSession:
                     bufsize=1,
                 )
                 handshake = self._readline()
-                self._validate_handshake(handshake)
+                self._validate_handshake(
+                    handshake, self._expected_manifest, self.executable
+                )
             except (OSError, ValueError, RustSessionError) as error:
                 self._metrics["failures"] += 1
                 self.close()

@@ -138,7 +138,7 @@ def _rust_bridge(
         key = str(Path(executable).resolve())
         session = _RUST_SESSIONS.get(key)
         if session is None:
-            session = RustCoreSession(executable)
+            session = RustCoreSession(executable, selection.manifest)
             _RUST_SESSIONS[key] = session
         result = session.call(operation, payload)
     except RustSessionError as error:

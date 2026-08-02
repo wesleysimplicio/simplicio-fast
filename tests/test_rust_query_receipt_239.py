@@ -9,7 +9,7 @@ import pytest
 
 from simplicio_fast.snapshot import build_snapshot
 from simplicio_fast.snapshot import Snapshot
-from simplicio_fast.rust_session import RustCoreSession
+from simplicio_fast.rust_session import RustCoreSession, RustSessionError
 
 
 def _run_json(executable: Path, *args: str) -> dict[str, object]:
@@ -216,3 +216,24 @@ def test_rust_query_receipt_uses_exact_and_prefix_indexes(tmp_path: Path) -> Non
         assert concurrent_metrics["starts"] == 1
         assert concurrent_metrics["requests"] == 21
         assert concurrent_metrics["mapped_generations"] == 1
+
+
+def test_resident_handshake_rejects_manifest_version_drift() -> None:
+    handshake = {
+        "schema": "simplicio.fast.engine-session/v1",
+        "abi": "simplicio.fast.engine-session/v1",
+        "engine": "rust",
+        "status": "ready",
+        "engine_version": "2.0.20",
+        "schemas": ["simplicio.fast.context/v1"],
+        "capabilities": ["stats", "query", "context"],
+        "binary_digest": "sha256:" + "0" * 64,
+        "source_commit": "a" * 40,
+        "conformance_digest": "sha256:" + "1" * 64,
+        "platform": "windows-x86_64",
+        "nonce": "nonce",
+    }
+    with pytest.raises(RustSessionError, match="session_version_mismatch"):
+        RustCoreSession._validate_handshake(
+            handshake, {"version": "2.0.21"}
+        )
