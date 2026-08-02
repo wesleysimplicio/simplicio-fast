@@ -76,6 +76,33 @@ def _atomic_json(path: Path, payload: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
+def _load_cached_prepare(path: Path, cache_key: str) -> dict[str, Any] | None:
+    """Return only a structurally valid receipt for this exact cache key."""
+    try:
+        cached = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(cached, dict):
+        return None
+    if cached.get("schema") != SCHEMA or cached.get("status") != "ready":
+        return None
+    cache = cached.get("cache")
+    timings = cached.get("timings")
+    request = cached.get("context_request")
+    context = cached.get("context")
+    if (
+        not isinstance(cache, dict)
+        or cache.get("key") != cache_key
+        or not isinstance(timings, dict)
+        or not isinstance(request, dict)
+        or request.get("schema") != CONTEXT_REQUEST_SCHEMA
+        or not isinstance(context, dict)
+        or not isinstance(context.get("tokenizer"), dict)
+    ):
+        return None
+    return cached
+
+
 def _terms(task: str) -> list[str]:
     values = re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", task)
     return list(dict.fromkeys(values))[:8]
@@ -301,17 +328,18 @@ class DeliveryEngine:
             ).hexdigest()
             cache_path = self.cache / f"{cache_key}.json"
             if cache_path.is_file():
-                cached = json.loads(cache_path.read_text(encoding="utf-8"))
-                cached["cache"] = {
-                    "L0_attempt": "hit",
-                    "hits": 1,
-                    "misses": 0,
-                    "key": cache_key,
-                }
-                cached["timings"]["prepare_wall_ms"] = (
-                    time.perf_counter_ns() - started
-                ) / 1_000_000
-                return cached
+                cached = _load_cached_prepare(cache_path, cache_key)
+                if cached is not None:
+                    cached["cache"] = {
+                        "L0_attempt": "hit",
+                        "hits": 1,
+                        "misses": 0,
+                        "key": cache_key,
+                    }
+                    cached["timings"]["prepare_wall_ms"] = (
+                        time.perf_counter_ns() - started
+                    ) / 1_000_000
+                    return cached
 
             terms = _terms(task)
             spans, deduplicated_handles = _deduplicate_spans(

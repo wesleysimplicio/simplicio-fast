@@ -45,6 +45,47 @@ class DeliveryEngineTest(unittest.TestCase):
             self.assertEqual("hit", second["cache"]["L0_attempt"])
             self.assertFalse(first["ownership"]["mutation_applied"])
 
+    def test_prepare_treats_corrupt_or_mismatched_cache_receipts_as_misses(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def create_user(name):\n    return name\n", encoding="utf-8"
+            )
+            snapshot = root / "project.sfast"
+            cache = root / "cache"
+            build_snapshot(root, snapshot)
+            engine = DeliveryEngine(root, snapshot, cache)
+            selection = select_engine("python").receipt()
+            first = engine.prepare(
+                "understand create_user",
+                profile="loop-standalone",
+                engine_receipt=selection,
+            )
+            cache_path = cache / f"{first['cache']['key']}.json"
+            cache_path.write_text("{broken", encoding="utf-8")
+            rebuilt = engine.prepare(
+                "understand create_user",
+                profile="loop-standalone",
+                engine_receipt=selection,
+            )
+            assert rebuilt["cache"]["L0_attempt"] == "miss"
+            cache_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "simplicio.fast.delivery-engine/v1",
+                        "status": "ready",
+                        "cache": {"key": "sha256:wrong"},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            rebuilt_again = engine.prepare(
+                "understand create_user",
+                profile="loop-standalone",
+                engine_receipt=selection,
+            )
+            assert rebuilt_again["cache"]["L0_attempt"] == "miss"
+
     def test_prepare_uses_exact_tokenizer_and_binds_tokenizer_to_cache(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
