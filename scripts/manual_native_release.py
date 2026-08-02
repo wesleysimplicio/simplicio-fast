@@ -557,7 +557,7 @@ def main(argv: list[str] | None = None) -> int:
         "--platform", action="append", choices=tuple(TARGETS), dest="platforms"
     )
     parser.add_argument("--force", action="store_true")
-    parser.add_argument("--tag", default="v2.0.21")
+    parser.add_argument("--tag", default="v2.0.22")
     parser.add_argument("--repo", default="wesleysimplicio/simplicio-fast")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
