@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 import hashlib
 
 import pytest
@@ -139,6 +140,20 @@ def test_knowledge_projection_rejects_boolean_budgets_and_enforces_fact_cap(monk
     for kwargs in ({"max_results": True}, {"max_bytes": True}, {"max_tokens": True}, {"as_of": True}):
         with pytest.raises(KnowledgeProjectionError, match="query_budget_invalid"):
             projection.query("contract", **kwargs)
+
+
+def test_knowledge_projection_rejects_untyped_delta_and_query_inputs() -> None:
+    projection = KnowledgeProjection("repo", "tenant", "g1")
+    with pytest.raises(KnowledgeProjectionError, match="fact_type_invalid"):
+        projection.apply_delta([object()])
+    with pytest.raises(KnowledgeProjectionError, match="tombstone_invalid"):
+        projection.apply_delta(tombstones=["", "h"])
+    with pytest.raises(KnowledgeProjectionError, match="query_task_invalid"):
+        projection.query(1)
+    with pytest.raises(KnowledgeProjectionError, match="query_source_types_invalid"):
+        projection.query("contract", source_types="adr")
+    with pytest.raises(KnowledgeProjectionError, match="fact_temporal_bounds_invalid"):
+        replace(fact("time", "contract"), valid_from=True)
 
 
 def test_knowledge_projection_serializes_twenty_readers() -> None:
