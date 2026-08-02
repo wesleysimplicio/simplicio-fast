@@ -1,8 +1,9 @@
 from concurrent.futures import ThreadPoolExecutor
+import json
 
 import pytest
 
-from simplicio_fast.validation_cache import ValidationCache, ValidationCacheError, ValidationKey
+from simplicio_fast.validation_cache import ValidationCache, ValidationCacheError, ValidationKey, ValidationResult, _canonical, _digest
 
 
 def key() -> ValidationKey:
@@ -117,3 +118,61 @@ def test_validation_cache_serializes_concurrent_publication_and_save(tmp_path) -
     receipt = cache.save(tmp_path / "concurrent-cache.json")
     assert receipt["entries"] == len(keys)
     assert len(ValidationCache.load(tmp_path / "concurrent-cache.json")._entries) == len(keys)
+
+
+def test_validation_cache_contract_boundaries_and_lease_lifecycle(tmp_path) -> None:
+    with pytest.raises(ValidationCacheError, match="cache_key_not_json"):
+        _canonical({"bad": object()})
+    with pytest.raises(ValidationCacheError, match="cache_environment_invalid"):
+        ValidationKey("source", "lock", "tool", ("test",), (("CI", 1),)).to_dict()
+    with pytest.raises(ValidationCacheError, match="result_status_invalid"):
+        ValidationResult("key", "unknown", "result", ("test",), True)
+    with pytest.raises(ValidationCacheError, match="result_digest_invalid"):
+        ValidationResult("", "pass", "result", ("test",), True)
+    with pytest.raises(ValidationCacheError, match="result_provenance_required"):
+        ValidationResult("key", "pass", "result", ("test",), True, verified=True)
+
+    cache = ValidationCache()
+    missing = ValidationKey("missing", "lock", "tool", ("test",))
+    with pytest.raises(ValidationCacheError, match="cache_entry_missing"):
+        cache.acquire_lease(missing, "lease")
+    with pytest.raises(ValidationCacheError, match="lease_id_invalid"):
+        cache.release_lease(missing, "")
+    cache.put(key(), status="pass", result={"ok": True})
+    with pytest.raises(ValidationCacheError, match="result_provenance_required"):
+        cache.put(key(), status="pass", result={"ok": True}, verified=True)
+    cache.acquire_lease(key(), "lease-a")
+    cache.acquire_lease(key(), "lease-b")
+    cache.release_lease(key(), "lease-a")
+    assert key().digest in cache._leases
+    cache.release_lease(key(), "lease-b")
+    assert key().digest not in cache._leases
+
+    invalid = [
+        ("{", "cache_document_invalid"),
+        ("[]", "cache_document_invalid"),
+        ('{"body":{"schema":"wrong"},"cache_sha256":"x"}', "cache_schema_unsupported"),
+    ]
+    for index, (content, reason) in enumerate(invalid):
+        path = tmp_path / f"invalid-{index}.json"
+        path.write_text(content, encoding="utf-8")
+        with pytest.raises(ValidationCacheError, match=reason):
+            ValidationCache.load(path)
+    valid_path = tmp_path / "valid.json"
+    cache.save(valid_path)
+    document = json.loads(valid_path.read_text(encoding="utf-8"))
+    document["body"]["entries"] = [1]
+    document["cache_sha256"] = _digest(document["body"])
+    valid_path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValidationCacheError, match="cache_entries_invalid"):
+        ValidationCache.load(valid_path)
+    document["body"]["entries"] = [{"key_digest": "x", "status": "pass", "result_digest": "x"}]
+    document["cache_sha256"] = _digest(document["body"])
+    valid_path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValidationCacheError, match="cache_entry_invalid"):
+        ValidationCache.load(valid_path)
+    document["body"]["entries"] = "not-a-list"
+    document["cache_sha256"] = _digest(document["body"])
+    valid_path.write_text(json.dumps(document), encoding="utf-8")
+    with pytest.raises(ValidationCacheError, match="cache_entries_invalid"):
+        ValidationCache.load(valid_path)
