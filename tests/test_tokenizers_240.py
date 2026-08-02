@@ -31,3 +31,22 @@ def test_unknown_tiktoken_encoding_falls_back_without_claiming_exactness() -> No
     )
     with patch.dict("sys.modules", {"tiktoken": fake_module}):
         assert resolve_tokenizer("tiktoken:missing") is None
+
+
+def test_tiktoken_model_resolution_and_malformed_provider_fail_closed() -> None:
+    fake_encoding = type("Encoding", (), {"encode": lambda self, text: [*text]})()
+    fake_module = type(
+        "Tiktoken",
+        (),
+        {
+            "encoding_for_model": staticmethod(lambda name: fake_encoding),
+        },
+    )
+    with patch.dict("sys.modules", {"tiktoken": fake_module}):
+        tokenizer = resolve_tokenizer("tiktoken:model:gpt-4o")
+    assert tokenizer is not None
+    assert tokenizer("model") == 5
+
+    malformed_module = type("Tiktoken", (), {"get_encoding": staticmethod(lambda _: None)})
+    with patch.dict("sys.modules", {"tiktoken": malformed_module}):
+        assert resolve_tokenizer("tiktoken:cl100k_base") is None

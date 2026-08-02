@@ -29,7 +29,9 @@ def resolve_tokenizer(tokenizer_id: str | None) -> Callable[[str], int] | None:
             encoding = tiktoken.encoding_for_model(target.removeprefix("model:"))
         else:
             encoding = tiktoken.get_encoding(target)
-    except (KeyError, ValueError):
+    except (AttributeError, KeyError, TypeError, ValueError):
+        return None
+    if not callable(getattr(encoding, "encode", None)):
         return None
     return lambda text: len(encoding.encode(text))
 
