@@ -11,7 +11,9 @@ from simplicio_fast.hbp_codec import (
 )
 
 VECTORS = json.loads(
-    (Path(__file__).parents[1] / "contracts/hbp/v1/golden-vectors.json").read_text()
+    (Path(__file__).parents[1] / "contracts/hbp/v1/golden-vectors.json").read_text(
+        encoding="utf-8"
+    )
 )["vectors"]
 
 
