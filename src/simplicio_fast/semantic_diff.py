@@ -49,15 +49,31 @@ class DiffRecord:
         if self.kind not in _KINDS:
             raise SemanticDiffError("diff_kind_invalid")
         if (
+            (self.before is not None and not isinstance(self.before, Mapping))
+            or (self.after is not None and not isinstance(self.after, Mapping))
+        ):
+            raise SemanticDiffError("diff_payload_invalid")
+        if (
             (self.kind == "add" and (self.before is not None or self.after is None))
             or (self.kind == "remove" and (self.before is None or self.after is not None))
             or (self.kind == "update" and (self.before is None or self.after is None))
         ):
             raise SemanticDiffError("diff_shape_invalid")
-        if not self.source_generation or not self.proposed_generation:
+        if (
+            not isinstance(self.source_generation, str)
+            or not self.source_generation.strip()
+            or not isinstance(self.proposed_generation, str)
+            or not self.proposed_generation.strip()
+        ):
             raise SemanticDiffError("generation_invalid")
-        if not 0.0 <= self.confidence <= 1.0:
+        if (
+            isinstance(self.confidence, bool)
+            or not isinstance(self.confidence, (int, float))
+            or not 0.0 <= self.confidence <= 1.0
+        ):
             raise SemanticDiffError("confidence_invalid")
+        if not isinstance(self.reason_code, str) or not self.reason_code.strip():
+            raise SemanticDiffError("reason_code_invalid")
         if self.derived and self.confidence >= 1.0:
             raise SemanticDiffError("derived_confidence_invalid")
 
@@ -81,6 +97,8 @@ class WhatIfOverlay:
     def __init__(self, base_generation: str, records: Sequence[DiffRecord]) -> None:
         if not base_generation:
             raise SemanticDiffError("generation_invalid")
+        if any(item.source_generation != base_generation for item in records):
+            raise SemanticDiffError("overlay_generation_mismatch")
         keys = [(item.handle, item.kind) for item in records]
         if len(keys) != len(set(keys)):
             raise SemanticDiffError("duplicate_diff_record")

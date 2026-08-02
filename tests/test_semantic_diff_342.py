@@ -40,6 +40,13 @@ def test_diff_rejects_incoherent_shapes_and_duplicate_overlay_records() -> None:
     record = DiffRecord("a", "add", None, {"new": 1}, "g1", "g2", "handle_added")
     with pytest.raises(SemanticDiffError, match="duplicate_diff_record"):
         WhatIfOverlay("g1", [record, record])
+    with pytest.raises(SemanticDiffError, match="overlay_generation_mismatch"):
+        WhatIfOverlay(
+            "g2",
+            [DiffRecord("b", "add", None, {"new": 1}, "g1", "g2", "handle_added")],
+        )
+    with pytest.raises(SemanticDiffError, match="diff_payload_invalid"):
+        DiffRecord("c", "add", None, [], "g1", "g2", "handle_added")
 
 
 def test_federated_impact_requires_and_records_pinned_manifest() -> None:
