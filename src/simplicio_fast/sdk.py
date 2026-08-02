@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .projection import ProjectionEnvelope, ProjectionError, ProjectionStore
-from .universal_context import compile_context
+from .universal_context import UniversalContextError, compile_context
 
 
 SDK_SCHEMA = "simplicio.fast.sdk/v1"
@@ -53,7 +53,10 @@ class ProjectionSDK:
     """In-process projection operations with explicit repository scope."""
 
     def __init__(self, repository: str) -> None:
-        self.store = ProjectionStore(repository)
+        try:
+            self.store = ProjectionStore(repository)
+        except ProjectionError as error:
+            raise SDKError(error.reason_code) from error
 
     @property
     def repository(self) -> str:
@@ -90,6 +93,8 @@ class ProjectionSDK:
             raise SDKError(error.reason_code) from error
 
     def query(self, handle: str) -> dict[str, Any] | None:
+        if not isinstance(handle, str) or not handle.strip():
+            raise SDKError("query_handle_invalid")
         return next((item for item in self.store.snapshot() if item["stable_handle"] == handle), None)
 
     def snapshot(self) -> list[dict[str, Any]]:
@@ -101,12 +106,18 @@ class ProjectionSDK:
     @classmethod
     def open(cls, path: Path, repository: str) -> "ProjectionSDK":
         instance = cls(repository)
-        instance.store = ProjectionStore.load(path, repository)
+        try:
+            instance.store = ProjectionStore.load(path, repository)
+        except ProjectionError as error:
+            raise SDKError(error.reason_code) from error
         return instance
 
     def context(self, *, max_bytes: int = 256 * 1024, max_tokens: int = 4096, max_items: int = 128) -> dict[str, Any]:
         envelopes = [ProjectionEnvelope.decode(json.dumps(item, sort_keys=True, separators=(",", ":")).encode()) for item in self.store.snapshot()]
-        return compile_context(envelopes, repository_scope=self.repository, max_bytes=max_bytes, max_tokens=max_tokens, max_items=max_items)
+        try:
+            return compile_context(envelopes, repository_scope=self.repository, max_bytes=max_bytes, max_tokens=max_tokens, max_items=max_items)
+        except UniversalContextError as error:
+            raise SDKError(error.reason_code) from error
 
     async def context_async(self, *, max_bytes: int = 256 * 1024, max_tokens: int = 4096, max_items: int = 128) -> dict[str, Any]:
         """Run bounded local compilation without blocking the event loop."""
