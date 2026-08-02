@@ -496,30 +496,55 @@ class ProjectionStore:
         self,
         generation: str,
         *,
+        base_generation: str | None = None,
         changed: tuple[ProjectionEnvelope, ...] = (),
         deleted_handles: tuple[str, ...] = (),
         closure_handles: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         _validate_text(generation, "generation")
+        if base_generation is not None:
+            _validate_text(base_generation, "base_generation")
         with self._lock:
-            if self._generation is not None and generation != self._generation:
+            generation_swap = (
+                self._generation is not None and generation != self._generation
+            )
+            if generation_swap and base_generation != self._generation:
+                raise ProjectionError("projection_generation_stale")
+            if (
+                not generation_swap
+                and base_generation is not None
+                and base_generation != self._generation
+            ):
                 raise ProjectionError("projection_generation_stale")
             changed_handles = sorted({item.stable_handle for item in changed})
             deleted = sorted(set(deleted_handles))
             if set(changed_handles).intersection(deleted):
                 raise ProjectionError("projection_delta_conflict")
+            next_records = dict(self._records)
             for item in changed:
                 if item.generation != generation:
                     raise ProjectionError("projection_generation_stale")
-                self.publish(item)
+                declared_repository = item.payload.get("repository")
+                if declared_repository is not None and declared_repository != self.repository:
+                    raise ProjectionError("projection_repository_mismatch")
+                previous = next_records.get(item.stable_handle)
+                if (
+                    not generation_swap
+                    and previous is not None
+                    and previous.payload_sha256 != item.payload_sha256
+                ):
+                    raise ProjectionError("projection_handle_conflict")
+                next_records[item.stable_handle] = item
             for handle in deleted:
-                self._records.pop(handle, None)
+                next_records.pop(handle, None)
+            self._records = next_records
             self._generation = generation
             closure = sorted(set(closure_handles).union(changed_handles, deleted))
             return {
                 "schema": "simplicio.fast.projection-delta/v1",
                 "repository": self.repository,
                 "generation": generation,
+                "base_generation": base_generation,
                 "changed_handles": changed_handles,
                 "deleted_handles": deleted,
                 "closure_handles": closure,

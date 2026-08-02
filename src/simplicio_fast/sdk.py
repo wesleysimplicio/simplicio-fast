@@ -67,8 +67,8 @@ class ProjectionSDK:
         self.store.publish(envelope)
         return {"schema": SDK_SCHEMA, "operation": "publish", "repository": self.repository, "generation": self.generation, "handle": envelope.stable_handle}
 
-    def compile_delta(self, generation: str, *, changed: Iterable[ProjectionEnvelope] = (), deleted_handles: Iterable[str] = (), closure_handles: Iterable[str] = ()) -> dict[str, Any]:
-        return self.store.apply_delta(generation, changed=tuple(changed), deleted_handles=tuple(deleted_handles), closure_handles=tuple(closure_handles))
+    def compile_delta(self, generation: str, *, base_generation: str | None = None, changed: Iterable[ProjectionEnvelope] = (), deleted_handles: Iterable[str] = (), closure_handles: Iterable[str] = ()) -> dict[str, Any]:
+        return self.store.apply_delta(generation, base_generation=base_generation, changed=tuple(changed), deleted_handles=tuple(deleted_handles), closure_handles=tuple(closure_handles))
 
     def query(self, handle: str) -> dict[str, Any] | None:
         return next((item for item in self.store.snapshot() if item["stable_handle"] == handle), None)

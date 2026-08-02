@@ -1,4 +1,5 @@
 from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 
@@ -431,3 +432,51 @@ def test_projection_store_rejects_conflicts_invalid_deltas_and_loads(tmp_path) -
     path.write_text(json.dumps(document), encoding="utf-8")
     with pytest.raises(ProjectionError, match="projection_generation_mismatch"):
         ProjectionStore.load(path, "repo-a")
+
+
+def test_projection_generation_swap_never_exposes_mixed_records() -> None:
+    store = ProjectionStore("repo-a")
+    first = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="code:a",
+        payload={"repository": "repo-a", "name": "a"},
+    )
+    second = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g1",
+        stable_handle="code:b",
+        payload={"repository": "repo-a", "name": "b"},
+    )
+    replacement = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g2",
+        stable_handle="code:c",
+        payload={"repository": "repo-a", "name": "c"},
+    )
+    store.publish(first)
+    store.publish(second)
+
+    def read_snapshots(_: int) -> set[tuple[str, ...]]:
+        observed: set[tuple[str, ...]] = set()
+        for _ in range(50):
+            records = store.snapshot()
+            observed.add(
+                tuple(sorted({str(record["generation"]) for record in records}))
+            )
+        return observed
+
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        readers = [pool.submit(read_snapshots, index) for index in range(20)]
+        store.apply_delta("g2", base_generation="g1", changed=(replacement,), deleted_handles=("code:a", "code:b"))
+        observed = [result.result() for result in readers]
+
+    assert all(generations in {("g1",), ("g2",)} for item in observed for generations in item)
+    assert store.generation == "g2"
+    assert [record["stable_handle"] for record in store.snapshot()] == ["code:c"]

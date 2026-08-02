@@ -61,3 +61,26 @@ def test_sdk_delta_and_error_contract_are_explicit() -> None:
     result = sdk.compile_delta("g1", changed=(envelope("symbol:a"),), closure_handles=("symbol:downstream",))
     assert result["changed_handles"] == ["symbol:a"]
     assert result["closure_handles"] == ["symbol:a", "symbol:downstream"]
+
+
+def test_sdk_compile_delta_supports_explicit_generation_swap() -> None:
+    sdk = ProjectionSDK("repo")
+    sdk.publish(envelope("symbol:a"))
+    replacement = ProjectionEnvelope.create(
+        "code",
+        producer="mapper",
+        producer_schema="mapper/v1",
+        generation="g2",
+        stable_handle="symbol:b",
+        payload={"repository": "repo", "name": "symbol:b"},
+    )
+    receipt = sdk.compile_delta(
+        "g2",
+        base_generation="g1",
+        changed=(replacement,),
+        deleted_handles=("symbol:a",),
+    )
+    assert receipt["base_generation"] == "g1"
+    assert sdk.generation == "g2"
+    assert sdk.query("symbol:a") is None
+    assert sdk.query("symbol:b")["generation"] == "g2"
