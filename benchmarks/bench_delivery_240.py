@@ -53,7 +53,7 @@ def run() -> dict[str, Any]:
                 cache = root / f"cache-{mode}-{repetition}"
                 delivery = DeliveryEngine(root, snapshot, cache)
                 started = time.perf_counter()
-                first = delivery.prepare(
+                delivery.prepare(
                     "authenticate user",
                     profile="loop-standalone",
                     engine_receipt=engine_receipt,
