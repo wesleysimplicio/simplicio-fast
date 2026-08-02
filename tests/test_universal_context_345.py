@@ -174,3 +174,40 @@ def test_universal_context_applies_trust_floor_without_promoting_instructions() 
     assert result["trust_floor"] == "verified"
     with pytest.raises(UniversalContextError, match="context_trust_invalid"):
         compile_context([], trust_floor="unknown")
+
+
+def test_universal_context_uses_exact_tokenizer_and_labels_fallback() -> None:
+    exact = compile_context(
+        [projection("knowledge", "exact")],
+        tokenizer_id="test-exact-v1",
+        tokenizer=lambda text: len(text.encode("utf-8")),
+    )
+    assert exact["tokenizer"] == {
+        "mode": "exact",
+        "id": "test-exact-v1",
+        "reason": None,
+    }
+    assert exact["tokens"] is not None
+    unavailable = compile_context(
+        [projection("knowledge", "fallback")],
+        tokenizer_id="tiktoken:missing-for-test",
+    )
+    assert unavailable["tokenizer"] == {
+        "mode": "estimated",
+        "id": "tiktoken:missing-for-test",
+        "reason": "provider_tokenizer_unavailable",
+    }
+    assert unavailable["tokens"] is None
+
+
+def test_universal_context_rejects_invalid_tokenizer_contract() -> None:
+    with pytest.raises(UniversalContextError, match="context_tokenizer_invalid"):
+        compile_context([], tokenizer=lambda text: 1)
+    with pytest.raises(UniversalContextError, match="context_tokenizer_invalid"):
+        compile_context([], tokenizer_id=True)
+    with pytest.raises(UniversalContextError, match="context_tokenizer_invalid"):
+        compile_context(
+            [projection("knowledge", "invalid-tokenizer")],
+            tokenizer_id="test",
+            tokenizer=lambda text: True,
+        )

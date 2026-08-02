@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from typing import Any, Mapping, Sequence
 
 from .projection import ProjectionEnvelope
+from .tokenizers import resolve_tokenizer
 
 
 CONTEXT_SCHEMA = "simplicio.fast.universal-context/v1"
@@ -24,8 +26,17 @@ class UniversalContextError(ValueError):
         super().__init__(reason_code)
 
 
-def _tokens(value: Any) -> int:
-    return len(str(value).split())
+def _tokens(value: Any, tokenizer: Callable[[str], int] | None = None) -> int:
+    if tokenizer is None:
+        return len(str(value).split())
+    text = json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    try:
+        count = tokenizer(text)
+    except Exception as error:
+        raise UniversalContextError("context_tokenizer_failed") from error
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        raise UniversalContextError("context_tokenizer_invalid")
+    return count
 
 
 def compile_context(
@@ -40,6 +51,8 @@ def compile_context(
     wrapper_bytes: int = 0,
     wrapper_tokens: int = 0,
     trust_floor: str | None = None,
+    tokenizer_id: str | None = None,
+    tokenizer: Callable[[str], int] | None = None,
 ) -> dict[str, Any]:
     """Compile a deterministic context packet; inputs remain immutable."""
     if not isinstance(projections, (tuple, list)) or any(
@@ -82,6 +95,14 @@ def compile_context(
         raise UniversalContextError("context_domain_budget_invalid")
     if trust_floor is not None and trust_floor not in _TRUST_RANK:
         raise UniversalContextError("context_trust_invalid")
+    if tokenizer_id is not None and (
+        not isinstance(tokenizer_id, str) or not tokenizer_id.strip()
+    ):
+        raise UniversalContextError("context_tokenizer_invalid")
+    if tokenizer is not None and (not callable(tokenizer) or not tokenizer_id):
+        raise UniversalContextError("context_tokenizer_invalid")
+    resolved_tokenizer = tokenizer or resolve_tokenizer(tokenizer_id)
+    effective_tokenizer_id = tokenizer_id or "estimated:word-split-v1"
     selected: list[dict[str, Any]] = []
     reasons: list[str] = []
     rejected: list[dict[str, str]] = []
@@ -130,7 +151,7 @@ def compile_context(
             rejected.append({"stable_handle": envelope.stable_handle, "reason": "trust_floor"})
             continue
         encoded_size = len(json.dumps(item, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("utf-8"))
-        estimated_tokens = _tokens(item)
+        estimated_tokens = _tokens(item, resolved_tokenizer)
         if len(selected) >= max_items:
             reasons.append("item_budget")
             rejected.append({"stable_handle": envelope.stable_handle, "reason": "item_budget"})
@@ -155,12 +176,24 @@ def compile_context(
         "projections": selected,
         "projection_count": len(selected),
         "bytes": byte_total,
-        "estimated_tokens": token_total,
+        "estimated_tokens": token_total if resolved_tokenizer is None else None,
+        "tokens": token_total if resolved_tokenizer is not None else None,
         "source_bytes": source_bytes,
         "source_tokens": source_tokens,
         "wrapper_bytes": wrapper_bytes,
         "wrapper_tokens": wrapper_tokens,
         "trust_floor": trust_floor,
+        "tokenizer": {
+            "mode": "exact" if resolved_tokenizer is not None else "estimated",
+            "id": effective_tokenizer_id,
+            "reason": (
+                None
+                if resolved_tokenizer is not None
+                else "provider_tokenizer_unavailable"
+                if tokenizer_id
+                else "tokenizer_unconfigured"
+            ),
+        },
         "source_generations": sorted({item["source_generation"] for item in selected}),
         "projection_generations": sorted(
             {item["projection_generation"] for item in selected}
