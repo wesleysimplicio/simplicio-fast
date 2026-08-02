@@ -205,6 +205,9 @@ class WorkspaceStore:
         self._delta_cache: dict[
             tuple[str, str, str, int, int, int, int], object
         ] = {}
+        self._manifest_cache: dict[
+            tuple[str, str, int, int, int, int], Manifest
+        ] = {}
 
     def cached_validated_base(
         self, generation: str, base: Manifest, snapshot: Path
@@ -293,10 +296,34 @@ class WorkspaceStore:
 
     def manifest(self, generation: str) -> Manifest:
         GenerationId(generation)
-        data = json.loads(self._manifest_path(generation).read_text(encoding="utf-8"))
+        path = self._manifest_path(generation)
+        try:
+            stat = path.stat()
+        except OSError:
+            stat = None
+        key = (
+            generation,
+            str(path),
+            int(stat.st_size),
+            int(stat.st_mtime_ns),
+            int(stat.st_ctime_ns),
+            int(getattr(stat, "st_ino", 0)),
+        ) if stat is not None else None
+        if key is not None:
+            cached = self._manifest_cache.get(key)
+            if cached is not None:
+                return cached
+        data = json.loads(path.read_text(encoding="utf-8"))
         manifest = Manifest.from_dict(data)
         if manifest.generation_id != generation:
             raise ValueError("manifest generation mismatch")
+        if key is not None:
+            for cached_key in tuple(self._manifest_cache):
+                if cached_key[:2] == key[:2] and cached_key != key:
+                    del self._manifest_cache[cached_key]
+            self._manifest_cache[key] = manifest
+            while len(self._manifest_cache) > 8:
+                self._manifest_cache.pop(next(iter(self._manifest_cache)))
         return manifest
 
     def build_base(self, *, config: dict[str, object] | None = None) -> Manifest:

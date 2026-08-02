@@ -18,7 +18,7 @@ from benchmarks.changed_path_delta_230 import (
 )
 from simplicio_fast.delta import DeltaError
 from simplicio_fast.snapshot import build_snapshot
-from simplicio_fast.workspace import WorkspaceStore
+from simplicio_fast.workspace import Manifest, WorkspaceStore
 
 
 def test_symbol_target_respects_explicit_file_distribution() -> None:
@@ -521,6 +521,28 @@ class ChangedPathDeltaHandoffTest(unittest.TestCase):
                     delta_generation=delta.delta_generation,
                 )
             self.assertTrue(report["parity"])
+
+    def test_reuses_manifest_parse_until_file_identity_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            _root, store = self._store(directory)
+            base = store.build_base()
+            manifest_path = store.base_dir / base.generation_id / "manifest.json"
+            with patch(
+                "simplicio_fast.workspace.Manifest.from_dict",
+                wraps=Manifest.from_dict,
+            ) as parse:
+                first = store.manifest(base.generation_id)
+                second = store.manifest(base.generation_id)
+                self.assertIs(first, second)
+                self.assertEqual(1, parse.call_count)
+
+                data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                data["created_at"] = "changed-at"
+                manifest_path.write_text(json.dumps(data), encoding="utf-8")
+                changed = store.manifest(base.generation_id)
+
+            self.assertEqual("changed-at", changed.created_at)
+            self.assertEqual(2, parse.call_count)
 
     def test_unchanged_scoped_handoff_skips_compose(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
