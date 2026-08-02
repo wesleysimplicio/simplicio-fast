@@ -6,7 +6,10 @@
 //! dependency and maps validated snapshots read-only when opened from disk.
 
 use memmap2::{Mmap, MmapOptions};
-use serde::{Deserialize, Serialize};
+use serde::{
+    de::{self, Deserializer, SeqAccess, Visitor},
+    Deserialize, Serialize,
+};
 use sha2::{Digest, Sha256};
 mod segment_writer;
 pub use segment_writer::{PublishReceipt, PublishedSegment, SegmentWriter};
@@ -126,6 +129,72 @@ pub struct RustRelation {
     pub origin_id: String,
     #[serde(default)]
     pub destination_id: String,
+}
+
+fn valid_relation(relation: &RustRelation) -> bool {
+    relation.confidence.is_finite()
+        && (0.0..=1.0).contains(&relation.confidence)
+        && !relation.origin.is_empty()
+        && !relation.destination.is_empty()
+        && !relation.kind.is_empty()
+}
+
+struct RelationVisitor<'a> {
+    handle: Option<&'a str>,
+    kind: Option<&'a str>,
+    limit: usize,
+    matches: Vec<RustRelation>,
+}
+
+impl<'de, 'a> Visitor<'de> for RelationVisitor<'a> {
+    type Value = Vec<RustRelation>;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("an array of valid relation records")
+    }
+
+    fn visit_seq<A>(mut self, mut sequence: A) -> Result<Self::Value, A::Error>
+    where
+        A: SeqAccess<'de>,
+    {
+        while let Some(relation) = sequence.next_element::<RustRelation>()? {
+            if !valid_relation(&relation) {
+                return Err(de::Error::custom("invalid relation record"));
+            }
+            let handle_match = self.handle.map_or(true, |value| {
+                relation.origin == value
+                    || relation.destination == value
+                    || relation.origin_id == value
+                    || relation.destination_id == value
+            });
+            let kind_match = self.kind.map_or(true, |value| relation.kind == value);
+            if self.matches.len() < self.limit && handle_match && kind_match {
+                self.matches.push(relation);
+            }
+        }
+        Ok(self.matches)
+    }
+}
+
+fn relation_section(
+    bytes: &[u8],
+    handle: Option<&str>,
+    kind: Option<&str>,
+    limit: usize,
+) -> Result<Vec<RustRelation>, SnapshotError> {
+    let mut deserializer = serde_json::Deserializer::from_slice(bytes);
+    let relations = deserializer
+        .deserialize_seq(RelationVisitor {
+            handle,
+            kind,
+            limit,
+            matches: Vec::with_capacity(limit.min(1024)),
+        })
+        .map_err(|error| SnapshotError::Invalid(format!("invalid relation JSON: {error}")))?;
+    deserializer
+        .end()
+        .map_err(|error| SnapshotError::Invalid(format!("invalid relation JSON: {error}")))?;
+    Ok(relations)
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -441,14 +510,7 @@ impl SnapshotReader {
                 "record section is not aligned".into(),
             ));
         }
-        let relation_value: serde_json::Value =
-            serde_json::from_slice(section_bytes(raw, &sections["relations"]))
-                .map_err(|_| SnapshotError::Invalid("invalid relation JSON".into()))?;
-        if !relation_value.is_array() {
-            return Err(SnapshotError::Invalid(
-                "relation section is not an array".into(),
-            ));
-        }
+        relation_section(section_bytes(raw, &sections["relations"]), None, None, 0)?;
         let symbol_count = sections["symbols"].length / SYMBOL_RECORD_SIZE;
         let indexes: PersistedIndexes =
             serde_json::from_slice(section_bytes(raw, &sections["indexes"]))
@@ -493,21 +555,12 @@ impl SnapshotReader {
     }
 
     pub fn relations(&self) -> Result<Vec<RustRelation>, SnapshotError> {
-        let relations: Vec<RustRelation> = serde_json::from_slice(section_bytes(
-            self.bytes.as_slice(),
-            &self.sections["relations"],
-        ))
-        .map_err(|_| SnapshotError::Invalid("invalid relation JSON".into()))?;
-        if relations.iter().any(|relation| {
-            !relation.confidence.is_finite()
-                || !(0.0..=1.0).contains(&relation.confidence)
-                || relation.origin.is_empty()
-                || relation.destination.is_empty()
-                || relation.kind.is_empty()
-        }) {
-            return Err(SnapshotError::Invalid("invalid relation record".into()));
-        }
-        Ok(relations)
+        relation_section(
+            section_bytes(self.bytes.as_slice(), &self.sections["relations"]),
+            None,
+            None,
+            usize::MAX,
+        )
     }
 
     pub fn query_relations(
@@ -521,21 +574,12 @@ impl SnapshotReader {
                 "relation limit must be positive".into(),
             ));
         }
-        Ok(self
-            .relations()?
-            .into_iter()
-            .filter(|relation| {
-                let handle_match = handle.map_or(true, |value| {
-                    relation.origin == value
-                        || relation.destination == value
-                        || relation.origin_id == value
-                        || relation.destination_id == value
-                });
-                let kind_match = kind.map_or(true, |value| relation.kind == value);
-                handle_match && kind_match
-            })
-            .take(limit)
-            .collect())
+        relation_section(
+            section_bytes(self.bytes.as_slice(), &self.sections["relations"]),
+            handle,
+            kind,
+            limit,
+        )
     }
 
     pub fn query(&self, term: &str, limit: usize) -> Result<Vec<RustSymbol>, SnapshotError> {
@@ -1393,6 +1437,26 @@ mod tests {
             decode_projection(&encoded).expect("round trip").payload,
             envelope.payload
         );
+    }
+
+    #[test]
+    fn relation_queries_validate_streaming_records_and_bound_matches() {
+        let relations = br#"[
+            {"origin":"other","destination":"target","kind":"definition","confidence":1.0},
+            {"origin":"source","destination":"target","kind":"definition","confidence":1.0},
+            {"origin":"source","destination":"target","kind":"call","confidence":0.9}
+        ]"#;
+        let result = relation_section(relations, Some("source"), Some("definition"), 1)
+            .expect("relation query should validate");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].origin, "source");
+        assert!(relation_section(
+            br#"[{"origin":"source","destination":"target","kind":"call","confidence":2.0}]"#,
+            None,
+            None,
+            1,
+        )
+        .is_err());
     }
 
     fn empty_reader() -> SnapshotReader {
