@@ -526,6 +526,7 @@ def build_payload(
     mode: str = "bootstrap",
     limits: Mapping[str, int] | None = None,
     previous_payload: Mapping[str, Any] | None = None,
+    rust_features: Iterable[str] = (),
 ) -> dict[str, Any]:
     """Build a deterministic, bounded contract payload from existing adapters."""
 
@@ -756,7 +757,7 @@ def build_payload(
         language: fingerprint
         for language, fingerprint in (
             ("csharp", csharp_workspace_fingerprint(root)),
-            ("rust", rust_workspace_fingerprint(root)),
+            ("rust", rust_workspace_fingerprint(root, features=rust_features)),
             ("typescript", typescript_workspace_fingerprint(root)),
         )
         if language in languages
@@ -777,6 +778,7 @@ def build_projection(
     mode: str = "bootstrap",
     limits: Mapping[str, int] | None = None,
     previous_payload: Mapping[str, Any] | None = None,
+    rust_features: Iterable[str] = (),
 ) -> ProjectionEnvelope:
     """Compile the Code adapter payload into the shared projection ABI."""
     payload = build_payload(
@@ -788,6 +790,7 @@ def build_projection(
         mode=mode,
         limits=limits,
         previous_payload=previous_payload,
+        rust_features=rust_features,
     )
     generation = payload.get("mapper_generation") or (
         f"bootstrap:{payload['payload_sha256']}"

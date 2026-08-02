@@ -1,10 +1,13 @@
 from pathlib import Path
 
+import pytest
+
 from simplicio_fast.adapters import (
     discover_rust_projects,
     parse_path,
     rust_workspace_fingerprint,
 )
+from simplicio_fast.parser_adapter import build_payload
 
 
 def test_rust_adapter_covers_workspace_constructs(tmp_path: Path) -> None:
@@ -94,6 +97,34 @@ def test_rust_workspace_fingerprint_binds_toolchain_and_cargo_config(
     cargo_config.write_text("[build]\nrustflags=[\"-Ctarget-cpu=native\"]\n", encoding="utf-8")
     changed_config = rust_workspace_fingerprint(tmp_path)
     assert changed_config != changed_toolchain
+
+
+def test_rust_workspace_fingerprint_binds_selected_cargo_features(tmp_path: Path) -> None:
+    (tmp_path / "Cargo.toml").write_text(
+        "[package]\nname='app'\nversion='0.1.0'\n[features]\nserde=[]\n",
+        encoding="utf-8",
+    )
+    baseline = rust_workspace_fingerprint(tmp_path, features=("default", "serde"))
+    reordered = rust_workspace_fingerprint(tmp_path, features=("serde", "default"))
+    changed = rust_workspace_fingerprint(tmp_path, features=("default",))
+    assert reordered == baseline
+    assert changed != baseline
+    with pytest.raises(ValueError, match="rust_features_invalid"):
+        rust_workspace_fingerprint(tmp_path, features="serde")  # type: ignore[arg-type]
+
+
+def test_parser_payload_propagates_selected_rust_features_into_identity(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "Cargo.toml").write_text(
+        "[package]\nname='app'\nversion='0.1.0'\n", encoding="utf-8"
+    )
+    source = tmp_path / "src" / "lib.rs"
+    source.parent.mkdir()
+    source.write_text("pub fn run() {}\n", encoding="utf-8")
+    serde = build_payload(tmp_path, rust_features=("serde",))
+    tokio = build_payload(tmp_path, rust_features=("tokio",))
+    assert serde["workspace_fingerprints"]["rust"] != tokio["workspace_fingerprints"]["rust"]
 
 
 def test_rust_multi_crate_workspace_discovers_and_parses_each_member(
