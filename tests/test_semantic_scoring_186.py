@@ -171,6 +171,13 @@ class ModelAndContractsTests(unittest.TestCase):
         self.assertEqual(0.5, lexical_score("cache retry", "CACHE works"))
         self.assertEqual(0.0, lexical_score("", "cache"))
 
+    def test_lexical_normalizes_identifier_boundaries(self):
+        self.assertEqual(
+            1.0,
+            lexical_score("reuse computed values", "reuse_computed_values"),
+        )
+        self.assertEqual(1.0, lexical_score("memo store", "MemoStore"))
+
 
 class RuntimeProviderTests(unittest.TestCase):
     def test_runtime_provider_handshake_and_request_contract(self):

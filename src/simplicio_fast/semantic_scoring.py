@@ -542,7 +542,17 @@ class DerivedVectorStore:
 
 
 def _tokens(value: str) -> tuple[str, ...]:
-    return tuple(token.casefold() for token in _WORD.findall(value))
+    tokens: list[str] = []
+    for raw in _WORD.findall(value):
+        for piece in raw.split("_"):
+            if not piece:
+                continue
+            parts = re.findall(
+                r"[A-Z]+(?=[A-Z][a-z]|\d|$)|[A-Z]?[a-z]+|\d+",
+                piece,
+            )
+            tokens.extend(parts or [piece])
+    return tuple(token.casefold() for token in tokens)
 
 
 def lexical_score(query: str, text: str) -> float:
