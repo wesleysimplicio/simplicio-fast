@@ -803,6 +803,8 @@ def validate_payload(
 ) -> dict[str, Any]:
     """Validate schema, bounds, paths, stable IDs and canonical payload digest."""
 
+    if not isinstance(value, Mapping):
+        raise ParserAdapterError("payload_shape_invalid")
     if value.get("schema") != SCHEMA:
         raise ParserAdapterError("schema_unsupported")
     if value.get("mode") not in SUPPORTED_MODES:
@@ -842,6 +844,17 @@ def validate_payload(
     diagnostics = value.get("diagnostics")
     if not isinstance(diagnostics, list):
         raise ParserAdapterError("diagnostics_invalid")
+    for diagnostic in diagnostics:
+        if not isinstance(diagnostic, Mapping):
+            raise ParserAdapterError("diagnostics_invalid")
+        if any(
+            not isinstance(diagnostic.get(field), str) or not diagnostic[field]
+            for field in ("path", "code", "detail")
+        ):
+            raise ParserAdapterError("diagnostics_invalid")
+        fallback = diagnostic.get("fallback")
+        if fallback is not None and not isinstance(fallback, str):
+            raise ParserAdapterError("diagnostics_invalid")
     invalidation = value.get("invalidation")
     if not isinstance(invalidation, Mapping):
         raise ParserAdapterError("invalidation_invalid")
@@ -901,8 +914,14 @@ def validate_payload(
         if item.get("encoding") != "utf-8":
             raise ParserAdapterError("file_encoding_invalid")
         file_paths.add(normalized_path)
-        if not isinstance(item.get("sha256"), str) or len(item["sha256"]) != 64:
+        if (
+            not isinstance(item.get("sha256"), str)
+            or len(item["sha256"]) != 64
+            or any(character not in "0123456789abcdef" for character in item["sha256"])
+        ):
             raise ParserAdapterError("file_digest_invalid")
+        if item.get("id") is not None and not isinstance(item["id"], str):
+            raise ParserAdapterError("file_invalid")
         if root is not None and normalized_path not in skipped_paths:
             source_root = root.resolve()
             source = (source_root / normalized_path).resolve()

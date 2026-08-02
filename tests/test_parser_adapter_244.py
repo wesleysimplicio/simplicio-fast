@@ -603,6 +603,31 @@ class ParserAdapter244Test(unittest.TestCase):
                     with self.assertRaisesRegex(ParserAdapterError, reason):
                         validate_payload(broken)
 
+    def test_validator_rejects_untyped_nested_records_and_non_mapping_inputs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def run():\n    return True\n", encoding="utf-8"
+            )
+            payload = build_payload(root)
+            with self.assertRaisesRegex(ParserAdapterError, "payload_shape_invalid"):
+                validate_payload([])  # type: ignore[arg-type]
+
+            broken = copy.deepcopy(payload)
+            broken["diagnostics"] = [{"path": "service.py", "code": "bad", "detail": 1}]
+            with self.assertRaisesRegex(ParserAdapterError, "diagnostics_invalid"):
+                validate_payload(broken)
+
+            broken = copy.deepcopy(payload)
+            broken["files"][0]["sha256"] = "g" * 64
+            with self.assertRaisesRegex(ParserAdapterError, "file_digest_invalid"):
+                validate_payload(broken)
+
+            broken = copy.deepcopy(payload)
+            broken["files"][0]["id"] = 1
+            with self.assertRaisesRegex(ParserAdapterError, "file_invalid"):
+                validate_payload(broken)
+
     def test_integrated_mode_requires_mapper_identity(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
