@@ -31,3 +31,16 @@ def test_invalid_cache_inputs_fail_closed() -> None:
         ValidationKey("", "lock", "tool", ("test",)).to_dict()
     with pytest.raises(ValidationCacheError, match="selection_budget_invalid"):
         ValidationCache().affected(("h",), {}, max_tests=0)
+
+
+def test_validation_cache_persistence_is_deterministic_and_tamper_evident(tmp_path) -> None:
+    cache = ValidationCache()
+    cache.put(key(), status="pass", result={"ok": True}, evidence=("receipt:1",))
+    path = tmp_path / "cache.json"
+    receipt = cache.save(path)
+    restored = ValidationCache.load(path)
+    assert receipt["entries"] == 1
+    assert restored.get(key()) == cache.get(key())
+    path.write_text(path.read_text(encoding="utf-8").replace("receipt:1", "receipt:2"), encoding="utf-8")
+    with pytest.raises(ValidationCacheError, match="cache_digest_mismatch"):
+        ValidationCache.load(path)

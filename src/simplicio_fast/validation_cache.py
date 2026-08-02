@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+from pathlib import Path
 from typing import Any, Mapping, Sequence
 
 
@@ -100,6 +101,50 @@ class ValidationCache:
 
     def __init__(self) -> None:
         self._entries: dict[str, ValidationResult] = {}
+
+    def save(self, path: Path) -> dict[str, Any]:
+        """Persist derived results atomically; execution authority stays external."""
+        body = {
+            "schema": "simplicio.fast.validation-cache/v1",
+            "entries": [self._entries[key].to_dict() for key in sorted(self._entries)],
+        }
+        document = {"body": body, "cache_sha256": _digest(body)}
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(f".{path.name}.tmp")
+        temporary.write_bytes(_canonical(document) + b"\n")
+        temporary.replace(path)
+        return {"schema": "simplicio.fast.validation-cache-receipt/v1", "status": "saved", "entries": len(self._entries), "cache_sha256": document["cache_sha256"]}
+
+    @classmethod
+    def load(cls, path: Path) -> "ValidationCache":
+        try:
+            document = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValidationCacheError("cache_document_invalid") from error
+        if not isinstance(document, Mapping):
+            raise ValidationCacheError("cache_document_invalid")
+        body = document.get("body")
+        if not isinstance(body, Mapping) or body.get("schema") != "simplicio.fast.validation-cache/v1":
+            raise ValidationCacheError("cache_schema_unsupported")
+        if document.get("cache_sha256") != _digest(body):
+            raise ValidationCacheError("cache_digest_mismatch")
+        entries = body.get("entries")
+        if not isinstance(entries, list):
+            raise ValidationCacheError("cache_entries_invalid")
+        cache = cls()
+        for raw in entries:
+            if not isinstance(raw, Mapping):
+                raise ValidationCacheError("cache_entries_invalid")
+            try:
+                entry = ValidationResult(
+                    str(raw["key_digest"]), str(raw["status"]), str(raw["result_digest"]),
+                    tuple(raw["command"]), bool(raw["fresh"]), tuple(raw.get("evidence", ())),
+                )
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValidationCacheError("cache_entry_invalid") from error
+            cache._entries[entry.key_digest] = entry
+        return cache
 
     def put(self, key: ValidationKey, *, status: str, result: Any, command: Sequence[str] | None = None, fresh: bool = True, evidence: Sequence[str] = ()) -> ValidationResult:
         result_digest = _digest(result)
