@@ -27,6 +27,8 @@ pub const FILE_RECORD_SIZE: usize = 64;
 pub const SYMBOL_RECORD_SIZE: usize = 72;
 pub const MAX_SNAPSHOT_BYTES: usize = 512 * 1024 * 1024;
 pub const REQUIRED_SECTIONS: [&str; 5] = ["files", "symbols", "relations", "indexes", "strings"];
+pub const PROJECTION_SCHEMA: &str = "simplicio.fast.projection/v1";
+pub const PROJECTION_TYPES: [&str; 3] = ["code", "knowledge", "operations"];
 
 #[derive(Debug)]
 pub enum SnapshotError {
@@ -786,6 +788,57 @@ pub fn manifest() -> serde_json::Value {
     })
 }
 
+/// Compute the v1 projection payload digest for JSON-compatible payloads.
+///
+/// `serde_json::Map` is ordered by key in this crate, matching the Python
+/// projection canonicalizer for the ASCII contract surface.
+pub fn projection_payload_digest(payload: &serde_json::Value) -> String {
+    let encoded = serde_json::to_vec(payload).expect("JSON payload is serializable");
+    format!("sha256:{}", hex_bytes(&Sha256::digest(encoded)))
+}
+
+/// Validate the shared projection envelope without exposing mmap offsets.
+pub fn validate_projection(value: &serde_json::Value) -> Result<(), SnapshotError> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| SnapshotError::Invalid("projection_not_object".into()))?;
+    if object.get("schema").and_then(serde_json::Value::as_str) != Some(PROJECTION_SCHEMA) {
+        return Err(SnapshotError::Invalid(
+            "projection_schema_unsupported".into(),
+        ));
+    }
+    let projection_type = object
+        .get("projection_type")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| SnapshotError::Invalid("projection_type_invalid".into()))?;
+    if !PROJECTION_TYPES.contains(&projection_type) {
+        return Err(SnapshotError::Invalid("projection_type_unsupported".into()));
+    }
+    for field in ["producer", "producer_schema", "generation", "stable_handle"] {
+        if object
+            .get(field)
+            .and_then(serde_json::Value::as_str)
+            .map_or(true, str::is_empty)
+        {
+            return Err(SnapshotError::Invalid(format!(
+                "projection_{field}_invalid"
+            )));
+        }
+    }
+    let payload = object
+        .get("payload")
+        .filter(|value| value.is_object())
+        .ok_or_else(|| SnapshotError::Invalid("projection_payload_invalid".into()))?;
+    let expected = object
+        .get("payload_sha256")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| SnapshotError::Invalid("projection_digest_missing".into()))?;
+    if projection_payload_digest(payload) != expected {
+        return Err(SnapshotError::Invalid("projection_digest_mismatch".into()));
+    }
+    Ok(())
+}
+
 fn u64_to_usize(value: u64) -> Result<usize, SnapshotError> {
     usize::try_from(value)
         .map_err(|_| SnapshotError::Invalid("64-bit field exceeds platform usize".into()))
@@ -922,6 +975,36 @@ mod tests {
         assert!(
             matches!(result, Err(SnapshotError::Invalid(reason)) if reason == "truncated header")
         );
+    }
+
+    #[test]
+    fn projection_digest_matches_python_ascii_canonical() {
+        let value = serde_json::json!({"a": ["x", "y"], "z": 1});
+        assert_eq!(
+            projection_payload_digest(&value),
+            "sha256:747ca7714c7a2b81fcf1b9fac06f8888f25927e768aa57798492846de6a41575"
+        );
+    }
+
+    #[test]
+    fn projection_validator_rejects_tampered_payload() {
+        let payload = serde_json::json!({"a": ["x", "y"], "z": 1});
+        let mut envelope = serde_json::json!({
+            "schema": PROJECTION_SCHEMA,
+            "projection_type": "code",
+            "producer": "mapper",
+            "producer_schema": "mapper.context/v1",
+            "generation": "g1",
+            "stable_handle": "symbol:a",
+            "payload": payload,
+            "payload_sha256": "sha256:747ca7714c7a2b81fcf1b9fac06f8888f25927e768aa57798492846de6a41575"
+        });
+        assert!(validate_projection(&envelope).is_ok());
+        envelope["payload"]["z"] = serde_json::json!(2);
+        assert!(matches!(
+            validate_projection(&envelope),
+            Err(SnapshotError::Invalid(reason)) if reason == "projection_digest_mismatch"
+        ));
     }
 
     fn empty_reader() -> SnapshotReader {
