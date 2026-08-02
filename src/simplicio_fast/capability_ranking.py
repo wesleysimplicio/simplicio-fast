@@ -161,7 +161,11 @@ def candidates_from_manifest(manifest: Mapping[str, Any]) -> tuple[CapabilityCan
             raise CapabilityRankingError("manifest_capability_invalid")
         version = availability.get("fast_version")
         status = availability.get("status")
-        if not isinstance(version, str) or not version.strip() or not isinstance(status, str):
+        if (
+            not isinstance(version, str)
+            or not version.strip()
+            or status not in {"ready", "degraded", "unavailable"}
+        ):
             raise CapabilityRankingError("manifest_capability_invalid")
         health = "healthy" if status == "ready" else "degraded" if status == "degraded" else "unhealthy"
         return (

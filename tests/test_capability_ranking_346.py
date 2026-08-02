@@ -273,3 +273,15 @@ def test_capability_manifest_adapter_rejects_unknown_schema_and_malformed_operat
         candidates_from_manifest(
             {"schema": "simplicio.preflight/v1", "operators": [{"name": "loop"}]}
         )
+
+
+def test_capability_manifest_adapter_rejects_unknown_fast_status() -> None:
+    with pytest.raises(CapabilityRankingError, match="manifest_capability_invalid"):
+        candidates_from_manifest(
+            {
+                "schema": "simplicio.fast-capabilities/v1",
+                "availability": {"fast_version": "2.0.20", "status": "maybe"},
+                "commands": ["fast capabilities"],
+                "languages": ["python"],
+            }
+        )
