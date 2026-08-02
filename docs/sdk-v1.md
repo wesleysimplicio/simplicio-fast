@@ -24,3 +24,10 @@ without shared mutable async state or a daemon requirement.
 The Python surface is currently `supported`; Rust, resident session and CLI
 surfaces are explicitly `partial` until their conformance, installed-artifact
 and cross-platform receipts are available. A partial row is not a parity claim.
+
+The same capabilities response includes `simplicio.fast.sdk-compatibility/v1`.
+An exact version is accepted, and a reader upgrade may consume an older minor
+within the same major. A reader downgrade rejects a newer artifact minor until
+an explicit migration exists; every major mismatch, including a future major,
+rejects with a stable reason code. Rollback is limited to a previously
+validated contract version, so version skew cannot silently become authority.
