@@ -3,8 +3,8 @@
 This matrix is an evidence index, not a closure claim. `PROVEN` means the
 named local check produced current evidence; `PARTIAL` means at least one
 required acceptance criterion remains; `BLOCKED` means the missing proof is
-owned by an external capability or service. Current master is `c9fe199`;
-the full Python suite passes `613 passed, 67 subtests` in 117.44s,
+owned by an external capability or service. Current master is `4436e90`;
+the full Python suite passes `614 passed, 67 subtests` in 116.42s,
 and release-integrity passes all checks.
 
 | Issue | Current state | Current evidence | Remaining authoritative gate |
@@ -22,7 +22,7 @@ and release-integrity passes all checks.
 | #247 | PARTIAL | `3515bb5`; C# multi-project/partial/test-symbol E2E, 4 tests | Roslyn/native relations, affected-project invalidation, installed Linux/Windows E2E and coverage |
 | #248 | PARTIAL | `dffc0b1`; TS monorepo/project refs/aliases/TSX E2E, 4 tests | Native compiler relations, bounded invalidation, Node/React installed E2E and coverage |
 | #249 | PARTIAL | `d1ac156`; multi-crate Cargo discovery/symbol E2E, 5 tests | Native parser parity, Cargo relation/invalidation E2E, installed matrix and coverage |
-| #339 | PARTIAL | `c9fe199`; typed `simplicio.fast.projection/v1` envelope plus Code/Knowledge/Operations producers and scoped incremental store with closure/digest receipt | Installed SDK/persistence, Rust parity and cross-domain benchmark |
+| #339 | PARTIAL | `4436e90`; typed `simplicio.fast.projection/v1` envelope plus Code/Knowledge/Operations producers, scoped incremental store and atomic verified persistence | Installed SDK packaging, Rust parity and cross-domain benchmark |
 
 ## Closure rule
 
