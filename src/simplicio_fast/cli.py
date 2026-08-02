@@ -31,6 +31,7 @@ from .semantic_scoring import (
     SourceDocument,
     semantic_capabilities,
 )
+from .tokenizers import resolve_tokenizer
 from .users.http import serve
 from .users.repository import JsonUserRepository
 from .users.service import UserService
@@ -390,6 +391,14 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("semantic", "legacy-regex"),
         default="semantic",
         help="bounded semantic ranking by default; legacy-regex is explicit fallback",
+    )
+    delivery.add_argument(
+        "--tokenizer-id",
+        default=None,
+        help=(
+            "optional exact tokenizer, e.g. tiktoken:cl100k_base or "
+            "tiktoken:model:gpt-4o; unavailable providers use labeled estimates"
+        ),
     )
     delivery.add_argument("--max-bytes", type=int, default=32_000)
     delivery.add_argument(
@@ -756,6 +765,8 @@ def main() -> None:
                             else None
                         ),
                         selection_mode=args.selection_mode,
+                        tokenizer_id=args.tokenizer_id,
+                        tokenizer=resolve_tokenizer(args.tokenizer_id),
                     )
                 )
         elif args.command == "changeset":
