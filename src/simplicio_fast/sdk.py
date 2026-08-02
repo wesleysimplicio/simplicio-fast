@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any, Iterable
@@ -59,8 +60,16 @@ class ProjectionSDK:
         envelopes = [ProjectionEnvelope.decode(json.dumps(item, sort_keys=True, separators=(",", ":")).encode()) for item in self.store.snapshot()]
         return compile_context(envelopes, repository_scope=self.repository, max_bytes=max_bytes, max_tokens=max_tokens, max_items=max_items)
 
+    async def context_async(self, *, max_bytes: int = 256 * 1024, max_tokens: int = 4096, max_items: int = 128) -> dict[str, Any]:
+        """Run bounded local compilation without blocking the event loop."""
+        return await asyncio.to_thread(self.context, max_bytes=max_bytes, max_tokens=max_tokens, max_items=max_items)
+
+    async def query_async(self, handle: str) -> dict[str, Any] | None:
+        """Async-safe read-only query using the same synchronous contract."""
+        return await asyncio.to_thread(self.query, handle)
+
     def capabilities(self) -> dict[str, Any]:
-        return {"schema": "simplicio.fast.sdk-capabilities/v1", "sdk": SDK_SCHEMA, "operations": ["publish", "compile_delta", "query", "snapshot", "save", "open", "context"], "authority": "derived_read_only"}
+        return {"schema": "simplicio.fast.sdk-capabilities/v1", "sdk": SDK_SCHEMA, "operations": ["publish", "compile_delta", "query", "query_async", "snapshot", "save", "open", "context", "context_async"], "authority": "derived_read_only"}
 
 
 __all__ = ["ProjectionSDK", "SDKError", "SDK_SCHEMA"]

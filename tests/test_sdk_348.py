@@ -1,3 +1,5 @@
+import asyncio
+
 from simplicio_fast.projection import ProjectionEnvelope
 from simplicio_fast.sdk import ProjectionSDK
 
@@ -16,3 +18,14 @@ def test_sdk_exposes_scoped_in_process_operations_and_context(tmp_path) -> None:
     sdk.save(path)
     reopened = ProjectionSDK.open(path, "repo")
     assert reopened.snapshot() == sdk.snapshot()
+
+
+def test_sdk_async_surface_is_read_only_and_matches_sync() -> None:
+    sdk = ProjectionSDK("repo")
+    sdk.publish(envelope("symbol:a"))
+
+    async def run() -> None:
+        assert await sdk.query_async("symbol:a") == sdk.query("symbol:a")
+        assert await sdk.context_async() == sdk.context()
+
+    asyncio.run(run())
