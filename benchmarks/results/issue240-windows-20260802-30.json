@@ -16,8 +16,8 @@
   "reason": "real_historical_corpus_and_downstream_success_not_collected",
   "results": {
     "legacy-regex": {
-      "cold_median_ms": 87.1589999878779,
-      "cold_p95_ms": 146.77085498988163,
+      "cold_median_ms": 94.02745001716539,
+      "cold_p95_ms": 167.41699000122026,
       "repetitions": 30,
       "selected_files": [
         "target.py",
@@ -30,19 +30,19 @@
         "module_6.py"
       ],
       "tokens_median": 32.0,
-      "warm_median_ms": 99.07284998917021,
-      "warm_p95_ms": 151.12200000730806
+      "warm_median_ms": 104.13984998012893,
+      "warm_p95_ms": 160.07331001455893
     },
     "semantic": {
-      "cold_median_ms": 85.21120002842508,
-      "cold_p95_ms": 213.54015500983215,
+      "cold_median_ms": 91.05190000263974,
+      "cold_p95_ms": 179.6104000008199,
       "repetitions": 30,
       "selected_files": [
         "target.py"
       ],
       "tokens_median": 4.0,
-      "warm_median_ms": 96.79404998314567,
-      "warm_p95_ms": 185.18138499639457
+      "warm_median_ms": 106.60940001253039,
+      "warm_p95_ms": 147.75257497676643
     }
   },
   "schema": "simplicio.fast.delivery-context-benchmark/v1",
