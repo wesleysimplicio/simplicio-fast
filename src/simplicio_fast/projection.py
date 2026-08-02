@@ -10,10 +10,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 import hashlib
 import json
+import os
+from pathlib import Path
+import tempfile
 from typing import Any, Mapping
 
 
 SCHEMA = "simplicio.fast.projection/v1"
+STORE_SCHEMA = "simplicio.fast.projection-store/v1"
 PROJECTION_TYPES = frozenset({"code", "knowledge", "operations"})
 _FORBIDDEN_KEYS = frozenset({"offset", "mmap_offset", "address", "pointer"})
 
@@ -207,6 +211,70 @@ class ProjectionStore:
             self._records[key].to_dict() for key in sorted(self._records)
         ]
 
+    def save(self, path: Path) -> dict[str, Any]:
+        """Atomically persist this derived store without becoming an authority."""
+        body = {
+            "schema": STORE_SCHEMA,
+            "repository": self.repository,
+            "generation": self._generation,
+            "records": self.snapshot(),
+        }
+        document = {"body": body, "store_sha256": _digest(body)}
+        encoded = _canonical(document) + b"\n"
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary: str | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+            ) as handle:
+                temporary = handle.name
+                handle.write(encoded)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+            temporary = None
+        finally:
+            if temporary is not None:
+                Path(temporary).unlink(missing_ok=True)
+        return {
+            "schema": "simplicio.fast.projection-store-receipt/v1",
+            "status": "saved",
+            "repository": self.repository,
+            "generation": self._generation,
+            "path": str(path),
+            "store_sha256": document["store_sha256"],
+            "records": len(self._records),
+        }
+
+    @classmethod
+    def load(cls, path: Path, repository: str) -> "ProjectionStore":
+        """Load and verify a derived store for exactly one repository scope."""
+        try:
+            document = json.loads(Path(path).read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ProjectionError("projection_store_invalid") from error
+        if not isinstance(document, Mapping):
+            raise ProjectionError("projection_store_invalid")
+        body = document.get("body")
+        if not isinstance(body, Mapping) or body.get("schema") != STORE_SCHEMA:
+            raise ProjectionError("projection_store_schema_unsupported")
+        if body.get("repository") != repository:
+            raise ProjectionError("projection_repository_mismatch")
+        if document.get("store_sha256") != _digest(body):
+            raise ProjectionError("projection_store_digest_mismatch")
+        records = body.get("records")
+        if not isinstance(records, list):
+            raise ProjectionError("projection_store_invalid")
+        store = cls(repository)
+        for record in records:
+            if not isinstance(record, Mapping):
+                raise ProjectionError("projection_store_invalid")
+            store.publish(ProjectionEnvelope.decode(_canonical(record)))
+        if body.get("generation") != store.generation:
+            raise ProjectionError("projection_generation_mismatch")
+        return store
+
 
 def _validate_text(value: object, field: str) -> None:
     if not isinstance(value, str) or not value.strip():
@@ -219,4 +287,5 @@ __all__ = [
     "ProjectionError",
     "ProjectionStore",
     "SCHEMA",
+    "STORE_SCHEMA",
 ]

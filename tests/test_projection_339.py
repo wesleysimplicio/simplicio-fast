@@ -139,3 +139,26 @@ def test_projection_store_rejects_stale_and_cross_repository_data() -> None:
     store.publish(local)
     with pytest.raises(ProjectionError, match="projection_generation_stale"):
         store.apply_delta("g2", changed=())
+
+
+def test_projection_store_save_load_is_atomic_and_tamper_evident(tmp_path) -> None:
+    store = ProjectionStore("repo-a")
+    record = ProjectionEnvelope.create(
+        "knowledge",
+        producer="skills",
+        producer_schema="skills/v1",
+        generation="g1",
+        stable_handle="skill:a",
+        payload={"repository": "repo-a", "name": "a"},
+    )
+    store.publish(record)
+    path = tmp_path / "derived" / "projection.json"
+    receipt = store.save(path)
+    assert receipt["status"] == "saved"
+    restored = ProjectionStore.load(path, "repo-a")
+    assert restored.snapshot() == store.snapshot()
+    path.write_text(path.read_text(encoding="utf-8").replace("skill:a", "skill:b"), encoding="utf-8")
+    with pytest.raises(ProjectionError, match="projection_store_digest_mismatch"):
+        ProjectionStore.load(path, "repo-a")
+    with pytest.raises(ProjectionError, match="projection_repository_mismatch"):
+        ProjectionStore.load(tmp_path / "derived" / "projection.json", "repo-b")
