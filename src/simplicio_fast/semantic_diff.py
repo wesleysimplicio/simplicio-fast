@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 import hashlib
 import json
@@ -86,6 +87,13 @@ class DiffRecord:
             raise SemanticDiffError("reason_code_invalid")
         if self.derived and self.confidence >= 1.0:
             raise SemanticDiffError("derived_confidence_invalid")
+        try:
+            before = deepcopy(self.before) if self.before is not None else None
+            after = deepcopy(self.after) if self.after is not None else None
+        except (TypeError, ValueError) as error:
+            raise SemanticDiffError("diff_payload_invalid") from error
+        object.__setattr__(self, "before", before)
+        object.__setattr__(self, "after", after)
 
     def to_dict(self) -> dict[str, Any]:
         return {

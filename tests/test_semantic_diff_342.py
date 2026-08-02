@@ -16,6 +16,18 @@ def test_diff_and_overlay_are_deterministic_without_mutating_inputs() -> None:
     assert before == {"a": {"name": "a"}, "gone": {"name": "gone"}}
 
 
+def test_diff_record_snapshots_nested_payloads_at_construction() -> None:
+    payload = {"nested": {"name": "before"}, "items": ["stable"]}
+    record = DiffRecord("a", "add", None, payload, "g1", "g2", "handle_added")
+    digest = SemanticDiff("g1", "g2", [record]).digest
+
+    payload["nested"]["name"] = "mutated"
+    payload["items"].append("external")
+
+    assert record.after == {"nested": {"name": "before"}, "items": ["stable"]}
+    assert SemanticDiff("g1", "g2", [record]).digest == digest
+
+
 def test_impact_explains_bounded_dependency_closure_and_partial_state() -> None:
     result = diff_generations({"a": {}}, {"a": {"x": 1}}, source_generation="g1", proposed_generation="g2")
     impact = result.impact({"a": ["b"], "b": ["c"]}, max_nodes=2)
