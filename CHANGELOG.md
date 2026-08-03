@@ -182,3 +182,4 @@ First stable proof-of-concept release.
 - Symbol lookup currently scans fixed binary records.
 - No import, reference or call graph yet.
 - No direct LLM, Mapper, Runtime or Loop adapter yet.
+
