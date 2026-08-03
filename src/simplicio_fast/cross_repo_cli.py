@@ -16,9 +16,17 @@ from .cross_repo import (
 
 
 def _parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(\n        prog="simplicio-fast-cross-repo",\n        description="Validate the pinned Simplicio stack-lock against the cross-repository contract.",\n        epilog="Use --help on validate for the file and profile options.",\n    )
+    parser = argparse.ArgumentParser(
+        prog="simplicio-fast-cross-repo",
+        description="Validate the pinned Simplicio stack-lock against the cross-repository contract.",
+        epilog="Use --help on validate for the file and profile options.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
-    validate = subparsers.add_parser(\n        "validate",\n        help="validate a pinned stack-lock JSON",\n        description="Check commit pins, package versions and the selected integration profile.",\n    )
+    validate = subparsers.add_parser(
+        "validate",
+        help="validate a pinned stack-lock JSON",
+        description="Check commit pins, package versions and the selected integration profile.",
+    )
     validate.add_argument("--file", required=True, type=Path)
     validate.add_argument("--profile", choices=("loop-standalone", "runtime-backed"))
     return parser
