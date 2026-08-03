@@ -740,7 +740,12 @@ class DeliveryEngineTest(unittest.TestCase):
             }
             engine = DeliveryEngine(root, snapshot)
             with patch.dict(
-                os.environ, {"SIMPLICIO_RUNTIME_OFFLINE": "1"}, clear=False
+                os.environ,
+                {
+                    "SIMPLICIO_RUNTIME_OFFLINE": "1",
+                    "SIMPLICIO_DEV_CLI_NO_RUNTIME_EDIT": "1",
+                },
+                clear=False,
             ):
                 receipt = engine.deliver(
                     changeset,
