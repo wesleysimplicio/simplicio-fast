@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import time
 from threading import RLock
 from typing import Any, Mapping, Sequence
 
@@ -191,8 +192,15 @@ class ValidationCache:
                     temporary.write(_canonical(document) + b"\n")
                     temporary.flush()
                     os.fsync(temporary.fileno())
-                os.replace(temporary_name, path)
-                temporary_name = None
+                for attempt in range(8):
+                    try:
+                        os.replace(temporary_name, path)
+                        temporary_name = None
+                        break
+                    except PermissionError:
+                        if attempt == 7:
+                            raise
+                        time.sleep(0.01 * (2**attempt))
             finally:
                 if temporary_name is not None:
                     Path(temporary_name).unlink(missing_ok=True)
