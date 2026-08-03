@@ -82,8 +82,40 @@ KIND_TO_ID = {
     "test": 10,
     "property": 11,
     "attribute": 12,
+    # Mapper/TS/Python emitters may use these kinds; keep snapshot build fail-open.
+    "type": 13,
+    "variable": 14,
+    "constant": 15,
+    "module": 16,
+    "method": 17,
+    "field": 18,
+    "unknown": 19,
 }
 ID_TO_KIND = {value: key for key, value in KIND_TO_ID.items()}
+
+
+def kind_to_id(kind: str) -> int:
+    """Map symbol kind to binary id; unknown kinds collapse to function (2)."""
+    if not kind:
+        return KIND_TO_ID["function"]
+    key = str(kind).strip().casefold()
+    if key in KIND_TO_ID:
+        return KIND_TO_ID[key]
+    # aliases
+    aliases = {
+        "fn": "function",
+        "func": "function",
+        "def": "function",
+        "cls": "class",
+        "typedef": "type",
+        "typealias": "type",
+        "const": "constant",
+        "var": "variable",
+    }
+    mapped = aliases.get(key)
+    if mapped and mapped in KIND_TO_ID:
+        return KIND_TO_ID[mapped]
+    return KIND_TO_ID["function"]
 RELATION_KINDS = {"import", "reference", "call", "definition", "test"}
 
 
@@ -486,7 +518,7 @@ def _build_v2(
                 file_index[symbol.file],
                 symbol.line,
                 symbol.end_line,
-                KIND_TO_ID[symbol.kind],
+                kind_to_id(symbol.kind),
                 bytes.fromhex(symbol.symbol_id),
             )
         )
