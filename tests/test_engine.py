@@ -14,6 +14,7 @@ from simplicio_fast.engine import (
     select_engine,
     validate_python_manifest,
 )
+from simplicio_fast.runtime_backend import RuntimeSelection
 from simplicio_fast.cli import main
 
 
@@ -123,6 +124,49 @@ class EngineSelectionTest(unittest.TestCase):
             main()
         payload = json.loads(output.getvalue())
         self.assertEqual("python", payload["engine"]["selected"])
+
+    def test_cli_bridges_runtime_selection_without_legacy_session(self) -> None:
+        output = io.StringIO()
+
+        class FakeBackend:
+            def __init__(self) -> None:
+                self.operation = None
+                self.payload = None
+
+            def call(self, operation, payload, *, cancel_event=None):
+                self.operation = operation
+                self.payload = payload
+                return {"matches": [{"name": "save"}]}
+
+        backend = FakeBackend()
+        selection = RuntimeSelection("rust", "rust", None, backend=backend)
+        with (
+            patch.object(
+                sys,
+                "argv",
+                [
+                    "simplicio-fast",
+                    "query",
+                    "save",
+                    "--snapshot",
+                    "snapshot.sfast",
+                    "--fast-engine",
+                    "rust",
+                ],
+            ),
+            patch("simplicio_fast.cli.select_engine", return_value=selection),
+            patch(
+                "simplicio_fast.cli.RustCoreSession",
+                side_effect=AssertionError("legacy RustCoreSession must not be used"),
+            ),
+            contextlib.redirect_stdout(output),
+        ):
+            main()
+        payload = json.loads(output.getvalue())
+        self.assertEqual("simplicio.fast.query/v1", payload["schema"])
+        self.assertEqual("hbp-stdio", payload["transport"])
+        self.assertEqual("query", backend.operation)
+        self.assertEqual(50, backend.payload["limit"])
 
     def test_cli_bridges_rust_query_without_importing_python_snapshot(self) -> None:
         output = io.StringIO()
