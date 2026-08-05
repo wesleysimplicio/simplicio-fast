@@ -5,13 +5,14 @@ import json
 import os
 import re
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from .integrations import run_dev_cli_changeset, run_mapper
 from .snapshot import ContextSpan, Snapshot, build_snapshot
 from .snapshot import DEFAULT_MAX_SOURCE_FILE_BYTES
+from .semantic_scoring import SemanticBudgets, SemanticScorer, SourceDocument
 
 STOP_WORDS = {
     "a",
@@ -37,7 +38,6 @@ STOP_WORDS = {
     "with",
     "criar",
     "de",
-    "do",
     "da",
     "e",
     "em",
@@ -51,6 +51,22 @@ STOP_WORDS = {
 }
 
 
+STRUCTURAL_NOISE = STOP_WORDS | {
+    "against",
+    "benchmark",
+    "check",
+    "compare",
+    "ensure",
+    "measure",
+    "reference",
+    "run",
+    "through",
+    "validate",
+}
+IDENTIFIER_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9]*")
+MAX_CONTEXT_CANDIDATES = 128
+
+
 @dataclass(frozen=True, slots=True)
 class Understanding:
     schema: str
@@ -59,6 +75,7 @@ class Understanding:
     files: list[str]
     symbols: list[str]
     context: list[ContextSpan]
+    selection: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,6 +95,21 @@ class PreparedChange:
     original: bytes
     updated: bytes
     replacements: int
+
+
+def _identifier_terms(value: str) -> list[str]:
+    expanded = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)
+    return [token.casefold() for token in IDENTIFIER_TOKEN.findall(expanded)]
+
+
+def _task_index_terms(task: str) -> list[str]:
+    return list(
+        dict.fromkeys(
+            token
+            for token in _identifier_terms(task)
+            if len(token) >= 2 and token not in STRUCTURAL_NOISE
+        )
+    )
 
 
 def task_terms(task: str) -> list[str]:
@@ -116,60 +148,256 @@ class ProjectProcessor:
             ),
         }
 
+    @staticmethod
+    def _symbol_key(symbol: Any) -> str:
+        return (
+            symbol.symbol_id or f"{symbol.qualified_name}|{symbol.file}|{symbol.line}"
+        )
+
+    @staticmethod
+    def _span_key(span: ContextSpan) -> str:
+        return span.symbol_id or f"{span.symbol}|{span.file}|{span.start_line}"
+
+    @staticmethod
+    def _structural_score(
+        symbol: Any, terms: set[str]
+    ) -> tuple[float, tuple[str, ...]]:
+        name_terms = set(_identifier_terms(symbol.name))
+        searchable = {
+            token
+            for value in (
+                symbol.name,
+                symbol.qualified_name,
+                symbol.file,
+                symbol.signature,
+            )
+            for token in _identifier_terms(value)
+        }
+        matched = tuple(sorted(terms.intersection(searchable)))
+        if not matched:
+            return 0.0, ()
+        name_ratio = len(terms.intersection(name_terms)) / max(1, len(matched))
+        coverage = min(1.0, len(matched) / max(1, min(4, len(terms))))
+        kind_bonus = (
+            1.0 if symbol.kind in {"class", "function", "async_function"} else 0.0
+        )
+        score = min(
+            1.0,
+            0.35 + 0.30 * coverage + 0.20 * min(1.0, name_ratio) + 0.15 * kind_bonus,
+        )
+        return score, matched
+
+    def _legacy_context(
+        self,
+        snapshot: Snapshot,
+        terms: list[str],
+        *,
+        max_results: int,
+        max_bytes: int,
+    ) -> list[ContextSpan]:
+        contexts: list[ContextSpan] = []
+        seen: set[tuple[str, int, int]] = set()
+        remaining = max_bytes
+        for term in terms:
+            if remaining <= 0 or len(contexts) >= max_results:
+                break
+            matches = snapshot.context(
+                self.root,
+                term,
+                max_results=max_results - len(contexts),
+                max_bytes=remaining,
+            )
+            for match in matches:
+                key = (match.file, match.start_line, match.end_line)
+                if key in seen:
+                    continue
+                seen.add(key)
+                contexts.append(match)
+                remaining -= len(match.content.encode())
+                if remaining <= 0 or len(contexts) >= max_results:
+                    break
+        if contexts:
+            return contexts
+        ranked = sorted(
+            snapshot.symbols(),
+            key=lambda item: (
+                0 if item.kind == "class" else 1,
+                len(item.qualified_name),
+                item.file,
+            ),
+        )
+        for symbol in ranked[: min(max_results, 5)]:
+            for match in snapshot.context(
+                self.root,
+                symbol.qualified_name,
+                max_results=1,
+                max_bytes=max(1, remaining),
+            ):
+                key = (match.file, match.start_line, match.end_line)
+                if key not in seen:
+                    seen.add(key)
+                    contexts.append(match)
+                    remaining -= len(match.content.encode())
+        return contexts
+
+    def _semantic_context(
+        self,
+        snapshot: Snapshot,
+        task: str,
+        *,
+        max_results: int,
+        max_bytes: int,
+    ) -> tuple[list[ContextSpan], dict[str, Any]]:
+        terms = _task_index_terms(task)
+        receipt: dict[str, Any] = {
+            "schema": "simplicio.fast.semantic-ranking-receipt/v1",
+            "selection_mode": "structural-semantic",
+            "requested_mode": "semantic",
+            "generation": snapshot.generation,
+            "candidate_terms": terms,
+        }
+        if not terms:
+            return [], {
+                **receipt,
+                "selection_mode": "legacy-regex",
+                "fallback": {"used": True, "reason_code": "NO_STRUCTURAL_TERMS"},
+            }
+        records: dict[str, dict[str, Any]] = {}
+        term_set = set(terms)
+        for term in terms:
+            for symbol in snapshot.search(term):
+                score, matched = self._structural_score(symbol, term_set)
+                if not matched:
+                    continue
+                key = self._symbol_key(symbol)
+                record = records.setdefault(
+                    key,
+                    {
+                        "symbol": symbol,
+                        "structural_score": score,
+                        "matched_terms": set(),
+                    },
+                )
+                record["structural_score"] = max(record["structural_score"], score)
+                record["matched_terms"].update(matched)
+        ranked_records = sorted(
+            records.values(),
+            key=lambda item: (
+                -item["structural_score"],
+                -len(item["matched_terms"]),
+                item["symbol"].qualified_name,
+                item["symbol"].file,
+            ),
+        )[:MAX_CONTEXT_CANDIDATES]
+        if not ranked_records:
+            return [], {
+                **receipt,
+                "selection_mode": "legacy-regex",
+                "candidate_count": 0,
+                "fallback": {"used": True, "reason_code": "NO_STRUCTURAL_CANDIDATES"},
+            }
+        spans = snapshot.context_many(
+            self.root,
+            [item["symbol"].qualified_name for item in ranked_records],
+            max_results=MAX_CONTEXT_CANDIDATES,
+            max_bytes=max_bytes,
+        )
+        records_by_span = {
+            self._symbol_key(item["symbol"]): item for item in ranked_records
+        }
+        documents: list[SourceDocument] = []
+        spans_by_id: dict[str, ContextSpan] = {}
+        explanations: dict[str, dict[str, Any]] = {}
+        for span in spans:
+            record = records_by_span.get(self._span_key(span))
+            if record is None:
+                continue
+            canonical_id = f"{self._span_key(span)}:{span.end_line}"
+            documents.append(
+                SourceDocument.create(
+                    canonical_id,
+                    span.content,
+                    structural_score=float(record["structural_score"]),
+                )
+            )
+            spans_by_id[canonical_id] = span
+            explanations[canonical_id] = {
+                "symbol": span.symbol,
+                "file": span.file,
+                "matched_terms": sorted(record["matched_terms"]),
+                "structural_score": record["structural_score"],
+            }
+        if not documents:
+            return [], {
+                **receipt,
+                "candidate_count": len(ranked_records),
+                "abstention": {
+                    "abstained": True,
+                    "reason": "NO_CONTEXT_FOR_CANDIDATES",
+                },
+            }
+        budgets = SemanticBudgets(
+            max_candidates=len(documents),
+            max_selected=min(max_results, len(documents)),
+            max_request_bytes=max(256_000, max_bytes + len(task.encode("utf-8"))),
+            max_selected_tokens=max(1, max_bytes // 4),
+        )
+        ranking = SemanticScorer(budgets=budgets).score(
+            generation=snapshot.generation,
+            query=task,
+            candidates=documents,
+        )
+        selected_ids = {item["canonical_id"] for item in ranking["selected"]}
+        for result in ranking["results"]:
+            detail = explanations[result["canonical_id"]]
+            result["matched_terms"] = detail["matched_terms"]
+            result["selection_reason"] = (
+                "selected"
+                if result["canonical_id"] in selected_ids
+                else f"rejected:{result.get('reason', 'lower_score')}"
+            )
+        ranking["selection_mode"] = "structural-semantic"
+        ranking["requested_mode"] = "semantic"
+        ranking["candidate_terms"] = terms
+        ranking["candidate_explanations"] = explanations
+        return [
+            spans_by_id[item["canonical_id"]] for item in ranking["selected"]
+        ], ranking
+
     def understand(
         self,
         task: str,
         *,
         max_results: int = 12,
         max_bytes: int = 48_000,
+        selection_mode: str = "semantic",
     ) -> Understanding:
+        if selection_mode not in {"semantic", "legacy-regex"}:
+            raise ValueError("selection_mode must be semantic or legacy-regex")
         if not self.snapshot_path.exists():
             self.ingest()
         terms = task_terms(task)
-        contexts: list[ContextSpan] = []
-        seen: set[tuple[str, int, int]] = set()
-        remaining = max_bytes
         with Snapshot(self.snapshot_path) as snapshot:
-            symbols = snapshot.symbols()
-            for term in terms:
-                if remaining <= 0 or len(contexts) >= max_results:
-                    break
-                matches = snapshot.context(
-                    self.root,
-                    term,
-                    max_results=max_results - len(contexts),
-                    max_bytes=remaining,
+            if selection_mode == "legacy-regex":
+                contexts = self._legacy_context(
+                    snapshot, terms, max_results=max_results, max_bytes=max_bytes
                 )
-                for match in matches:
-                    key = (match.file, match.start_line, match.end_line)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    contexts.append(match)
-                    remaining -= len(match.content.encode())
-                    if remaining <= 0 or len(contexts) >= max_results:
-                        break
-            if not contexts:
-                ranked = sorted(
-                    symbols,
-                    key=lambda item: (
-                        0 if item.kind == "class" else 1,
-                        len(item.qualified_name),
-                        item.file,
-                    ),
+                selection = {
+                    "schema": "simplicio.fast.semantic-ranking-receipt/v1",
+                    "selection_mode": "legacy-regex",
+                    "requested_mode": selection_mode,
+                    "generation": snapshot.generation,
+                    "fallback": {"used": True, "reason_code": "EXPLICIT_LEGACY_MODE"},
+                }
+            else:
+                contexts, selection = self._semantic_context(
+                    snapshot, task, max_results=max_results, max_bytes=max_bytes
                 )
-                for symbol in ranked[: min(max_results, 5)]:
-                    for match in snapshot.context(
-                        self.root,
-                        symbol.qualified_name,
-                        max_results=1,
-                        max_bytes=max(1, remaining),
-                    ):
-                        key = (match.file, match.start_line, match.end_line)
-                        if key not in seen:
-                            seen.add(key)
-                            contexts.append(match)
-                            remaining -= len(match.content.encode())
+                if selection.get("selection_mode") == "legacy-regex":
+                    contexts = self._legacy_context(
+                        snapshot, terms, max_results=max_results, max_bytes=max_bytes
+                    )
+                    selection["requested_mode"] = selection_mode
         return Understanding(
             schema="simplicio.fast.understanding/v2",
             task=task,
@@ -177,10 +405,19 @@ class ProjectProcessor:
             files=sorted({item.file for item in contexts}),
             symbols=[item.symbol for item in contexts],
             context=contexts,
+            selection=selection,
         )
 
-    def plan(self, task: str, *, max_bytes: int = 48_000) -> dict[str, Any]:
-        understanding = self.understand(task, max_bytes=max_bytes)
+    def plan(
+        self,
+        task: str,
+        *,
+        max_bytes: int = 48_000,
+        selection_mode: str = "semantic",
+    ) -> dict[str, Any]:
+        understanding = self.understand(
+            task, max_bytes=max_bytes, selection_mode=selection_mode
+        )
         source_hashes = {
             item.file: item.source_sha256 for item in understanding.context
         }
@@ -195,6 +432,7 @@ class ProjectProcessor:
                     "files": understanding.files,
                     "symbols": understanding.symbols,
                     "source_hashes": source_hashes,
+                    "selection": understanding.selection,
                 },
                 ["context spans are current and bounded"],
             ),
@@ -205,6 +443,7 @@ class ProjectProcessor:
                 {
                     "allowed_files": understanding.files,
                     "required_hashes": source_hashes,
+                    "selection": understanding.selection,
                     "format": "simplicio.fast.changeset/v2",
                 },
                 [

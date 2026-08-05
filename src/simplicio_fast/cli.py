@@ -393,6 +393,11 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--root", default=".", help="repository root (default: .)")
         snapshot_argument(command)
         command.add_argument("--max-bytes", type=int, default=48_000)
+        command.add_argument(
+            "--selection-mode",
+            choices=("semantic", "legacy-regex"),
+            default="semantic",
+        )
 
     delivery = commands.add_parser(
         "delivery",
@@ -761,9 +766,23 @@ def main() -> int:
         elif args.command in {"understand", "plan"}:
             processor = ProjectProcessor(Path(args.root), Path(args.snapshot))
             if args.command == "understand":
-                emit(asdict(processor.understand(args.task, max_bytes=args.max_bytes)))
+                emit(
+                    asdict(
+                        processor.understand(
+                            args.task,
+                            max_bytes=args.max_bytes,
+                            selection_mode=args.selection_mode,
+                        )
+                    )
+                )
             else:
-                emit(processor.plan(args.task, max_bytes=args.max_bytes))
+                emit(
+                    processor.plan(
+                        args.task,
+                        max_bytes=args.max_bytes,
+                        selection_mode=args.selection_mode,
+                    )
+                )
         elif args.command == "delivery":
             delivery_engine = DeliveryEngine(
                 Path(args.root),
@@ -878,7 +897,9 @@ def main() -> int:
                     )
                     receipt = materialize(changeset, Path(args.root), journal)
                     emit(receipt)
-                    return 0 if receipt.get("status") in {"applied", "idempotent"} else 1
+                    return (
+                        0 if receipt.get("status") in {"applied", "idempotent"} else 1
+                    )
             elif action == "reconcile":
                 changeset = read_binary(Path(args.binary))
                 journal = BinaryChangeJournal(
@@ -1210,15 +1231,14 @@ def main() -> int:
             )
         elif args.command == "parser-payload":
             root = Path(args.root).resolve()
-            handoff = json.loads(
-                Path(args.mapper_handoff).read_text(encoding="utf-8")
-            )
+            handoff = json.loads(Path(args.mapper_handoff).read_text(encoding="utf-8"))
             payload = build_payload_from_mapper(root, handoff)
             if args.output:
                 output = Path(args.output).resolve()
                 output.parent.mkdir(parents=True, exist_ok=True)
                 output.write_text(
-                    json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2) + "\n",
+                    json.dumps(payload, ensure_ascii=True, sort_keys=True, indent=2)
+                    + "\n",
                     encoding="utf-8",
                 )
                 emit(
@@ -1246,8 +1266,15 @@ def main() -> int:
                         "schema": "simplicio.fast.sdk-capabilities/v1",
                         "sdk": SDK_SCHEMA,
                         "operations": [
-                            "publish", "compile_delta", "query", "query_async",
-                            "snapshot", "save", "open", "close", "context",
+                            "publish",
+                            "compile_delta",
+                            "query",
+                            "query_async",
+                            "snapshot",
+                            "save",
+                            "open",
+                            "close",
+                            "context",
                             "context_async",
                         ],
                         "support_matrix": [

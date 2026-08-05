@@ -493,6 +493,55 @@ class ProjectProcessorTest(unittest.TestCase):
             )
             self.assertEqual("crlf", second["files"][0]["newline"])
 
+    def test_semantic_selection_prefers_specific_symbols_over_generic_verbs(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            target = root / "quantized.py"
+            target.write_text(
+                "class QuantizedI8DotProduct:\n"
+                "    def validate_quantized_i8_dot_product(self, vector):\n"
+                "        return vector\n",
+                encoding="utf-8",
+            )
+            generic = root / "validators.py"
+            generic.write_text(
+                "def validate(value):\n    return bool(value)\n",
+                encoding="utf-8",
+            )
+            snapshot = root / "project.sfast"
+            processor = ProjectProcessor(root, snapshot)
+            processor.ingest()
+            task = (
+                "Validate the quantized i8 dot-product path from Tesser builtins "
+                "through Runtime FFI and benchmark AVX2 against the scalar Rust reference"
+            )
+            understanding = processor.understand(task)
+            plan = processor.plan(task)
+            self.assertIn("quantized.py", understanding.files)
+            self.assertNotIn("validators.py", understanding.files)
+            self.assertEqual(
+                "structural-semantic", understanding.selection["selection_mode"]
+            )
+            self.assertTrue(understanding.selection["selected"])
+            self.assertEqual(
+                understanding.files,
+                plan["nodes"][1]["inputs"]["allowed_files"],
+            )
+            self.assertEqual(
+                "structural-semantic",
+                plan["understanding"]["selection"]["selection_mode"],
+            )
+            self.assertEqual(
+                understanding.selection["generation"],
+                plan["understanding"]["selection"]["generation"],
+            )
+            self.assertEqual(
+                understanding.selection["candidate_terms"],
+                plan["understanding"]["selection"]["candidate_terms"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
