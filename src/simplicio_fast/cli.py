@@ -20,7 +20,12 @@ from .snapshot import (
 )
 from .adapters import capability_report
 from .workspace import MANIFEST_SCHEMA, OVERLAY_SCHEMA, WorkspaceStore
-from .engine import EngineSelection, EngineSelectionError, select_engine
+from .engine import EngineSelection, EngineSelectionError
+from .runtime_backend import (
+    RuntimeBackendError,
+    RuntimeSelection,
+    select_runtime_backend as select_engine,
+)
 from .delivery import DeliveryEngine
 from .query_planner import plan_query
 from .navigation import DIRECTIONS, RELATIONS, NavigationBudget, NavigationIndex
@@ -63,6 +68,21 @@ def emit(value: object) -> None:
     print(json.dumps(value, indent=2, ensure_ascii=True, sort_keys=True))
 
 
+def _cli_engine_receipt(
+    selection: RuntimeSelection | EngineSelection,
+) -> dict[str, object]:
+    receipt = dict(selection.receipt())
+    if isinstance(selection, RuntimeSelection):
+        receipt.update(
+            {
+                "requested": selection.requested,
+                "selected": selection.selected,
+                "reason": selection.reason_code,
+            }
+        )
+    return receipt
+
+
 def source_commit(root: Path) -> tuple[str | None, str | None]:
     """Return the checked-out commit, or a reason when root is outside Git."""
     if not (root / ".git").exists():
@@ -84,21 +104,57 @@ def source_commit(root: Path) -> tuple[str | None, str | None]:
     return commit, None
 
 
-def _rust_bridge(
-    selection: EngineSelection, args: argparse.Namespace
-) -> dict[str, object] | None:
-    """Dispatch read-only snapshot commands to a proven Rust executable.
+def _runtime_bridge_request(args: argparse.Namespace) -> tuple[str, dict[str, object], str]:
+    if args.command == "stats":
+        return "stats", {"snapshot": str(Path(args.snapshot))}, "simplicio.fast.stats/v1"
+    if args.command == "query":
+        if args.limit < 1:
+            raise ValueError("--limit must be positive")
+        return (
+            "query",
+            {
+                "snapshot": str(Path(args.snapshot)),
+                "term": args.term,
+                "limit": args.limit,
+            },
+            "simplicio.fast.query/v1",
+        )
+    if min(args.max_results, args.max_lines, args.max_bytes, args.max_tokens) < 1:
+        raise ValueError("context limits must be positive")
+    return (
+        "context",
+        {
+            "snapshot": str(Path(args.snapshot)),
+            "root": str(Path(args.root).resolve()),
+            "term": args.term,
+            "limit": args.max_results,
+            "max_lines": args.max_lines,
+            "max_bytes": args.max_bytes,
+            "max_tokens": args.max_tokens,
+        },
+        "simplicio.fast.context/v1",
+    )
 
-    Rust is deliberately limited to operations it owns today.  Snapshot
-    construction and mutations stay on the Python/Dev CLI paths until their
-    contracts are implemented by the native engine.
-    """
+
+def _rust_bridge(
+    selection: RuntimeSelection | EngineSelection, args: argparse.Namespace
+) -> dict[str, object] | None:
+    """Dispatch read-only snapshot commands through the admitted backend."""
     if selection.selected != "rust" or args.command not in {
         "stats",
         "query",
         "context",
     }:
         return None
+    operation, payload, expected_schema = _runtime_bridge_request(args)
+    if isinstance(selection, RuntimeSelection):
+        result = selection.execute(operation, payload)
+        return {
+            "schema": expected_schema,
+            "engine": "rust",
+            "transport": "hbp-stdio",
+            **result,
+        }
     executable = selection.executable
     if not executable:
         raise EngineSelectionError(
@@ -111,34 +167,6 @@ def _rust_bridge(
                 "manifest": selection.manifest,
             }
         )
-    if args.command == "stats":
-        operation = "stats"
-        payload = {"snapshot": str(Path(args.snapshot))}
-        expected_schema = "simplicio.fast.stats/v1"
-    elif args.command == "query":
-        if args.limit < 1:
-            raise ValueError("--limit must be positive")
-        operation = "query"
-        payload = {
-            "snapshot": str(Path(args.snapshot)),
-            "term": args.term,
-            "limit": args.limit,
-        }
-        expected_schema = "simplicio.fast.query/v1"
-    else:
-        if min(args.max_results, args.max_lines, args.max_bytes, args.max_tokens) < 1:
-            raise ValueError("context limits must be positive")
-        operation = "context"
-        payload = {
-            "snapshot": str(Path(args.snapshot)),
-            "root": str(Path(args.root).resolve()),
-            "term": args.term,
-            "limit": args.max_results,
-            "max_lines": args.max_lines,
-            "max_bytes": args.max_bytes,
-            "max_tokens": args.max_tokens,
-        }
-        expected_schema = "simplicio.fast.context/v1"
     try:
         key = str(Path(executable).resolve())
         session = _RUST_SESSIONS.get(key)
@@ -756,7 +784,7 @@ def main() -> int:
                     delivery_engine.deliver(
                         load_changeset(Path(args.changeset)),
                         profile=args.profile,
-                        engine_receipt=selection.receipt(),
+                        engine_receipt=_cli_engine_receipt(selection),
                         write=args.write,
                         idempotency_key=args.idempotency_key,
                         runtime_transaction=runtime_transaction,
@@ -767,7 +795,7 @@ def main() -> int:
                     delivery_engine.prepare(
                         args.task,
                         profile=args.profile,
-                        engine_receipt=selection.receipt(),
+                        engine_receipt=_cli_engine_receipt(selection),
                         mode=args.mapper_mode,
                         mapper_handoff=(
                             json.loads(
@@ -1209,8 +1237,8 @@ def main() -> int:
             emit(
                 {
                     "schema": "simplicio.fast.capabilities/v1",
-                    "engine": selection.receipt(),
-                    "engine_manifest": selection.manifest,
+                    "engine": _cli_engine_receipt(selection),
+                    "engine_manifest": _cli_engine_receipt(selection),
                     "capabilities": [asdict(item) for item in capability_report()],
                     "parser_adapter": adapter_capability(),
                     "semantic_scoring": semantic_capabilities(),
@@ -1278,6 +1306,13 @@ def main() -> int:
             "error": type(error).__name__,
             "message": str(error),
         }
+        if isinstance(error, RuntimeBackendError):
+            payload.update(
+                {
+                    "reason_code": error.reason_code,
+                    "detail": error.detail,
+                }
+            )
         if isinstance(error, SnapshotBuildTimeout):
             payload.update(
                 {
