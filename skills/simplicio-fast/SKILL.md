@@ -5,6 +5,13 @@ description: Accelerate Simplicio retrieval with indexed search, ranking, cache,
 
 # Simplicio Fast
 
+## Worker preflight and centralized artifact policy
+
+Before using Fast, every worker reads `AGENTS.md`, `CLAUDE.md`, and all relevant local skills. Fast workers consume one read-only binary/artifact set built from the canonical default branch; they must not rebuild binaries or regenerate canonical Mapper/Fast artifacts. Worktrees isolate source edits and receipts only. Every result/receipt records repository/revision, binary digest/version, Mapper generation, and artifact digest. Missing, stale, incompatible, or mismatched central artifacts fail closed and trigger the central rebuild path only.
+
+Fast remains read-only acceleration over Mapper; it never repairs central artifacts locally or substitutes fabricated context.
+
+
 Use Fast as an acceleration layer over Mapper's canonical survey data. Prefer it when an index is compatible with the requested repository revision and scope. Read `references/capabilities.yaml` and `references/interfaces.md` before using an unfamiliar operation.
 
 ## Complete interface map

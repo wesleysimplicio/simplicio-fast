@@ -1,6 +1,11 @@
 # CLAUDE.md
 
 Use [`AGENTS.md`](AGENTS.md) as the canonical repository contract.
+
+Before any operation, every subagent/worker reads `AGENTS.md`, this `CLAUDE.md`, and all relevant local skills. The minimum Fast set is `skills/simplicio-prism/SKILL.md` and `skills/simplicio-fast/SKILL.md`; task-specific local skills are loaded before mutation.
+
+Workers use one read-only binary/artifact set built from the canonical default branch. They do not rebuild binaries or regenerate canonical Mapper/Fast artifacts. Worktrees isolate source edits and receipts only. Receipts include repository/revision, binary digest/version, Mapper generation, and artifact digest. Missing, stale, or mismatched central artifacts fail closed and invoke the central rebuild path only.
+
 Use [`docs/CLI_COMMANDS.md`](docs/CLI_COMMANDS.md) as the complete feature and
 command index. Before executing a public operation, run:
 
