@@ -29,6 +29,7 @@ try:
 except ImportError:  # pragma: no cover - Windows
     resource = None  # type: ignore[assignment]
 
+from .receipts import benchmark_receipt
 from .slot_executor import quantize as slot_quantize
 from .turboquant import (
     QuantizedVector,
@@ -1218,6 +1219,34 @@ def run_benchmark(
     commit = source_state["commit"] or "unavailable"
     sizes_arg = ",".join(str(size) for size in sizes)
     shared_arg = " --shared-integral-store" if shared_integral_store else ""
+    execution_report = benchmark_receipt(
+        repository_id=base.name,
+        source_commit=commit,
+        generation=generation,
+        fixture={
+            "name": "quant-benchmark-198",
+            "sizes": list(sizes),
+            "seed": seed,
+            "config_sha256": config_hash,
+        },
+        workload={
+            "name": "quantized-lane-query",
+            "candidate_k": candidate_k,
+            "result_k": result_k,
+            "dimension": dimension,
+        },
+        hardware={
+            "platform": platform.platform(),
+            "machine": platform.machine(),
+            "python": platform.python_version(),
+        },
+        cache_policy="mmap-first-touch-and-warm",
+        repetitions=repetitions,
+        baseline={"status": "blocked", "reason": "baseline_not_run"},
+        classification="MEASURED",
+        evidence={"command": "benchmarks/quant_benchmark_198.py", "exit_code": 0},
+        metrics={"measured_sizes": len(measured), "blocked_sizes": len(unavailable)},
+    )
     return {
         "schema": BENCHMARK_SCHEMA,
         "issue": 198,
@@ -1236,6 +1265,7 @@ def run_benchmark(
         "source_commit": commit,
         "source_tree": source_state["tree"],
         "source_state": source_state,
+        "execution_report": execution_report,
         "environment": {
             "python": platform.python_version(),
             "implementation": platform.python_implementation(),

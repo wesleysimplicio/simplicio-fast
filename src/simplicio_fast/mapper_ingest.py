@@ -61,11 +61,18 @@ def _head(root: Path) -> str:
     return commit
 
 
-def validate_handoff(root: Path, envelope: dict[str, Any]) -> dict[str, Any]:
+def validate_handoff(
+    root: Path,
+    envelope: dict[str, Any],
+    *,
+    expected_generation: str | None = None,
+) -> dict[str, Any]:
     """Validate a real ``simplicio-mapper fast-handoff`` JSON envelope.
 
     The adapter only consumes documented metadata and artifact digests. It does
-    not reinterpret Mapper graph nodes or manufacture stable IDs.
+    not reinterpret Mapper graph nodes or manufacture stable IDs. When a caller
+    pins a generation, the pin is part of the interface and stale handoffs are
+    rejected before Fast compiles or reads a snapshot.
     """
     if not isinstance(envelope, dict):
         raise MapperIngestError("mapper_schema_unsupported")
@@ -85,9 +92,20 @@ def validate_handoff(root: Path, envelope: dict[str, Any]) -> dict[str, Any]:
         raise MapperIngestError("mapper_repository_mismatch")
     revision = handoff.get("revision")
     if revision != _head(root):
-        raise MapperIngestError("mapper_commit_mismatch")
+        raise MapperIngestError(
+            "mapper_commit_mismatch",
+            "Mapper handoff is stale for this checkout; run simplicio-fast refresh",
+        )
     generation = handoff.get("generation")
     if not isinstance(generation, str) or not generation.strip():
+        raise MapperIngestError("mapper_generation_stale")
+    if expected_generation is not None and generation != expected_generation:
+        raise MapperIngestError(
+            "mapper_generation_stale",
+            f"expected={expected_generation} actual={generation}; refresh Mapper context",
+        )
+    receipt_generation = receipt.get("generation")
+    if receipt_generation is not None and receipt_generation != generation:
         raise MapperIngestError("mapper_generation_stale")
     producer = handoff.get("producer")
     if producer is not None and (
