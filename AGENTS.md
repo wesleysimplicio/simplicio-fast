@@ -4,6 +4,13 @@
 
 This repository is one component of the Simplicio ecosystem. For every non-trivial task: run `simplicio runtime map --repo . --for-llm markdown`, then `simplicio memory "<task>"`, rank/load relevant skills, execute through the native `simplicio` CLI, validate, and record evidence. MCP is fallback transport only.
 
+## Worker startup and centralized artifacts (mandatory)
+
+Every subagent, worker, and provider session MUST read `AGENTS.md`, `CLAUDE.md`, and every relevant local skill before operating. For Fast work, the baseline skills are `skills/simplicio-prism/SKILL.md` and `skills/simplicio-fast/SKILL.md`; load any additional task-selected local skills before mutation.
+
+The canonical default branch owns one centrally built binary/artifact set. Workers consume that binary read-only; they MUST NOT rebuild binaries or regenerate canonical Mapper/Fast artifacts. Worktrees isolate source edits and receipts only. Every receipt/handoff MUST record repository and revision, binary digest/version, Mapper generation and artifact digest. Missing, stale, incompatible, or mismatched central artifacts fail closed and route to the central rebuild path only; a worker may not repair them locally or fall back to fabricated/uncertified context.
+
+
 ### Boundaries and handoff
 `simplicio-mapper` observes and emits bounded context; `simplicio-fast` owns snapshots/mmap/PlanDAG; `simplicio-dev-cli` owns focused implementation plans and deterministic edits; `simplicio-runtime` owns contracts, gates, validation and receipts; `simplicio-loop` owns convergence, journals, watcher/close-gates and learning; `simplicio-agent` owns the control plane and conversation. Providers are workers, never authorities.
 
