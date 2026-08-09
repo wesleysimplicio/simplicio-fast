@@ -460,5 +460,52 @@ class SnapshotTest(unittest.TestCase):
             self.assertEqual(before, output.read_bytes())
 
 
+    def test_v1_snapshot_survives_failed_v2_publish_and_migrates(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.py").write_text("class New: pass\n", encoding="utf-8")
+            strings = b"sample.pyA"
+            files_offset = LEGACY_HEADER.size
+            symbols_offset = files_offset + LEGACY_FILE_RECORD.size
+            strings_offset = symbols_offset + LEGACY_SYMBOL_RECORD.size
+            payload = bytearray(strings_offset + len(strings))
+            LEGACY_HEADER.pack_into(
+                payload,
+                0,
+                MAGIC,
+                1,
+                1,
+                1,
+                files_offset,
+                symbols_offset,
+                strings_offset,
+                len(payload),
+            )
+            LEGACY_FILE_RECORD.pack_into(
+                payload, files_offset, 0, 9, 1, 0, hashlib.sha256(b"x").digest()
+            )
+            LEGACY_SYMBOL_RECORD.pack_into(payload, symbols_offset, 9, 1, 0, 1, 1, 2)
+            payload[strings_offset:] = strings
+            output = root / "project.sfast"
+            output.write_bytes(payload)
+            before = output.read_bytes()
+
+            with patch.object(
+                snapshot_module, "_build_v2", side_effect=RuntimeError("publish failed")
+            ):
+                with self.assertRaises(RuntimeError):
+                    build_snapshot(root, output)
+
+            self.assertEqual(before, output.read_bytes())
+            with Snapshot(output) as snapshot:
+                self.assertEqual(1, snapshot.format_version)
+                self.assertEqual("A", snapshot.find_exact("A")[0].name)
+
+            metrics = build_snapshot(root, output)
+            self.assertEqual(2, metrics.format_version)
+            with Snapshot(output) as snapshot:
+                self.assertEqual(2, snapshot.format_version)
+                self.assertEqual("SFAST001/v2", snapshot.stats()["format"])
+
 if __name__ == "__main__":
     unittest.main()
