@@ -97,14 +97,25 @@ class PreparedChange:
     replacements: int
 
 
-def _context_handle(span: ContextSpan) -> str:
-    """Return the opaque handle exposed by PlanDAG context consumers."""
+def _context_handle_id(span: ContextSpan) -> str:
+    """Return the stable opaque ID for a PlanDAG context handle."""
     if span.symbol_id:
         return span.symbol_id
     identity = "|".join(
         (span.file, str(span.start_line), str(span.end_line), span.source_sha256)
     )
     return "context:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
+def _context_handle(span: ContextSpan, generation: str) -> dict[str, Any]:
+    """Return Mapper-bound lineage needed to reject stale context."""
+    return {
+        "handle": _context_handle_id(span),
+        "generation": generation,
+        "base_generation": span.base_generation or generation,
+        "overlay_generation": span.overlay_generation,
+        "source_sha256": span.source_sha256,
+    }
 
 
 def _identifier_terms(value: str) -> list[str]:
@@ -428,8 +439,9 @@ class ProjectProcessor:
         understanding = self.understand(
             task, max_bytes=max_bytes, selection_mode=selection_mode
         )
+        generation = str(understanding.selection.get("generation") or "")
         context_handles = [
-            _context_handle(item) for item in understanding.context
+            _context_handle(item, generation) for item in understanding.context
         ]
         source_hashes = {
             item.file: item.source_sha256 for item in understanding.context
