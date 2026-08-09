@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.0.25 - 2026-08-08
+
+- Enforce centralized Mapper/Fast artifact generations, source digests, and
+  evidence receipts across worker handoffs.
+- Route the Fast CLI through the governed Runtime backend and harden
+  artifact and resident-session integrity.
+- Improve task-anchor context ranking and publish the project skills and
+  capability inventory used by integrated agents.
+- Preserve the published Mapper 0.26.x and Dev CLI 0.18.6+ floors for the optional integrated profile.
+
+## 2.0.24 - 2026-08-03
+
+- Accept Mapper type and method symbol kinds without crashing snapshot builds.
+
 ## 2.0.23 - 2026-08-02
 
 - Publish the complete LLM-facing Fast command and feature index, including
