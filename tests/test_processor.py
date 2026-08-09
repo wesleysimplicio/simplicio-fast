@@ -71,6 +71,22 @@ class ProjectProcessorTest(unittest.TestCase):
             self.assertEqual("write", written["mode"])
             self.assertIn("return name.strip()", source.read_text())
 
+    def test_plan_exposes_context_handles_without_internal_spans(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "service.py").write_text(
+                "def ping():\n    return True\n", encoding="utf-8"
+            )
+            processor = ProjectProcessor(root, root / "project.sfast")
+            plan = processor.plan("validate ping")
+
+            handles = plan["context_handles"]
+            self.assertTrue(handles)
+            self.assertEqual(handles, plan["understanding"]["context_handles"])
+            self.assertNotIn("context", plan["understanding"])
+            for node in plan["nodes"][:2]:
+                self.assertEqual(handles, node["inputs"]["context_handles"])
+
     def test_rejects_stale_changeset(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

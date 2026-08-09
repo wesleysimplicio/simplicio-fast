@@ -97,6 +97,16 @@ class PreparedChange:
     replacements: int
 
 
+def _context_handle(span: ContextSpan) -> str:
+    """Return the opaque handle exposed by PlanDAG context consumers."""
+    if span.symbol_id:
+        return span.symbol_id
+    identity = "|".join(
+        (span.file, str(span.start_line), str(span.end_line), span.source_sha256)
+    )
+    return "context:" + hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
 def _identifier_terms(value: str) -> list[str]:
     expanded = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", value)
     return [token.casefold() for token in IDENTIFIER_TOKEN.findall(expanded)]
@@ -418,6 +428,9 @@ class ProjectProcessor:
         understanding = self.understand(
             task, max_bytes=max_bytes, selection_mode=selection_mode
         )
+        context_handles = [
+            _context_handle(item) for item in understanding.context
+        ]
         source_hashes = {
             item.file: item.source_sha256 for item in understanding.context
         }
@@ -431,10 +444,11 @@ class ProjectProcessor:
                     "task": task,
                     "files": understanding.files,
                     "symbols": understanding.symbols,
+                    "context_handles": context_handles,
                     "source_hashes": source_hashes,
                     "selection": understanding.selection,
                 },
-                ["context spans are current and bounded"],
+                ["context handles identify current bounded spans"],
             ),
             PlanNode(
                 "modify",
@@ -442,6 +456,7 @@ class ProjectProcessor:
                 ["orient"],
                 {
                     "allowed_files": understanding.files,
+                    "context_handles": context_handles,
                     "required_hashes": source_hashes,
                     "selection": understanding.selection,
                     "format": "simplicio.fast.changeset/v2",
@@ -466,11 +481,21 @@ class ProjectProcessor:
                 ["changed files are visible in the next snapshot generation"],
             ),
         ]
+        plan_understanding = {
+            "schema": understanding.schema,
+            "task": understanding.task,
+            "terms": understanding.terms,
+            "files": understanding.files,
+            "symbols": understanding.symbols,
+            "context_handles": context_handles,
+            "selection": understanding.selection,
+        }
         return {
             "schema": "simplicio.fast.plandag/v2",
             "task": task,
             "root": str(self.root),
-            "understanding": asdict(understanding),
+            "context_handles": context_handles,
+            "understanding": plan_understanding,
             "nodes": [asdict(node) for node in nodes],
         }
 
