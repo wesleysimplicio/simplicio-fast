@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.27] - 2026-08-10
+
+- Synchronize the Fast release with the aggregate Loop stack.
+
+
 ## [2.0.26] - 2026-08-10
 
 - Add the shared `simplicio.io/v1` envelope and document Fast retrieval-only responsibility.
