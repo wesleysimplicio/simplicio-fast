@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.26] - 2026-08-10
+
+- Add the shared `simplicio.io/v1` envelope and document Fast retrieval-only responsibility.
+
+
 ## 2.0.25 - 2026-08-08
 
 - Enforce centralized Mapper/Fast artifact generations, source digests, and
