@@ -391,12 +391,13 @@ class ProjectProcessor:
         *,
         max_results: int = 12,
         max_bytes: int = 48_000,
+        max_file_bytes: int = DEFAULT_MAX_SOURCE_FILE_BYTES,
         selection_mode: str = "semantic",
     ) -> Understanding:
         if selection_mode not in {"semantic", "legacy-regex"}:
             raise ValueError("selection_mode must be semantic or legacy-regex")
         if not self.snapshot_path.exists():
-            self.ingest()
+            self.ingest(max_file_bytes=max_file_bytes)
         terms = task_terms(task)
         with Snapshot(self.snapshot_path) as snapshot:
             if selection_mode == "legacy-regex":
@@ -434,10 +435,14 @@ class ProjectProcessor:
         task: str,
         *,
         max_bytes: int = 48_000,
+        max_file_bytes: int = DEFAULT_MAX_SOURCE_FILE_BYTES,
         selection_mode: str = "semantic",
     ) -> dict[str, Any]:
         understanding = self.understand(
-            task, max_bytes=max_bytes, selection_mode=selection_mode
+            task,
+            max_bytes=max_bytes,
+            max_file_bytes=max_file_bytes,
+            selection_mode=selection_mode,
         )
         generation = str(understanding.selection.get("generation") or "")
         context_handles = [

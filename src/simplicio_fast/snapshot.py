@@ -47,7 +47,7 @@ def _atomic_publish(temporary: Path, destination: Path) -> None:
             time.sleep(ATOMIC_PUBLISH_DELAY_SECONDS * (attempt + 1))
 
 
-DEFAULT_MAX_SOURCE_FILE_BYTES = 8 * 1024 * 1024
+DEFAULT_MAX_SOURCE_FILE_BYTES = 80 * 1024 * 1024  # 83_886_080; override with --max-file-bytes
 DEFAULT_BUILD_TIMEOUT_SECONDS = 180.0
 VALIDATION_CACHE_SCHEMA = "simplicio.fast.validation-cache/v1"
 # A metadata-only hit immediately after publication is unsafe on filesystems
