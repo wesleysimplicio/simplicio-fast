@@ -443,7 +443,7 @@ class ProjectProcessorTest(unittest.TestCase):
             snapshot = root / "project.sfast"
             processor = ProjectProcessor(root, snapshot)
             with patch.object(
-                processor, "ingest", side_effect=lambda: build_snapshot(root, snapshot)
+                processor, "ingest", side_effect=lambda **_kwargs: build_snapshot(root, snapshot)
             ):
                 understanding = processor.understand("term-not-found", max_results=5)
             self.assertEqual("simplicio.fast.understanding/v2", understanding.schema)

@@ -64,6 +64,16 @@ Use: `simplicio-fast changeset <action> --help`.
 emits `simplicio.fast.cross-repo-receipt/v1` JSON. The operation is
 read-only and fail-closed.
 
+## Source-file size limit
+
+Snapshot build paths (`build`, `refresh`, `ingest`, and the auto-bootstrap used by
+`understand` / `plan` when no snapshot exists) reject a source file larger than
+**80 MB** (`83_886_080` bytes) by default. Raise or lower the bound per invocation
+with `--max-file-bytes` (not `--max-bytes`, which only bounds context delivery).
+
+Files larger than the effective limit fail with `SourceFileTooLarge` before parse.
+A ~10 MB generated bundle is accepted under the 80 MB default.
+
 ## Safe operating sequence
 
 ```text

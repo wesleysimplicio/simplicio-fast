@@ -13,6 +13,7 @@ from .parser_adapter import adapter_capability, build_payload_from_mapper
 from .rollout import RolloutController
 from .snapshot import (
     DEFAULT_BUILD_TIMEOUT_SECONDS,
+    DEFAULT_MAX_SOURCE_FILE_BYTES,
     Snapshot,
     SnapshotBuildTimeout,
     StaleSnapshotError,
@@ -256,12 +257,14 @@ def build_parser() -> argparse.ArgumentParser:
             default=DEFAULT_BUILD_TIMEOUT_SECONDS,
             help=f"maximum build time in seconds before failing without publishing (default: {DEFAULT_BUILD_TIMEOUT_SECONDS:g})",
         )
-
         command.add_argument(
             "--max-file-bytes",
             type=int,
-            default=8 * 1024 * 1024,
-            help="reject a source file larger than this before parsing (default: 8388608)",
+            default=DEFAULT_MAX_SOURCE_FILE_BYTES,
+            help=(
+                "reject a source file larger than this before parsing "
+                f"(default: {DEFAULT_MAX_SOURCE_FILE_BYTES})"
+            ),
         )
         json_option(command)
     query = commands.add_parser(
@@ -393,6 +396,15 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--root", default=".", help="repository root (default: .)")
         snapshot_argument(command)
         command.add_argument("--max-bytes", type=int, default=48_000)
+        command.add_argument(
+            "--max-file-bytes",
+            type=int,
+            default=DEFAULT_MAX_SOURCE_FILE_BYTES,
+            help=(
+                "reject a source file larger than this when bootstrapping a snapshot "
+                f"(default: {DEFAULT_MAX_SOURCE_FILE_BYTES})"
+            ),
+        )
         command.add_argument(
             "--selection-mode",
             choices=("semantic", "legacy-regex"),
@@ -771,6 +783,7 @@ def main() -> int:
                         processor.understand(
                             args.task,
                             max_bytes=args.max_bytes,
+                            max_file_bytes=args.max_file_bytes,
                             selection_mode=args.selection_mode,
                         )
                     )
@@ -780,6 +793,7 @@ def main() -> int:
                     processor.plan(
                         args.task,
                         max_bytes=args.max_bytes,
+                        max_file_bytes=args.max_file_bytes,
                         selection_mode=args.selection_mode,
                     )
                 )
