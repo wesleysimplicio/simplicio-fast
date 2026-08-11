@@ -1,0 +1,231 @@
+name: Release simplicio-fast
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to PyPI and promote the GitHub release after all gates pass.
+        required: true
+        default: false
+        type: boolean
+      tag:
+        description: Existing release tag to build, for example v2.0.27.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    name: Build and attest Python package
+    if: github.event_name == 'push' || inputs.publish == true
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    outputs:
+      ref: ${{ steps.release.outputs.ref }}
+      source_commit: ${{ steps.source.outputs.source_commit }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - name: Resolve release ref
+        id: release
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+          PUSH_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$INPUT_TAG"
+            ref="$INPUT_TAG"
+          else
+            tag="${GITHUB_REF_NAME}"
+            ref="$PUSH_REF"
+          fi
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          version="${tag#v}"
+          {
+            echo "tag=$tag"
+            echo "ref=$ref"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check out the exact release source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.release.outputs.ref }}
+          fetch-depth: 1
+
+      - name: Capture source commit
+        id: source
+        shell: bash
+        run: echo "source_commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install packaging tools
+        run: python -m pip install --disable-pip-version-check "build==1.2.2.post1" "twine==5.1.1"
+
+      - name: Build the Python distributions
+        run: python -m build --outdir dist
+
+      - name: Run the pre-publication asset digest gate
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          python scripts/check_release_assets.py \
+            --dist dist \
+            --expected-version "$RELEASE_VERSION" \
+            --source-commit "$SOURCE_COMMIT" \
+            --write-manifest release-assets.json \
+            --json
+          python -m twine check dist/*
+
+      - name: Upload package and digest manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-release-${{ steps.release.outputs.version }}
+          path: |
+            dist
+            release-assets.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish package metadata
+        if: always()
+        shell: bash
+        run: |
+          echo "release=${{ steps.release.outputs.tag }}"
+          echo "source_commit=${{ steps.source.outputs.source_commit }}"
+
+  native:
+    name: Build native release matrix
+    needs: package
+    uses: ./.github/workflows/native-release.yml
+    with:
+      ref: ${{ needs.package.outputs.ref }}
+      source_commit: ${{ needs.package.outputs.source_commit }}
+      version: ${{ needs.package.outputs.version }}
+
+  verify-native:
+    name: Verify ${{ matrix.platform }} before promotion
+    needs: [package, native]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [linux-x86_64, linux-aarch64, macos-aarch64, windows-x86_64]
+    steps:
+      - name: Check out release verification scripts
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.package.outputs.ref }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download native artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: native-${{ matrix.platform }}
+          path: bundle
+
+      - name: Verify native artifact digest and binding
+        run: |
+          python scripts/verify_native_bundle.py \
+            --root bundle \
+            --expected-platform "${{ matrix.platform }}" \
+            --expected-version "${{ needs.package.outputs.version }}" \
+            --json
+
+  promote:
+    name: Publish and promote verified release
+    needs: [package, verify-native]
+    if: github.event_name == 'push' || inputs.publish == true
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      id-token: write
+    environment: pypi
+    steps:
+      - name: Check out release verification scripts
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.package.outputs.ref }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Download Python distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: python-release-${{ needs.package.outputs.version }}
+          path: release
+
+      - name: Re-run the publication gate on the immutable artifact
+        run: |
+          python scripts/check_release_assets.py \
+            --dist release/dist \
+            --expected-version "${{ needs.package.outputs.version }}" \
+            --source-commit "${{ needs.package.outputs.source_commit }}" \
+            --verify-manifest release/release-assets.json \
+            --json
+
+      - name: Publish to PyPI with trusted publishing
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: release/dist
+          skip-existing: true
+          attestations: true
+
+      - name: Verify PyPI digests before GitHub promotion
+        run: |
+          python scripts/check_release_assets.py \
+            --dist release/dist \
+            --expected-version "${{ needs.package.outputs.version }}" \
+            --source-commit "${{ needs.package.outputs.source_commit }}" \
+            --verify-manifest release/release-assets.json \
+            --pypi-url "https://pypi.org/pypi/simplicio-fast/json" \
+            --pypi-retries 24 \
+            --pypi-delay 5 \
+            --json
+
+      - name: Download verified native artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: native-*
+          path: release/native
+          merge-multiple: true
+
+      - name: Promote the GitHub release only after all digests pass
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.package.outputs.tag }}
+          target_commitish: ${{ needs.package.outputs.source_commit }}
+          generate_release_notes: true
+          files: |
+            release/dist/*
+            release/native/**
