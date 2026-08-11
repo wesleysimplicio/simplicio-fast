@@ -50,6 +50,8 @@ jobs:
             tests/test_fast_core_bundle.py \
             tests/test_native_release_workflow_211.py \
             tests/test_release_assets_482.py
+      - name: Validate release metadata and ownership policy
+        run: python scripts/check_release_integrity.py --check --json
 
   package:
     name: Build and attest Python package
