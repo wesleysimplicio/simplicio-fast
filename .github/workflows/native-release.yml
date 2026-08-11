@@ -196,7 +196,9 @@ jobs:
       - name: Require matching release tag
         if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish == true)
         shell: bash
-        run: test "$GITHUB_REF_NAME" = "v${{ steps.package.outputs.version }}"
+        env:
+          EXPECTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+        run: test "$EXPECTED_TAG" = "v${{ steps.package.outputs.version }}"
       - name: Build compatibility CLI in CI
         run: cargo build --manifest-path native/fast-native/Cargo.toml --release --target ${{ matrix.target }}
       - name: Build Rust-core CLI in CI
