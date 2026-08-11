@@ -198,7 +198,12 @@ jobs:
         shell: bash
         env:
           EXPECTED_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
-        run: test "$EXPECTED_TAG" = "v${{ steps.package.outputs.version }}"
+        run: |
+          if [[ "$EXPECTED_TAG" == "$GITHUB_REF_NAME" ]]; then
+            test "$GITHUB_REF_NAME" = "v${{ steps.package.outputs.version }}"
+          else
+            test "$EXPECTED_TAG" = "v${{ steps.package.outputs.version }}"
+          fi
       - name: Build compatibility CLI in CI
         run: cargo build --manifest-path native/fast-native/Cargo.toml --release --target ${{ matrix.target }}
       - name: Build Rust-core CLI in CI
