@@ -10,7 +10,7 @@ from __future__ import annotations
 from importlib import import_module
 
 
-__version__ = "2.0.27"
+__version__ = "2.0.28"
 
 _EXPORTS = {
     "ArenaError": (".prism_arena", "ArenaError"),
