@@ -13,8 +13,6 @@ import tempfile
 import time
 from typing import Any, Mapping
 
-import psutil
-
 from simplicio_fast.rollout import RolloutController, RolloutError
 
 
@@ -84,6 +82,8 @@ class NativeSession:
 
 
 def _resource_probe(executable: Path, repetitions: int = 30) -> dict[str, Any]:
+    import psutil
+
     with NativeSession(executable) as session:
         process = psutil.Process(session.process.pid)
         rss_before = process.memory_info().rss
