@@ -360,8 +360,8 @@ class SnapshotTest(unittest.TestCase):
             source_reads = []
 
             def tracked_read_bytes(path):
-                if path == source:
-                    source_reads.append(path)
+                if path.resolve() == source.resolve():
+                    source_reads.append(path.resolve())
                 return original_read_bytes(path)
 
             with patch.object(Path, "read_bytes", tracked_read_bytes):
@@ -402,14 +402,14 @@ class SnapshotTest(unittest.TestCase):
             source_reads = []
 
             def tracked_read_bytes(path):
-                if path == source:
-                    source_reads.append(path)
+                if path.resolve() == source.resolve():
+                    source_reads.append(path.resolve())
                 return original_read_bytes(path)
 
             with patch.object(Path, "read_bytes", tracked_read_bytes):
                 recovered = build_snapshot(root, output)
 
-            self.assertEqual([source], source_reads)
+            self.assertEqual([source.resolve()], source_reads)
             self.assertEqual(0, recovered.metadata_reused_files)
             self.assertEqual(1, recovered.reused_files)
 

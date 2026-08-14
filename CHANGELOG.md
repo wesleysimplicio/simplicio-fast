@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.0.29 - 2026-08-14
+
+- Reconcile the Python package, Rust core, README badge, and release-integrity
+  contract for the current main release train.
+
 ## [2.0.28] - 2026-08-14
 
 - Require Mapper 0.26.20 for the integrated Fast path.
@@ -212,4 +217,3 @@ First stable proof-of-concept release.
 - Symbol lookup currently scans fixed binary records.
 - No import, reference or call graph yet.
 - No direct LLM, Mapper, Runtime or Loop adapter yet.
-
