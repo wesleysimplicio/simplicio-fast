@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.28] - 2026-08-14
+
+- Require Mapper 0.26.20 for the integrated Fast path.
+- Add QLT-001 operational coverage for Mapper handoff, Fast context and impact,
+  idempotent ingest, and the missing-snapshot fail-closed path.
+
 ## [2.0.27] - 2026-08-10
 
 - Synchronize the Fast release with the aggregate Loop stack.
