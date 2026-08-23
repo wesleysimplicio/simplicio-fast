@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from threading import RLock
 from typing import Any
 
-
 KEY_SCHEMA = "simplicio.fast.decision-cache-key/v1"
 CACHE_SCHEMA = "simplicio.fast.decision-cache/v1"
 RECEIPT_SCHEMA = "simplicio.fast.decision-cache-receipt/v1"
@@ -675,13 +674,13 @@ class DecisionCache:
 
 __all__ = [
     "CACHE_SCHEMA",
+    "DEFAULT_MAX_ENTRIES",
+    "KEY_SCHEMA",
+    "MAX_ENTRIES",
+    "RECEIPT_SCHEMA",
     "DecisionCache",
     "DecisionCacheEntry",
     "DecisionCacheError",
     "DecisionCacheKey",
-    "DEFAULT_MAX_ENTRIES",
     "InvalidationReason",
-    "KEY_SCHEMA",
-    "MAX_ENTRIES",
-    "RECEIPT_SCHEMA",
 ]
