@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any
 
 
 FACT_SCHEMA = "simplicio.fast.capability-fact/v1"
@@ -45,6 +45,7 @@ class CapabilityCandidate:
     metric_class: str = "unknown"
     freshness_seconds: int | None = None
     health: str = "unknown"
+    _capability_set: frozenset[str] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if any(
@@ -56,7 +57,9 @@ class CapabilityCandidate:
             raise CapabilityRankingError("candidate_capabilities_invalid")
         if any(not isinstance(item, str) or not item.strip() for item in self.capabilities):
             raise CapabilityRankingError("candidate_capabilities_invalid")
-        object.__setattr__(self, "capabilities", tuple(self.capabilities))
+        normalized_capabilities = tuple(self.capabilities)
+        object.__setattr__(self, "capabilities", normalized_capabilities)
+        object.__setattr__(self, "_capability_set", frozenset(normalized_capabilities))
         if not isinstance(self.provenance, (tuple, list)):
             raise CapabilityRankingError("candidate_provenance_invalid")
         if any(not isinstance(item, str) or not item.strip() for item in self.provenance):
@@ -105,6 +108,18 @@ class CapabilityCandidate:
             "unhealthy",
         }:
             raise CapabilityRankingError("candidate_health_invalid")
+
+
+def _split_required_capabilities(
+    required_capabilities: Sequence[str],
+    available_capabilities: frozenset[str],
+) -> tuple[list[str], list[str]]:
+    """Return sorted matches and missing capabilities without per-candidate sets."""
+    matched: list[str] = []
+    missing: list[str] = []
+    for capability in required_capabilities:
+        (matched if capability in available_capabilities else missing).append(capability)
+    return matched, missing
 
 
 def candidates_from_manifest(manifest: Mapping[str, Any]) -> tuple[CapabilityCandidate, ...]:
@@ -173,7 +188,7 @@ def candidates_from_manifest(manifest: Mapping[str, Any]) -> tuple[CapabilityCan
                 handle="operator:simplicio-fast",
                 kind="fast",
                 version=version,
-                capabilities=tuple([*commands, *languages]),
+                capabilities=(*commands, *languages),
                 trust="advisory",
                 available=status in {"ready", "degraded"},
                 provenance=(FAST_CAPABILITIES_SCHEMA, "operator:simplicio-fast"),
@@ -264,14 +279,16 @@ def rank_capabilities(
             else "ranking_request_invalid"
         )
     required_set = set(required)
+    ordered_required = sorted(required_set)
     facts: list[dict[str, Any]] = []
     for candidate in candidates:
         if not isinstance(candidate, CapabilityCandidate):
             raise CapabilityRankingError("candidate_type_invalid")
         if len(facts) >= MAX_CANDIDATES:
             raise CapabilityRankingError("candidate_count_limit")
-        matched = sorted(required_set.intersection(candidate.capabilities))
-        missing = sorted(required_set.difference(candidate.capabilities))
+        matched, missing = _split_required_capabilities(
+            ordered_required, candidate._capability_set
+        )
         scope_match = required_scope is None or candidate.scope in {"*", required_scope}
         trust_match = (
             required_trust is None
@@ -383,7 +400,7 @@ def rank_capabilities(
     frontier.sort(key=lambda item: (item["handle"], item["version"]))
     return {
         "schema": CATALOG_SCHEMA,
-        "required_capabilities": sorted(required_set),
+        "required_capabilities": ordered_required,
         "required_scope": required_scope,
         "required_trust": required_trust,
         "max_freshness_seconds": max_freshness_seconds,
@@ -396,8 +413,15 @@ def rank_capabilities(
 
 
 __all__ = [
-    "CATALOG_SCHEMA", "CapabilityCandidate", "CapabilityRankingError", "FACT_SCHEMA",
-    "FAST_CAPABILITIES_SCHEMA", "PREFLIGHT_SCHEMA", "RUNTIME_SMOKE_SCHEMA",
+    "CATALOG_SCHEMA",
+    "CapabilityCandidate",
+    "CapabilityRankingError",
+    "FACT_SCHEMA",
+    "FAST_CAPABILITIES_SCHEMA",
+    "MAX_CANDIDATES",
+    "MAX_RESULTS",
+    "PREFLIGHT_SCHEMA",
+    "RUNTIME_SMOKE_SCHEMA",
     "candidates_from_manifest",
-    "MAX_CANDIDATES", "MAX_RESULTS", "rank_capabilities",
+    "rank_capabilities",
 ]
