@@ -28,7 +28,9 @@ def key(**overrides: str) -> TuningKey:
 
 
 class SpeculationProfiler493Test(unittest.TestCase):
-    def test_synthetic_profile_is_deterministic_and_captures_receipt_metrics(self) -> None:
+    def test_synthetic_profile_is_deterministic_and_captures_receipt_metrics(
+        self,
+    ) -> None:
         first = deterministic_synthetic_profile(key(), seed=7)
         second = deterministic_synthetic_profile(key(), seed=7)
         self.assertEqual(first.to_dict(), second.to_dict())
@@ -120,7 +122,9 @@ class SpeculationProfiler493Test(unittest.TestCase):
         self.assertFalse(decision.enabled)
         self.assertEqual(decision.reason, "fallback_observed")
 
-    def test_tuning_records_are_isolated_by_generation_model_backend_hardware(self) -> None:
+    def test_tuning_records_are_isolated_by_generation_model_backend_hardware(
+        self,
+    ) -> None:
         store = TuningRecordStore()
         first = deterministic_synthetic_profile(key(generation="gen-1"), seed=1)
         second = deterministic_synthetic_profile(key(generation="gen-2"), seed=1)

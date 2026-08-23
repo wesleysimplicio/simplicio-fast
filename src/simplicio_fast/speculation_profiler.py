@@ -15,7 +15,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-
 PROFILE_SCHEMA = "simplicio.fast.speculation-profile/v1"
 TUNING_SCHEMA = "simplicio.fast.speculation-tuning/v1"
 HARD_MAX_DRAFT_TOKENS = 128
@@ -269,7 +268,9 @@ class TuningBounds:
             "max_acceptance_threshold",
         )
         if not 0.0 <= minimum <= maximum <= 1.0:
-            raise SpeculationProfilerError("acceptance thresholds must be between 0 and 1")
+            raise SpeculationProfilerError(
+                "acceptance thresholds must be between 0 and 1"
+            )
         _number(self.threshold_step, "threshold_step", minimum=0.000001)
         if self.threshold_step > maximum - minimum and maximum != minimum:
             raise SpeculationProfilerError("threshold_step exceeds threshold range")
@@ -316,12 +317,17 @@ def regression_guardrail(
         raise SpeculationProfilerError("max_throughput_regression must be < 1")
     ratio = metrics.throughput_ratio
     memory_ratio = None
-    if metrics.baseline_memory_mb not in (None, 0.0) and metrics.speculative_memory_mb is not None:
+    if (
+        metrics.baseline_memory_mb not in (None, 0.0)
+        and metrics.speculative_memory_mb is not None
+    ):
         memory_ratio = metrics.speculative_memory_mb / metrics.baseline_memory_mb
     if metrics.fallback_reason:
         return GuardrailResult(False, "fallback_observed", ratio, memory_ratio)
     if ratio is None:
-        return GuardrailResult(False, "speculative_tok_s_unavailable", ratio, memory_ratio)
+        return GuardrailResult(
+            False, "speculative_tok_s_unavailable", ratio, memory_ratio
+        )
     if ratio < 1.0 - regression:
         return GuardrailResult(False, "throughput_regression", ratio, memory_ratio)
     if memory_ratio is not None and memory_ratio > 1.0 + memory_budget:
@@ -365,7 +371,9 @@ def auto_tune(
         or not isinstance(current_draft_tokens, int)
         or current_draft_tokens < 1
     ):
-        raise SpeculationProfilerError("current_draft_tokens must be a positive integer")
+        raise SpeculationProfilerError(
+            "current_draft_tokens must be a positive integer"
+        )
     threshold = _number(
         current_acceptance_threshold,
         "current_acceptance_threshold",
@@ -460,9 +468,7 @@ class TuningRecordStore:
         return len(self._records)
 
     def to_dict(self) -> dict[str, Any]:
-        records = [
-            self._records[key].to_dict() for key in sorted(self._records)
-        ]
+        records = [self._records[key].to_dict() for key in sorted(self._records)]
         return {"schema": TUNING_SCHEMA, "records": records}
 
 
