@@ -466,7 +466,9 @@ class DecisionCache:
                 self._metrics["misses"] += 1
                 return self._receipt(
                     operation="lookup",
-                    outcome="invalidated" if key_digest in self._invalidations else "miss",
+                    outcome="invalidated"
+                    if key_digest in self._invalidations
+                    else "miss",
                     reason=self._invalidations.get(
                         key_digest, InvalidationReason.ENTRY_MISSING
                     ),

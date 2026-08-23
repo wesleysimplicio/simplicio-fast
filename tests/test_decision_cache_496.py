@@ -82,7 +82,10 @@ def test_generation_change_invalidates_old_entries_explicitly() -> None:
     stale = cache.lookup(old_key)
     assert stale["outcome"] == "miss"
     assert stale["reason"] == decision_cache.InvalidationReason.GENERATION_MISMATCH
-    assert cache.lookup(new_key)["reason"] == decision_cache.InvalidationReason.ENTRY_MISSING
+    assert (
+        cache.lookup(new_key)["reason"]
+        == decision_cache.InvalidationReason.ENTRY_MISSING
+    )
 
 
 def test_bounded_lru_eviction_is_deterministic() -> None:
@@ -96,7 +99,10 @@ def test_bounded_lru_eviction_is_deterministic() -> None:
     receipt = cache.put(third, {"strategy": "baseline"})
 
     assert receipt["evicted_key_digests"] == [second.digest]
-    assert cache.lookup(second)["reason"] == decision_cache.InvalidationReason.CAPACITY_EVICTION
+    assert (
+        cache.lookup(second)["reason"]
+        == decision_cache.InvalidationReason.CAPACITY_EVICTION
+    )
     assert cache.lookup(first)["outcome"] == "hit"
     assert len(cache) == 2
 
@@ -114,7 +120,10 @@ def test_drift_invalidation_reports_dimension_reason() -> None:
     assert receipt["outcome"] == "invalidated"
     assert receipt["reason"] == decision_cache.InvalidationReason.BACKEND_DRIFT
     assert receipt["invalidated_key_digests"] == [old_key.digest]
-    assert cache.lookup(old_key)["reason"] == decision_cache.InvalidationReason.BACKEND_DRIFT
+    assert (
+        cache.lookup(old_key)["reason"]
+        == decision_cache.InvalidationReason.BACKEND_DRIFT
+    )
 
 
 def test_telemetry_contradiction_quarantines_without_exposing_values() -> None:
@@ -128,7 +137,10 @@ def test_telemetry_contradiction_quarantines_without_exposing_values() -> None:
 
     receipt = cache.lookup(key, observed={"throughput_class": "regressing"})
     assert receipt["outcome"] == "quarantined"
-    assert receipt["reason"] == decision_cache.InvalidationReason.OBSERVED_TELEMETRY_CONTRADICTION
+    assert (
+        receipt["reason"]
+        == decision_cache.InvalidationReason.OBSERVED_TELEMETRY_CONTRADICTION
+    )
     assert receipt["contradiction_fields"] == ["throughput_class"]
     assert "improving" not in json.dumps(receipt)
     assert cache.lookup(key)["outcome"] == "quarantined"
@@ -148,9 +160,13 @@ def test_regression_disable_blocks_reuse_until_generation_changes() -> None:
 
 
 def test_raw_content_and_invalid_reasons_are_rejected() -> None:
-    with pytest.raises(decision_cache.DecisionCacheError, match="raw_content_forbidden"):
+    with pytest.raises(
+        decision_cache.DecisionCacheError, match="raw_content_forbidden"
+    ):
         make_key(workload_class="raw user prompt")
-    with pytest.raises(decision_cache.DecisionCacheError, match="raw_content_forbidden"):
+    with pytest.raises(
+        decision_cache.DecisionCacheError, match="raw_content_forbidden"
+    ):
         decision_cache.DecisionCache(generation="generation-7").put(
             make_key(), {"prompt": "do not cache this"}
         )
