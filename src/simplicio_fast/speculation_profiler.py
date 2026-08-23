@@ -8,11 +8,12 @@ decision to the policy owner through the small :func:`adapt_telemetry` and
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import json
 import math
-from typing import Any, Mapping
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
 
 
 PROFILE_SCHEMA = "simplicio.fast.speculation-profile/v1"
@@ -70,7 +71,7 @@ class TuningKey:
             _text(getattr(self, field), field)
 
     @classmethod
-    def from_mapping(cls, payload: Mapping[str, Any]) -> "TuningKey":
+    def from_mapping(cls, payload: Mapping[str, Any]) -> TuningKey:
         if not isinstance(payload, Mapping):
             raise SpeculationProfilerError("key must be an object")
         return cls(
@@ -142,7 +143,7 @@ class ProfilingMetrics:
             raise SpeculationProfilerError("sample_count must be a positive integer")
 
     @classmethod
-    def from_mapping(cls, payload: Mapping[str, Any]) -> "ProfilingMetrics":
+    def from_mapping(cls, payload: Mapping[str, Any]) -> ProfilingMetrics:
         if not isinstance(payload, Mapping):
             raise SpeculationProfilerError("telemetry must be an object")
         required = ("baseline_tok_s", "baseline_ttft_ms")
