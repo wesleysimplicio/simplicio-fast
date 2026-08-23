@@ -41,6 +41,18 @@ class PressureInputTests(unittest.TestCase):
         self.assertIn("TELEMETRY_INSUFFICIENT", result.reason_codes)
         self.assertEqual(Recommendation.BASELINE, result.recommendation)
 
+    def test_all_unavailable_metrics_have_no_numeric_pressure_score(self):
+        result = score_pressure(
+            PressureInputs(
+                transfer=PressureMetric.unavailable(capability="transfer.cost"),
+            ),
+            acceptance_rate=0.95,
+        )
+
+        self.assertIsNone(result.score)
+        self.assertEqual((), result.used_metrics)
+        self.assertIn("TELEMETRY_INSUFFICIENT", result.reason_codes)
+
     def test_capability_gate_marks_receipt_unavailable(self):
         result = score_pressure(
             PressureInputs(

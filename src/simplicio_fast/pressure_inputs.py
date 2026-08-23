@@ -14,7 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from math import isfinite
-from typing import Generic, Iterable, TypeVar
+from typing import Generic, TypeVar
 
 
 SCHEMA = "simplicio.fast.pressure-inputs/v1"
@@ -373,7 +373,7 @@ class MetricContribution:
 class PressureScore:
     """Deterministic pressure score and explainable policy boundary result."""
 
-    score: float
+    score: float | None
     confidence: float
     recommendation: Recommendation
     reason_codes: tuple[str, ...]
@@ -517,7 +517,7 @@ def score_pressure(
 
     denominator = sum(item.weight * item.confidence for item in contributions)
     numerator = sum(item.weight * item.confidence * item.pressure for item in contributions)
-    score = 100.0 * numerator / denominator if denominator else 0.0
+    score = 100.0 * numerator / denominator if denominator else None
     coverage = sum(item.weight for item in contributions) / sum(_WEIGHTS.values())
     confidence = coverage * (
         sum(item.weight * item.confidence for item in contributions)
@@ -551,7 +551,7 @@ def score_pressure(
         reasons.append("ACCEPTANCE_UNAVAILABLE")
     elif acceptance_rate < 0.50:
         reasons.append("ACCEPTANCE_LOW")
-    if not reasons and score >= 100.0 * _HIGH_RISK:
+    if not reasons and score is not None and score >= 100.0 * _HIGH_RISK:
         reasons.append("PRESSURE_RISK_HIGH")
 
     recommendation = (
@@ -560,7 +560,7 @@ def score_pressure(
         else Recommendation.BASELINE
     )
     return PressureScore(
-        score=round(score, 6),
+        score=round(score, 6) if score is not None else None,
         confidence=round(confidence, 6),
         recommendation=recommendation,
         reason_codes=tuple(dict.fromkeys(reasons)),
