@@ -20,7 +20,7 @@ TELEMETRY_REQUIRED = {
     "standard": frozenset(("tokens_per_second", "memory_used_bytes", "ttft_ms", "acceptance_rate", "bandwidth_bytes_per_second", "transfer_bytes")),
     "deep": frozenset(TELEMETRY_FIELDS),
 }
-TELEMETRY_UNAVAILABLE = frozenset(TELEMETRY_FIELDS) - TELEMETRY_REQUIRED["minimal"]
+TELEMETRY_UNAVAILABLE = frozenset(TELEMETRY_FIELDS)
 UNAVAILABLE_REASONS = frozenset(("not_collected", "not_supported", "not_exposed", "not_applicable", "redacted"))
 _DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 _REVISION = re.compile(r"^[0-9a-f]{40}$")
