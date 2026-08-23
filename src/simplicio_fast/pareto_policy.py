@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-
 PARETO_POLICY_SCHEMA = "simplicio.fast.pareto-policy/v1"
 CANDIDATE_SCHEMA = "simplicio.fast.pareto-candidate/v1"
 RECEIPT_SCHEMA = "simplicio.fast.pareto-policy-receipt/v1"
@@ -326,7 +325,9 @@ class RepresentationCandidate:
         }
         for field, value in fields.items():
             object.__setattr__(self, field, value)
-        object.__setattr__(self, "name", _text(resolved_name, "candidate_identity_invalid"))
+        object.__setattr__(
+            self, "name", _text(resolved_name, "candidate_identity_invalid")
+        )
         object.__setattr__(self, "representation", parsed_representation)
         object.__setattr__(self, "quality", normalized_quality)
         object.__setattr__(self, "available", available)
@@ -484,15 +485,22 @@ class PolicyContext:
             raise ParetoPolicyError("context_budget_invalid")
         return cls(
             generation=value.get("generation"),
-            hardware_fingerprint=value.get("hardware_fingerprint", value.get("hardware", "unknown")),
-            context_fingerprint=value.get("context_fingerprint", value.get("context", "unknown")),
-            workload_fingerprint=value.get("workload_fingerprint", value.get("workload", "unknown")),
+            hardware_fingerprint=value.get(
+                "hardware_fingerprint", value.get("hardware", "unknown")
+            ),
+            context_fingerprint=value.get(
+                "context_fingerprint", value.get("context", "unknown")
+            ),
+            workload_fingerprint=value.get(
+                "workload_fingerprint", value.get("workload", "unknown")
+            ),
             resident_budget_bytes=value.get(
                 "resident_budget_bytes",
                 value.get("max_resident_bytes", budgets.get("resident_bytes")),
             ),
             peak_budget_bytes=value.get(
-                "peak_budget_bytes", value.get("max_peak_bytes", budgets.get("peak_bytes"))
+                "peak_budget_bytes",
+                value.get("max_peak_bytes", budgets.get("peak_bytes")),
             ),
             bytes_per_token_budget=value.get(
                 "bytes_per_token_budget",
@@ -574,7 +582,9 @@ _PROFILE_WEIGHTS: dict[Profile, tuple[tuple[str, float], ...]] = {
 }
 
 
-def _candidate_metric(candidate: RepresentationCandidate, metric: str) -> float | int | None:
+def _candidate_metric(
+    candidate: RepresentationCandidate, metric: str
+) -> float | int | None:
     if metric == "quality":
         return candidate.quality
     return getattr(candidate, metric)
@@ -587,9 +597,7 @@ def _dominates(first: RepresentationCandidate, second: RepresentationCandidate) 
         second_value = _candidate_metric(second, metric)
         if first_value is None or second_value is None:
             continue
-        comparisons.append(
-            (first_value, second_value, metric in _MAXIMIZE)
-        )
+        comparisons.append((first_value, second_value, metric in _MAXIMIZE))
     if not comparisons:
         return False
     no_worse = all(
@@ -618,8 +626,13 @@ def _benefits(
     if low == high:
         return {name: 1.0 for name in observed}
     if metric in _MAXIMIZE:
-        return {name: (float(value) - low) / (high - low) for name, value in observed.items()}
-    return {name: (high - float(value)) / (high - low) for name, value in observed.items()}
+        return {
+            name: (float(value) - low) / (high - low)
+            for name, value in observed.items()
+        }
+    return {
+        name: (high - float(value)) / (high - low) for name, value in observed.items()
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -737,7 +750,9 @@ class ParetoDecision:
         return json.dumps(self.to_dict(), sort_keys=True, separators=(",", ":"))
 
 
-def _coerce_candidate(value: RepresentationCandidate | Mapping[str, Any]) -> RepresentationCandidate:
+def _coerce_candidate(
+    value: RepresentationCandidate | Mapping[str, Any],
+) -> RepresentationCandidate:
     if isinstance(value, RepresentationCandidate):
         return value
     if isinstance(value, Mapping):
@@ -763,18 +778,42 @@ def _hard_filters(
     for label, candidate_value, budget in (
         ("resident_budget", candidate.resident_bytes, context.resident_budget_bytes),
         ("peak_budget", candidate.peak_bytes, context.peak_budget_bytes),
-        ("bytes_per_token_budget", candidate.bytes_per_token, context.bytes_per_token_budget),
-        ("kv_bytes_per_token_budget", candidate.kv_bytes_per_token, context.kv_bytes_per_token_budget),
+        (
+            "bytes_per_token_budget",
+            candidate.bytes_per_token,
+            context.bytes_per_token_budget,
+        ),
+        (
+            "kv_bytes_per_token_budget",
+            candidate.kv_bytes_per_token,
+            context.kv_bytes_per_token_budget,
+        ),
     ):
-        passes = budget is None or candidate_value is not None and candidate_value <= budget
+        passes = (
+            budget is None or candidate_value is not None and candidate_value <= budget
+        )
         filters[label] = passes
         if not passes and reason is None:
-            reason = f"{label}_unknown" if candidate_value is None else f"{label}_exceeded"
+            reason = (
+                f"{label}_unknown" if candidate_value is None else f"{label}_exceeded"
+            )
 
     for label, candidate_value, context_value in (
-        ("hardware_fingerprint", candidate.hardware_fingerprint, context.hardware_fingerprint),
-        ("context_fingerprint", candidate.context_fingerprint, context.context_fingerprint),
-        ("workload_fingerprint", candidate.workload_fingerprint, context.workload_fingerprint),
+        (
+            "hardware_fingerprint",
+            candidate.hardware_fingerprint,
+            context.hardware_fingerprint,
+        ),
+        (
+            "context_fingerprint",
+            candidate.context_fingerprint,
+            context.context_fingerprint,
+        ),
+        (
+            "workload_fingerprint",
+            candidate.workload_fingerprint,
+            context.workload_fingerprint,
+        ),
     ):
         passes = (
             candidate_value is None
@@ -853,7 +892,12 @@ class ParetoPolicy:
             else self._quality_threshold
         )
         raw_candidates = list(candidates)
-        normalized = tuple(sorted((_coerce_candidate(item) for item in raw_candidates), key=lambda item: (item.name, item.representation.value)))
+        normalized = tuple(
+            sorted(
+                (_coerce_candidate(item) for item in raw_candidates),
+                key=lambda item: (item.name, item.representation.value),
+            )
+        )
         names = [candidate.name for candidate in normalized]
         if len(names) != len(set(names)):
             raise ParetoPolicyError("candidate_identity_duplicate")
@@ -904,8 +948,13 @@ class ParetoPolicy:
                 for other in eligible_tuple
             )
         )
-        frontier = tuple(sorted(frontier, key=lambda item: (item.name, item.representation.value)))
-        benefits = {metric: _benefits(frontier, metric) for metric, _ in _PROFILE_WEIGHTS[self._profile]}
+        frontier = tuple(
+            sorted(frontier, key=lambda item: (item.name, item.representation.value))
+        )
+        benefits = {
+            metric: _benefits(frontier, metric)
+            for metric, _ in _PROFILE_WEIGHTS[self._profile]
+        }
         scores: dict[str, tuple[float, dict[str, float]]] = {}
         for candidate in frontier:
             components: dict[str, float] = {}
@@ -928,7 +977,9 @@ class ParetoPolicy:
                 -candidate.quality,
                 -(candidate.tokens_per_second or 0.0),
                 candidate.ttft_ms if candidate.ttft_ms is not None else math.inf,
-                candidate.resident_bytes if candidate.resident_bytes is not None else math.inf,
+                candidate.resident_bytes
+                if candidate.resident_bytes is not None
+                else math.inf,
                 candidate.peak_bytes if candidate.peak_bytes is not None else math.inf,
                 candidate.name,
                 candidate.representation.value,
@@ -974,7 +1025,8 @@ class ParetoPolicy:
             elif not any(candidate.quality >= threshold for candidate in normalized):
                 reason = "quality_threshold_unmet"
             elif any(
-                fact["eligible"] is False and fact["selection_reason"] == "candidate_unavailable"
+                fact["eligible"] is False
+                and fact["selection_reason"] == "candidate_unavailable"
                 for fact in facts
             ):
                 reason = "no_available_candidate_fits"
@@ -1042,7 +1094,9 @@ class ParetoPolicy:
         return PolicyContext.from_mapping(values)
 
     @staticmethod
-    def invalidation_hook(generation: str, decision_key: str) -> GenerationInvalidationHook:
+    def invalidation_hook(
+        generation: str, decision_key: str
+    ) -> GenerationInvalidationHook:
         return GenerationInvalidationHook(generation, decision_key)
 
 
@@ -1054,7 +1108,9 @@ def invalidate_on_generation_change(
 ) -> dict[str, Any]:
     """Return a truthful reuse/invalidation receipt for a generation change."""
 
-    return GenerationInvalidationHook(generation, decision_key).check(current_generation)
+    return GenerationInvalidationHook(generation, decision_key).check(
+        current_generation
+    )
 
 
 def select_representation(
@@ -1093,17 +1149,17 @@ __all__ = [
     "CANDIDATE_SCHEMA",
     "DECISION_OWNER",
     "EXECUTION_OWNER",
-    "GenerationInvalidationHook",
     "INVALIDATION_SCHEMA",
     "PARETO_POLICY_SCHEMA",
     "POLICY_VERSION",
+    "RECEIPT_SCHEMA",
+    "GenerationInvalidationHook",
     "ParetoDecision",
     "ParetoPolicy",
     "ParetoPolicyError",
     "ParetoReceipt",
     "PolicyContext",
     "Profile",
-    "RECEIPT_SCHEMA",
     "Representation",
     "RepresentationCandidate",
     "RepresentationKind",

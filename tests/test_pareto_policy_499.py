@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import unittest
 
 from simplicio_fast.pareto_policy import (
@@ -113,12 +112,8 @@ class ParetoPolicy499Test(unittest.TestCase):
         self.assertEqual(balanced.selected_id, "mixed-v1")
         self.assertEqual(minimal.selected_id, "sqtn-v1")
         self.assertNotIn("sqtn-v1", quality.receipt.pareto_frontier)
-        self.assertEqual(
-            quality.receipt.to_dict()["decision_owner"], DECISION_OWNER
-        )
-        self.assertEqual(
-            quality.receipt.to_dict()["execution_owner"], EXECUTION_OWNER
-        )
+        self.assertEqual(quality.receipt.to_dict()["decision_owner"], DECISION_OWNER)
+        self.assertEqual(quality.receipt.to_dict()["execution_owner"], EXECUTION_OWNER)
 
     def test_quality_threshold_is_a_hard_gate(self) -> None:
         result = ParetoPolicy("balanced", quality_threshold=0.965).decide(
@@ -128,7 +123,9 @@ class ParetoPolicy499Test(unittest.TestCase):
         self.assertEqual(result.selected_id, "dense-v1")
         facts = {fact["candidate_id"]: fact for fact in result.receipt.candidates}
         self.assertFalse(facts["mixed-v1"]["hard_filters"]["quality_threshold"])
-        self.assertEqual(facts["mixed-v1"]["selection_reason"], "quality_below_threshold")
+        self.assertEqual(
+            facts["mixed-v1"]["selection_reason"], "quality_below_threshold"
+        )
         self.assertFalse(facts["sqtn-v1"]["hard_filters"]["quality_threshold"])
 
     def test_threshold_failure_and_budget_failure_are_honest_cannot_fit(self) -> None:
