@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import Any, Iterable, Sequence
-
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any
 
 FACT_SCHEMA = "simplicio.fast.capability-fact/v1"
 CATALOG_SCHEMA = "simplicio.fast.capability-catalog-projection/v1"
@@ -45,6 +44,7 @@ class CapabilityCandidate:
     metric_class: str = "unknown"
     freshness_seconds: int | None = None
     health: str = "unknown"
+    _capability_set: frozenset[str] = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
         if any(
@@ -54,48 +54,55 @@ class CapabilityCandidate:
             raise CapabilityRankingError("candidate_identity_invalid")
         if not isinstance(self.capabilities, (tuple, list)):
             raise CapabilityRankingError("candidate_capabilities_invalid")
-        if any(not isinstance(item, str) or not item.strip() for item in self.capabilities):
+        if any(
+            not isinstance(item, str) or not item.strip() for item in self.capabilities
+        ):
             raise CapabilityRankingError("candidate_capabilities_invalid")
-        object.__setattr__(self, "capabilities", tuple(self.capabilities))
+        normalized_capabilities = tuple(self.capabilities)
+        object.__setattr__(self, "capabilities", normalized_capabilities)
+        object.__setattr__(self, "_capability_set", frozenset(normalized_capabilities))
         if not isinstance(self.provenance, (tuple, list)):
             raise CapabilityRankingError("candidate_provenance_invalid")
-        if any(not isinstance(item, str) or not item.strip() for item in self.provenance):
+        if any(
+            not isinstance(item, str) or not item.strip() for item in self.provenance
+        ):
             raise CapabilityRankingError("candidate_provenance_invalid")
         object.__setattr__(self, "provenance", tuple(self.provenance))
         if not isinstance(self.scope, str) or not self.scope.strip():
             raise CapabilityRankingError("candidate_scope_invalid")
         if not isinstance(self.available, bool):
             raise CapabilityRankingError("candidate_availability_invalid")
-        if self.policy_eligible is not None and not isinstance(self.policy_eligible, bool):
+        if self.policy_eligible is not None and not isinstance(
+            self.policy_eligible, bool
+        ):
             raise CapabilityRankingError("candidate_policy_invalid")
         if (
-            (
-                self.estimated_cost is not None
-                and (
-                    isinstance(self.estimated_cost, bool)
-                    or not isinstance(self.estimated_cost, int)
-                    or self.estimated_cost < 0
-                )
+            self.estimated_cost is not None
+            and (
+                isinstance(self.estimated_cost, bool)
+                or not isinstance(self.estimated_cost, int)
+                or self.estimated_cost < 0
             )
-            or (
-                self.estimated_latency_ms is not None
-                and (
-                    isinstance(self.estimated_latency_ms, bool)
-                    or not isinstance(self.estimated_latency_ms, int)
-                    or self.estimated_latency_ms < 0
-                )
+        ) or (
+            self.estimated_latency_ms is not None
+            and (
+                isinstance(self.estimated_latency_ms, bool)
+                or not isinstance(self.estimated_latency_ms, int)
+                or self.estimated_latency_ms < 0
             )
         ):
             raise CapabilityRankingError("candidate_cost_invalid")
-        if not isinstance(self.metric_class, str) or self.metric_class not in {"unknown", "estimated", "measured", "simulated"}:
+        if not isinstance(self.metric_class, str) or self.metric_class not in {
+            "unknown",
+            "estimated",
+            "measured",
+            "simulated",
+        }:
             raise CapabilityRankingError("candidate_metric_class_invalid")
-        if (
-            self.freshness_seconds is not None
-            and (
-                isinstance(self.freshness_seconds, bool)
-                or not isinstance(self.freshness_seconds, int)
-                or self.freshness_seconds < 0
-            )
+        if self.freshness_seconds is not None and (
+            isinstance(self.freshness_seconds, bool)
+            or not isinstance(self.freshness_seconds, int)
+            or self.freshness_seconds < 0
         ):
             raise CapabilityRankingError("candidate_freshness_invalid")
         if not isinstance(self.health, str) or self.health not in {
@@ -107,7 +114,23 @@ class CapabilityCandidate:
             raise CapabilityRankingError("candidate_health_invalid")
 
 
-def candidates_from_manifest(manifest: Mapping[str, Any]) -> tuple[CapabilityCandidate, ...]:
+def _split_required_capabilities(
+    required_capabilities: Sequence[str],
+    available_capabilities: frozenset[str],
+) -> tuple[list[str], list[str]]:
+    """Return sorted matches and missing capabilities without per-candidate sets."""
+    matched: list[str] = []
+    missing: list[str] = []
+    for capability in required_capabilities:
+        (matched if capability in available_capabilities else missing).append(
+            capability
+        )
+    return matched, missing
+
+
+def candidates_from_manifest(
+    manifest: Mapping[str, Any],
+) -> tuple[CapabilityCandidate, ...]:
     """Convert installed operator receipts into advisory candidates only."""
     if not isinstance(manifest, Mapping):
         raise CapabilityRankingError("manifest_type_invalid")
@@ -156,7 +179,10 @@ def candidates_from_manifest(manifest: Mapping[str, Any]) -> tuple[CapabilityCan
             not isinstance(availability, Mapping)
             or not isinstance(commands, list)
             or not isinstance(languages, list)
-            or any(not isinstance(item, str) or not item.strip() for item in (*commands, *languages))
+            or any(
+                not isinstance(item, str) or not item.strip()
+                for item in (*commands, *languages)
+            )
         ):
             raise CapabilityRankingError("manifest_capability_invalid")
         version = availability.get("fast_version")
@@ -167,13 +193,19 @@ def candidates_from_manifest(manifest: Mapping[str, Any]) -> tuple[CapabilityCan
             or status not in {"ready", "degraded", "unavailable"}
         ):
             raise CapabilityRankingError("manifest_capability_invalid")
-        health = "healthy" if status == "ready" else "degraded" if status == "degraded" else "unhealthy"
+        health = (
+            "healthy"
+            if status == "ready"
+            else "degraded"
+            if status == "degraded"
+            else "unhealthy"
+        )
         return (
             CapabilityCandidate(
                 handle="operator:simplicio-fast",
                 kind="fast",
                 version=version,
-                capabilities=tuple([*commands, *languages]),
+                capabilities=(*commands, *languages),
                 trust="advisory",
                 available=status in {"ready", "degraded"},
                 provenance=(FAST_CAPABILITIES_SCHEMA, "operator:simplicio-fast"),
@@ -231,13 +263,10 @@ def rank_capabilities(
     invalid_required_trust = (
         required_trust is not None and required_trust not in _TRUST_RANK
     )
-    invalid_max_freshness = (
-        max_freshness_seconds is not None
-        and (
-            isinstance(max_freshness_seconds, bool)
-            or not isinstance(max_freshness_seconds, int)
-            or max_freshness_seconds < 0
-        )
+    invalid_max_freshness = max_freshness_seconds is not None and (
+        isinstance(max_freshness_seconds, bool)
+        or not isinstance(max_freshness_seconds, int)
+        or max_freshness_seconds < 0
     )
     if (
         not isinstance(required, Sequence)
@@ -251,9 +280,7 @@ def rank_capabilities(
             required_scope is not None
             and (not isinstance(required_scope, str) or not required_scope.strip())
         )
-        or (
-            invalid_required_trust
-        )
+        or (invalid_required_trust)
         or invalid_max_freshness
     ):
         raise CapabilityRankingError(
@@ -264,25 +291,24 @@ def rank_capabilities(
             else "ranking_request_invalid"
         )
     required_set = set(required)
+    ordered_required = sorted(required_set)
     facts: list[dict[str, Any]] = []
     for candidate in candidates:
         if not isinstance(candidate, CapabilityCandidate):
             raise CapabilityRankingError("candidate_type_invalid")
         if len(facts) >= MAX_CANDIDATES:
             raise CapabilityRankingError("candidate_count_limit")
-        matched = sorted(required_set.intersection(candidate.capabilities))
-        missing = sorted(required_set.difference(candidate.capabilities))
+        matched, missing = _split_required_capabilities(
+            ordered_required, candidate._capability_set
+        )
         scope_match = required_scope is None or candidate.scope in {"*", required_scope}
         trust_match = (
             required_trust is None
             or _TRUST_RANK.get(candidate.trust, -1) >= _TRUST_RANK[required_trust]
         )
-        freshness_match = (
-            max_freshness_seconds is None
-            or (
-                candidate.freshness_seconds is not None
-                and candidate.freshness_seconds <= max_freshness_seconds
-            )
+        freshness_match = max_freshness_seconds is None or (
+            candidate.freshness_seconds is not None
+            and candidate.freshness_seconds <= max_freshness_seconds
         )
         policy = (
             "eligible"
@@ -303,15 +329,25 @@ def rank_capabilities(
         score_components = {
             "matched_capabilities": len(matched) * 100,
             "missing_capabilities": -len(missing) * 1000,
-            "cost": -candidate.estimated_cost if candidate.estimated_cost is not None else None,
-            "latency": -candidate.estimated_latency_ms if candidate.estimated_latency_ms is not None else None,
+            "cost": -candidate.estimated_cost
+            if candidate.estimated_cost is not None
+            else None,
+            "latency": -candidate.estimated_latency_ms
+            if candidate.estimated_latency_ms is not None
+            else None,
             "availability": 0 if candidate.available else -10000,
-            "policy": 0 if policy == "eligible" else -10000 if policy == "rejected" else -5000,
+            "policy": 0
+            if policy == "eligible"
+            else -10000
+            if policy == "rejected"
+            else -5000,
             "scope": 0 if scope_match else -10000,
             "trust": 0 if trust_match else -10000,
             "freshness": 0 if freshness_match else -10000,
         }
-        score = sum(value for value in score_components.values() if isinstance(value, int))
+        score = sum(
+            value for value in score_components.values() if isinstance(value, int)
+        )
         if missing:
             reason = "missing_required_capabilities"
         elif not candidate.available:
@@ -330,32 +366,42 @@ def rank_capabilities(
             )
         else:
             reason = "eligible"
-        facts.append({
-            "schema": FACT_SCHEMA,
-            "handle": candidate.handle,
-            "kind": candidate.kind,
-            "version": candidate.version,
-            "matched_capabilities": matched,
-            "missing_capabilities": missing,
-            "trust": candidate.trust,
-            "available": candidate.available,
-            "scope": candidate.scope,
-            "health": candidate.health,
-            "freshness_seconds": candidate.freshness_seconds,
-            "policy_eligibility": policy,
-            "eligible": eligible,
-            "hard_filter": hard_filter,
-            "metric_class": candidate.metric_class,
-            "estimated_cost": candidate.estimated_cost,
-            "estimated_latency_ms": candidate.estimated_latency_ms,
-            "score": score,
-            "score_components": score_components,
-            "selection_reason": reason,
-            "provenance": list(candidate.provenance),
-        })
-    facts.sort(key=lambda item: (-item["eligible"], -item["score"], item["handle"], item["version"]))
+        facts.append(
+            {
+                "schema": FACT_SCHEMA,
+                "handle": candidate.handle,
+                "kind": candidate.kind,
+                "version": candidate.version,
+                "matched_capabilities": matched,
+                "missing_capabilities": missing,
+                "trust": candidate.trust,
+                "available": candidate.available,
+                "scope": candidate.scope,
+                "health": candidate.health,
+                "freshness_seconds": candidate.freshness_seconds,
+                "policy_eligibility": policy,
+                "eligible": eligible,
+                "hard_filter": hard_filter,
+                "metric_class": candidate.metric_class,
+                "estimated_cost": candidate.estimated_cost,
+                "estimated_latency_ms": candidate.estimated_latency_ms,
+                "score": score,
+                "score_components": score_components,
+                "selection_reason": reason,
+                "provenance": list(candidate.provenance),
+            }
+        )
+    facts.sort(
+        key=lambda item: (
+            -item["eligible"],
+            -item["score"],
+            item["handle"],
+            item["version"],
+        )
+    )
     measured = [
-        item for item in facts
+        item
+        for item in facts
         if item["eligible"]
         and item["estimated_cost"] is not None
         and item["estimated_latency_ms"] is not None
@@ -373,17 +419,19 @@ def rank_capabilities(
             for other in measured
         )
         if not dominated:
-            frontier.append({
-                "handle": item["handle"],
-                "version": item["version"],
-                "estimated_cost": item["estimated_cost"],
-                "estimated_latency_ms": item["estimated_latency_ms"],
-                "metric_class": item["metric_class"],
-            })
+            frontier.append(
+                {
+                    "handle": item["handle"],
+                    "version": item["version"],
+                    "estimated_cost": item["estimated_cost"],
+                    "estimated_latency_ms": item["estimated_latency_ms"],
+                    "metric_class": item["metric_class"],
+                }
+            )
     frontier.sort(key=lambda item: (item["handle"], item["version"]))
     return {
         "schema": CATALOG_SCHEMA,
-        "required_capabilities": sorted(required_set),
+        "required_capabilities": ordered_required,
         "required_scope": required_scope,
         "required_trust": required_trust,
         "max_freshness_seconds": max_freshness_seconds,
@@ -396,8 +444,15 @@ def rank_capabilities(
 
 
 __all__ = [
-    "CATALOG_SCHEMA", "CapabilityCandidate", "CapabilityRankingError", "FACT_SCHEMA",
-    "FAST_CAPABILITIES_SCHEMA", "PREFLIGHT_SCHEMA", "RUNTIME_SMOKE_SCHEMA",
+    "CATALOG_SCHEMA",
+    "FACT_SCHEMA",
+    "FAST_CAPABILITIES_SCHEMA",
+    "MAX_CANDIDATES",
+    "MAX_RESULTS",
+    "PREFLIGHT_SCHEMA",
+    "RUNTIME_SMOKE_SCHEMA",
+    "CapabilityCandidate",
+    "CapabilityRankingError",
     "candidates_from_manifest",
-    "MAX_CANDIDATES", "MAX_RESULTS", "rank_capabilities",
+    "rank_capabilities",
 ]
