@@ -109,7 +109,9 @@ class SpeculationPolicy492Test(unittest.TestCase):
         self.assertEqual(result.reason, "no_faster_supported_strategy")
         self.assertTrue(result.receipt.fallback)
 
-    def test_result_and_receipt_are_typed_serializable_and_owned_correctly(self) -> None:
+    def test_result_and_receipt_are_typed_serializable_and_owned_correctly(
+        self,
+    ) -> None:
         capabilities = SpeculationCapabilities(
             ngram=True,
             draft=StrategyCapability(True, 1.3),
