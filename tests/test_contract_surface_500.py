@@ -12,9 +12,10 @@ from simplicio_fast.contract_surface import (
     validate_telemetry_snapshot,
 )
 
-
 ROOT = Path(__file__).parents[1]
-EXAMPLES = json.loads((ROOT / "contracts/fast-local/v1/examples.json").read_text(encoding="utf-8"))
+EXAMPLES = json.loads(
+    (ROOT / "contracts/fast-local/v1/examples.json").read_text(encoding="utf-8")
+)
 
 
 def test_valid_examples_are_contract_authority_vectors():
@@ -29,11 +30,20 @@ def test_validation_is_deterministic_across_mapping_order():
     value = EXAMPLES["telemetry_snapshot"]
     first = validate_telemetry_snapshot(value)
     reordered = {key: value[key] for key in reversed(list(value))}
-    reordered["payload"] = {key: value["payload"][key] for key in reversed(list(value["payload"]))}
+    reordered["payload"] = {
+        key: value["payload"][key] for key in reversed(list(value["payload"]))
+    }
     assert validate_telemetry_snapshot(reordered) == first
 
 
-@pytest.mark.parametrize("version,reason", [("2.0", "contract_major_unsupported"), ("1.1", "contract_version_unsupported"), ("1", "contract_version_invalid")])
+@pytest.mark.parametrize(
+    "version,reason",
+    [
+        ("2.0", "contract_major_unsupported"),
+        ("1.1", "contract_version_unsupported"),
+        ("1", "contract_version_invalid"),
+    ],
+)
 def test_version_rules_fail_closed(version, reason):
     value = copy.deepcopy(EXAMPLES["telemetry_snapshot"])
     value["contract_version"] = version
@@ -65,7 +75,11 @@ def test_invalidation_order_is_stable():
     current["concurrency_digest"] = "sha256:" + "8" * 64
     current["model_digest"] = "sha256:" + "9" * 64
     current["hardware_digest"] = "sha256:" + "a" * 64
-    assert invalidation_triggers(previous, current) == ("model_drift", "hardware_drift", "concurrency_drift")
+    assert invalidation_triggers(previous, current) == (
+        "model_drift",
+        "hardware_drift",
+        "concurrency_drift",
+    )
 
 
 def test_manifest_declares_ownership_levels_and_versioning():
