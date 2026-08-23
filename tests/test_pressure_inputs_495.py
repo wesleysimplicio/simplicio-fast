@@ -13,8 +13,8 @@ from simplicio_fast.pressure_inputs import (
     Recommendation,
     Residency,
     TransferPressure,
-    score_pressure,
     rank_placements,
+    score_pressure,
 )
 
 
