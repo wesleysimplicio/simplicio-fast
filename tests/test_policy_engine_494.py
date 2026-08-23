@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
-from pathlib import Path
 import unittest
+from copy import deepcopy
+from pathlib import Path
 
 from simplicio_fast.contract_surface import digest_for, validate_decision_receipt
 from simplicio_fast.policy_engine import (
@@ -35,7 +35,6 @@ from simplicio_fast.speculation_profiler import (
     deterministic_synthetic_profile,
 )
 
-
 ROOT = Path(__file__).parents[1]
 EXAMPLES = json.loads(
     (ROOT / "contracts/fast-local/v1/examples.json").read_text(encoding="utf-8")
@@ -60,9 +59,7 @@ def low_pressure_inputs(*, residency: Residency | None = None) -> PressureInputs
         concurrency=metric(ConcurrencyPressure(0.20), "runtime.concurrency"),
         throughput=metric(ThroughputCost(0.10), "throughput.cost"),
         residency=(
-            metric(residency, "placement.residency")
-            if residency is not None
-            else None
+            metric(residency, "placement.residency") if residency is not None else None
         ),
     )
 
@@ -207,7 +204,10 @@ class PolicyEngine494Test(unittest.TestCase):
         self.assertFalse(decision.enabled)
         self.assertIn("throughput_regression", decision.reason_codes)
         self.assertTrue(
-            any(receipt.get("operation") == "disable" for receipt in decision.cache_receipts)
+            any(
+                receipt.get("operation") == "disable"
+                for receipt in decision.cache_receipts
+            )
         )
 
     def test_low_confidence_telemetry_falls_back_without_synthetic_zeroes(self):
@@ -233,9 +233,7 @@ class PolicyEngine494Test(unittest.TestCase):
         with self.assertRaisesRegex(
             PolicyEngineError, "placement_candidates_exceed_bound"
         ):
-            PolicyEngine(
-                config=PolicyEngineConfig(max_placement_candidates=16)
-            ).decide(
+            PolicyEngine(config=PolicyEngineConfig(max_placement_candidates=16)).decide(
                 EXAMPLES["telemetry_snapshot"],
                 low_pressure_inputs(residency=Residency(candidates)),
             )

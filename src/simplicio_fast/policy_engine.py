@@ -32,10 +32,10 @@ from .contract_surface import (
     validate_telemetry_snapshot,
 )
 from .decision_cache import (
+    MAX_ENTRIES,
     DecisionCache,
     DecisionCacheError,
     DecisionCacheKey,
-    MAX_ENTRIES,
 )
 from .pressure_inputs import (
     PlacementScore,
@@ -61,7 +61,6 @@ from .speculation_profiler import (
     auto_tune,
     regression_guardrail,
 )
-
 
 POLICY_ENGINE_SCHEMA = "simplicio.fast.policy-engine/v1"
 POLICY_ENGINE_VERSION = "policy-engine-v1"
@@ -156,9 +155,13 @@ def _telemetry_classifications(
     memory_regression: float,
 ) -> dict[str, str]:
     """Return only classified observations suitable for cache expectations."""
-    pressure_class = "unknown" if pressure.score is None else _bucket(pressure.score / 100.0)
-    confidence_class = "high" if pressure.confidence >= 0.80 else (
-        "medium" if pressure.confidence >= 0.60 else "low"
+    pressure_class = (
+        "unknown" if pressure.score is None else _bucket(pressure.score / 100.0)
+    )
+    confidence_class = (
+        "high"
+        if pressure.confidence >= 0.80
+        else ("medium" if pressure.confidence >= 0.60 else "low")
     )
     observations = {
         "pressure_class": pressure_class,
@@ -212,8 +215,7 @@ def _telemetry_classifications(
         and profile.metrics.speculative_memory_mb is not None
     ):
         memory_ratio = (
-            profile.metrics.speculative_memory_mb
-            / profile.metrics.baseline_memory_mb
+            profile.metrics.speculative_memory_mb / profile.metrics.baseline_memory_mb
         )
     if memory_ratio is not None:
         observations["memory_class"] = (
@@ -330,9 +332,7 @@ class PolicyDecision:
             "confidence": self.confidence,
             "reason_codes": list(self.reason_codes),
             "pressure": self.pressure.as_dict(),
-            "guardrail": (
-                None if self.guardrail is None else self.guardrail.to_dict()
-            ),
+            "guardrail": (None if self.guardrail is None else self.guardrail.to_dict()),
             "cache_receipts": [dict(item) for item in self.cache_receipts],
             "receipt": deepcopy(dict(self.receipt)),
         }
@@ -354,9 +354,7 @@ class PolicyEngine:
             raise PolicyEngineError("cache_invalid")
         self.config = config or PolicyEngineConfig()
         self.policy = policy or SpeculationPolicy("auto")
-        self.cache = cache or DecisionCache(
-            max_entries=self.config.max_cache_entries
-        )
+        self.cache = cache or DecisionCache(max_entries=self.config.max_cache_entries)
         self._last_key: DecisionCacheKey | None = None
         self._lock = RLock()
 
@@ -403,7 +401,11 @@ class PolicyEngine:
         cache hit reuses only classified decision data bound to the current
         generation and compatible observed classes.
         """
-        if profile is not None and profiling_receipt is not None and profile != profiling_receipt:
+        if (
+            profile is not None
+            and profiling_receipt is not None
+            and profile != profiling_receipt
+        ):
             raise PolicyEngineError("profile_arguments_conflict")
         selected_profile = profile or profiling_receipt
         if not isinstance(pressure_inputs, PressureInputs):
@@ -449,7 +451,9 @@ class PolicyEngine:
                         }
                     )
                 else:
-                    cache_events.append(self.cache.activate_generation(cache_generation))
+                    cache_events.append(
+                        self.cache.activate_generation(cache_generation)
+                    )
                     cache_events.extend(self._invalidate_changed_key(current_key))
 
             guardrail, tuning, guardrail_reasons = self._profile_state(
@@ -483,23 +487,24 @@ class PolicyEngine:
                 cache_events.append(
                     self.cache.invalidate(current_key, reason="pressure_drift")
                 )
-            if cache_enabled and current_key is not None and not cache_lookup_allowed:
-                if guardrail is not None and not guardrail.enabled:
-                    if guardrail.reason in {
-                        "throughput_regression",
-                        "memory_regression",
-                        "ttft_regression",
-                        "fallback_observed",
-                    }:
-                        cache_events.append(
-                            self.cache.disable_for_regression(current_key)
-                        )
-                    else:
-                        cache_events.append(
-                            self.cache.invalidate(
-                                current_key, reason=guardrail.reason
-                            )
-                        )
+            if (
+                cache_enabled
+                and current_key is not None
+                and not cache_lookup_allowed
+                and guardrail is not None
+                and not guardrail.enabled
+            ):
+                if guardrail.reason in {
+                    "throughput_regression",
+                    "memory_regression",
+                    "ttft_regression",
+                    "fallback_observed",
+                }:
+                    cache_events.append(self.cache.disable_for_regression(current_key))
+                else:
+                    cache_events.append(
+                        self.cache.invalidate(current_key, reason=guardrail.reason)
+                    )
             if cache_lookup_allowed and current_key is not None:
                 cache_events.append(
                     self.cache.lookup(current_key, observed=observations)
@@ -522,9 +527,7 @@ class PolicyEngine:
                             cached["context_batch_size"],
                             cached["context_ranking"],
                             min(pressure.confidence, cached["confidence"]),
-                            _unique_reasons(
-                                (*cached["reason_codes"], "cache_hit")
-                            ),
+                            _unique_reasons((*cached["reason_codes"], "cache_hit")),
                             guardrail,
                             tuple(cache_events),
                         )
@@ -542,15 +545,13 @@ class PolicyEngine:
             cache_events_for_result = tuple(cache_events)
             if cache_enabled and current_key is not None and decision["enabled"]:
                 cache_decision = self._cache_payload(decision)
-                cache_events_for_result = tuple(
-                    [
-                        *cache_events,
-                        self.cache.put(
-                            current_key,
-                            cache_decision,
-                            expected=observations,
-                        ),
-                    ]
+                cache_events_for_result = (
+                    *cache_events,
+                    self.cache.put(
+                        current_key,
+                        cache_decision,
+                        expected=observations,
+                    ),
                 )
             return self._finish(
                 normalized,
@@ -583,9 +584,13 @@ class PolicyEngine:
             raise PolicyEngineError(error.reason_code) from error
 
     def _rank_placements(self, inputs: PressureInputs) -> tuple[PlacementScore, ...]:
-        if inputs.residency is not None and inputs.residency.value is not None:
-            if len(inputs.residency.value.candidates) > self.config.max_placement_candidates:
-                raise PolicyEngineError("placement_candidates_exceed_bound")
+        if (
+            inputs.residency is not None
+            and inputs.residency.value is not None
+            and len(inputs.residency.value.candidates)
+            > self.config.max_placement_candidates
+        ):
+            raise PolicyEngineError("placement_candidates_exceed_bound")
         try:
             return rank_placements(inputs)
         except PressureInputError as error:
@@ -674,9 +679,7 @@ class PolicyEngine:
             return ()
         try:
             return (
-                self.cache.invalidate_drift(
-                    current_key, dimensions=drift_dimensions
-                ),
+                self.cache.invalidate_drift(current_key, dimensions=drift_dimensions),
             )
         except DecisionCacheError as error:
             raise PolicyEngineError(error.reason_code) from error
@@ -706,7 +709,10 @@ class PolicyEngine:
         if not guardrail.enabled:
             reasons.append(guardrail.reason)
         ttft_ratio = profile.metrics.ttft_ratio
-        if ttft_ratio is not None and ttft_ratio > 1.0 + self.config.max_ttft_regression:
+        if (
+            ttft_ratio is not None
+            and ttft_ratio > 1.0 + self.config.max_ttft_regression
+        ):
             reasons.append("ttft_regression")
             guardrail = GuardrailResult(
                 False,
@@ -777,7 +783,9 @@ class PolicyEngine:
             selected = SpeculationStrategy.BASELINE
             reasons.append("tuning_baseline_fallback")
 
-        placement = "baseline" if selected is SpeculationStrategy.BASELINE else "unspecified"
+        placement = (
+            "baseline" if selected is SpeculationStrategy.BASELINE else "unspecified"
+        )
         if placements:
             placement = (
                 "baseline"
@@ -810,9 +818,7 @@ class PolicyEngine:
             if tuning is not None
             else self.config.default_acceptance_threshold
         )
-        batch_size, ranking = self._context_batch_policy(
-            inputs, pressure, enabled
-        )
+        batch_size, ranking = self._context_batch_policy(inputs, pressure, enabled)
         if not enabled:
             draft_tokens = 0
         if enabled:
@@ -987,7 +993,9 @@ class PolicyEngine:
             "strategy": selected.value,
             "placement": placement,
         }
-        decision_id = "decision-" + digest_for(key_material).removeprefix("sha256:")[:24]
+        decision_id = (
+            "decision-" + digest_for(key_material).removeprefix("sha256:")[:24]
+        )
         contract_strategy = (
             "disabled"
             if not enabled
