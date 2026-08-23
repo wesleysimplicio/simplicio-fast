@@ -105,7 +105,7 @@
         "transfer_bytes": 8192,
         "ttft_ms": 18.2
       },
-      "telemetry_digest": "sha256:1eba03857c2e4e07b28781f67c50b57177e42327b6b41e44098371cbdf7fd1dc",
+      "telemetry_digest": "sha256:08c8f1a13577d79a6fbdb0623ddca94e1d555851d9a4bb2f95db65c698ab8269",
       "unavailable": {
         "cache_pressure_ratio": "not_exposed",
         "stage_timings_ms": "not_collected"
