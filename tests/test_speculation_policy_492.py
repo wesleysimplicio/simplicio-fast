@@ -49,9 +49,7 @@ class SpeculationPolicy492Test(unittest.TestCase):
         self.assertFalse(result.receipt.fallback)
 
     def test_explicit_unsupported_strategy_falls_back_to_baseline(self) -> None:
-        result = SpeculationPolicy("mtp").decide(
-            SpeculationCapabilities(ngram=True)
-        )
+        result = SpeculationPolicy("mtp").decide(SpeculationCapabilities(ngram=True))
         self.assertEqual(result.selected, SpeculationStrategy.BASELINE)
         self.assertEqual(result.reason, "requested_strategy_unsupported")
         self.assertTrue(result.receipt.fallback)
