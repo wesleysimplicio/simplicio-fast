@@ -8,8 +8,9 @@ import json
 import platform
 import statistics
 import time
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any
 
 try:
     import tracemalloc
@@ -21,7 +22,6 @@ from simplicio_fast.capability_ranking import (
     _split_required_capabilities,
     rank_capabilities,
 )
-
 
 SCHEMA = "simplicio.fast.hot-path-benchmark/v1"
 REQUIRED = tuple(f"cap-{index:02d}" for index in range(8))
@@ -224,7 +224,9 @@ def run(
                 "page_faults": "not_collected",
                 "rss_kib": "not_collected",
                 "traced_peak_bytes": (
-                    "available" if tracemalloc is not None else "tracemalloc_unavailable"
+                    "available"
+                    if tracemalloc is not None
+                    else "tracemalloc_unavailable"
                 ),
             },
         },
