@@ -62,9 +62,9 @@ def test_unknown_fields_and_digest_tampering_fail_closed():
 def test_invalidation_order_is_stable():
     previous = EXAMPLES["telemetry_snapshot"]["generation"]
     current = copy.deepcopy(previous)
-    current["concurrency_digest"] = "sha256:" + "1" * 64
-    current["model_digest"] = "sha256:" + "2" * 64
-    current["hardware_digest"] = "sha256:" + "3" * 64
+    current["concurrency_digest"] = "sha256:" + "8" * 64
+    current["model_digest"] = "sha256:" + "9" * 64
+    current["hardware_digest"] = "sha256:" + "a" * 64
     assert invalidation_triggers(previous, current) == ("model_drift", "hardware_drift", "concurrency_drift")
 
 
