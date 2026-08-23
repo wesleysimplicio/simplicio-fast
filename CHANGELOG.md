@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.0.30 - 2026-08-23
+
+- Add the versioned Fast–Local contract surface, deterministic policy
+  conformance checks, and offline policy replay/simulation receipts.
+- Integrate pressure-aware speculation policy, profiler guardrails,
+  generation-bound decision caching, context/ranking batching, and Pareto
+  representation selection without taking Local execution ownership.
+- Add portable capability-ranking hot-path caching with deterministic benchmark
+  evidence and preserve fail-closed behavior for unavailable telemetry.
+
 ## 2.0.29 - 2026-08-14
 
 - Reconcile the Python package, Rust core, README badge, and release-integrity
