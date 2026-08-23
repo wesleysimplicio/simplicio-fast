@@ -71,7 +71,10 @@ class PressureInputTests(unittest.TestCase):
         result = score_pressure(
             PressureInputs(
                 bandwidth=metric(BandwidthPressure(0.95), "memory.bandwidth"),
-                transfer=metric(TransferPressure(0.90, bytes=10_000_000, milliseconds=12), "transfer.cost"),
+                transfer=metric(
+                    TransferPressure(0.90, bytes=10_000_000, milliseconds=12),
+                    "transfer.cost",
+                ),
                 cache=metric(CachePressure(0.20), "cache.llc"),
             ),
             acceptance_rate=0.99,
@@ -93,7 +96,10 @@ class PressureInputTests(unittest.TestCase):
             acceptance_rate=0.95,
         )
 
-        self.assertEqual(MetricState.CONTRADICTORY, result.contradictory_metrics and MetricState.CONTRADICTORY)
+        self.assertEqual(
+            MetricState.CONTRADICTORY,
+            result.contradictory_metrics and MetricState.CONTRADICTORY,
+        )
         self.assertEqual(("cache",), result.used_metrics)
         self.assertEqual(Recommendation.BASELINE, result.recommendation)
         self.assertIn("TELEMETRY_CONTRADICTORY", result.reason_codes)
@@ -115,8 +121,12 @@ class PressureInputTests(unittest.TestCase):
 
         first = rank_placements(inputs)
         second = rank_placements(inputs)
-        self.assertEqual([item.candidate.name for item in first], ["same", "unified", "cpu"])
-        self.assertEqual([item.score for item in first], [item.score for item in second])
+        self.assertEqual(
+            [item.candidate.name for item in first], ["same", "unified", "cpu"]
+        )
+        self.assertEqual(
+            [item.score for item in first], [item.score for item in second]
+        )
         self.assertLess(first[0].score, first[-1].score)
 
     def test_invalid_input_is_rejected_with_reason_code(self):

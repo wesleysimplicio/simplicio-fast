@@ -16,7 +16,6 @@ from enum import Enum
 from math import isfinite
 from typing import Generic, TypeVar
 
-
 SCHEMA = "simplicio.fast.pressure-inputs/v1"
 MAX_PRESSURE = 1.0
 
@@ -73,7 +72,9 @@ def _non_negative_number(value: float, reason_code: str) -> float:
     return value
 
 
-def _optional_non_negative_number(value: float | None, reason_code: str) -> float | None:
+def _optional_non_negative_number(
+    value: float | None, reason_code: str
+) -> float | None:
     if value is None:
         return None
     return _non_negative_number(value, reason_code)
@@ -108,7 +109,9 @@ class PressureMetric(Generic[T]):
         if not isinstance(self.capability, str) or not self.capability.strip():
             raise PressureInputError("METRIC_CAPABILITY_INVALID")
         object.__setattr__(
-            self, "confidence", _finite_fraction(self.confidence, "METRIC_CONFIDENCE_INVALID")
+            self,
+            "confidence",
+            _finite_fraction(self.confidence, "METRIC_CONFIDENCE_INVALID"),
         )
         if self.state is MetricState.AVAILABLE and self.value is None:
             raise PressureInputError("METRIC_VALUE_MISSING")
@@ -166,7 +169,11 @@ class BandwidthPressure:
     class_name: str | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "pressure", _finite_fraction(self.pressure, "BANDWIDTH_PRESSURE_INVALID"))
+        object.__setattr__(
+            self,
+            "pressure",
+            _finite_fraction(self.pressure, "BANDWIDTH_PRESSURE_INVALID"),
+        )
         if self.class_name is not None and not isinstance(self.class_name, str):
             raise PressureInputError("BANDWIDTH_CLASS_INVALID")
 
@@ -179,8 +186,14 @@ class CachePressure:
     miss_rate: float | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "pressure", _finite_fraction(self.pressure, "CACHE_PRESSURE_INVALID"))
-        object.__setattr__(self, "miss_rate", _optional_non_negative_number(self.miss_rate, "CACHE_MISS_RATE_INVALID"))
+        object.__setattr__(
+            self, "pressure", _finite_fraction(self.pressure, "CACHE_PRESSURE_INVALID")
+        )
+        object.__setattr__(
+            self,
+            "miss_rate",
+            _optional_non_negative_number(self.miss_rate, "CACHE_MISS_RATE_INVALID"),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -192,8 +205,16 @@ class TransferPressure:
     milliseconds: float | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "pressure", _finite_fraction(self.pressure, "TRANSFER_PRESSURE_INVALID"))
-        object.__setattr__(self, "bytes", _optional_non_negative_int(self.bytes, "TRANSFER_BYTES_INVALID"))
+        object.__setattr__(
+            self,
+            "pressure",
+            _finite_fraction(self.pressure, "TRANSFER_PRESSURE_INVALID"),
+        )
+        object.__setattr__(
+            self,
+            "bytes",
+            _optional_non_negative_int(self.bytes, "TRANSFER_BYTES_INVALID"),
+        )
         object.__setattr__(
             self,
             "milliseconds",
@@ -213,7 +234,9 @@ class Headroom:
         values = {
             "ram": _optional_non_negative_number(self.ram, "RAM_HEADROOM_INVALID"),
             "vram": _optional_non_negative_number(self.vram, "VRAM_HEADROOM_INVALID"),
-            "unified": _optional_non_negative_number(self.unified, "UNIFIED_HEADROOM_INVALID"),
+            "unified": _optional_non_negative_number(
+                self.unified, "UNIFIED_HEADROOM_INVALID"
+            ),
         }
         for name, value in values.items():
             if value is not None and value > 1.0:
@@ -226,7 +249,11 @@ class Headroom:
     def pressure(self) -> float:
         """Return pressure from known headroom only; unknown pools are omitted."""
 
-        known = [1.0 - value for value in (self.ram, self.vram, self.unified) if value is not None]
+        known = [
+            1.0 - value
+            for value in (self.ram, self.vram, self.unified)
+            if value is not None
+        ]
         return max(known)
 
 
@@ -239,9 +266,19 @@ class KVPressure:
     capacity_tokens: int | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "pressure", _finite_fraction(self.pressure, "KV_PRESSURE_INVALID"))
-        object.__setattr__(self, "context_tokens", _optional_non_negative_int(self.context_tokens, "KV_CONTEXT_INVALID"))
-        object.__setattr__(self, "capacity_tokens", _optional_non_negative_int(self.capacity_tokens, "KV_CAPACITY_INVALID"))
+        object.__setattr__(
+            self, "pressure", _finite_fraction(self.pressure, "KV_PRESSURE_INVALID")
+        )
+        object.__setattr__(
+            self,
+            "context_tokens",
+            _optional_non_negative_int(self.context_tokens, "KV_CONTEXT_INVALID"),
+        )
+        object.__setattr__(
+            self,
+            "capacity_tokens",
+            _optional_non_negative_int(self.capacity_tokens, "KV_CAPACITY_INVALID"),
+        )
         if (
             self.context_tokens is not None
             and self.capacity_tokens is not None
@@ -259,9 +296,23 @@ class ConcurrencyPressure:
     capacity_sessions: int | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "pressure", _finite_fraction(self.pressure, "CONCURRENCY_PRESSURE_INVALID"))
-        object.__setattr__(self, "active_sessions", _optional_non_negative_int(self.active_sessions, "ACTIVE_SESSIONS_INVALID"))
-        object.__setattr__(self, "capacity_sessions", _optional_non_negative_int(self.capacity_sessions, "SESSION_CAPACITY_INVALID"))
+        object.__setattr__(
+            self,
+            "pressure",
+            _finite_fraction(self.pressure, "CONCURRENCY_PRESSURE_INVALID"),
+        )
+        object.__setattr__(
+            self,
+            "active_sessions",
+            _optional_non_negative_int(self.active_sessions, "ACTIVE_SESSIONS_INVALID"),
+        )
+        object.__setattr__(
+            self,
+            "capacity_sessions",
+            _optional_non_negative_int(
+                self.capacity_sessions, "SESSION_CAPACITY_INVALID"
+            ),
+        )
         if (
             self.active_sessions is not None
             and self.capacity_sessions is not None
@@ -280,10 +331,32 @@ class ThroughputCost:
     verification_milliseconds: float | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "pressure", _finite_fraction(self.pressure, "THROUGHPUT_PRESSURE_INVALID"))
-        object.__setattr__(self, "target_tokens_per_second", _optional_non_negative_number(self.target_tokens_per_second, "TARGET_THROUGHPUT_INVALID"))
-        object.__setattr__(self, "draft_tokens_per_second", _optional_non_negative_number(self.draft_tokens_per_second, "DRAFT_THROUGHPUT_INVALID"))
-        object.__setattr__(self, "verification_milliseconds", _optional_non_negative_number(self.verification_milliseconds, "VERIFICATION_COST_INVALID"))
+        object.__setattr__(
+            self,
+            "pressure",
+            _finite_fraction(self.pressure, "THROUGHPUT_PRESSURE_INVALID"),
+        )
+        object.__setattr__(
+            self,
+            "target_tokens_per_second",
+            _optional_non_negative_number(
+                self.target_tokens_per_second, "TARGET_THROUGHPUT_INVALID"
+            ),
+        )
+        object.__setattr__(
+            self,
+            "draft_tokens_per_second",
+            _optional_non_negative_number(
+                self.draft_tokens_per_second, "DRAFT_THROUGHPUT_INVALID"
+            ),
+        )
+        object.__setattr__(
+            self,
+            "verification_milliseconds",
+            _optional_non_negative_number(
+                self.verification_milliseconds, "VERIFICATION_COST_INVALID"
+            ),
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,8 +373,20 @@ class PlacementCandidate:
             raise PressureInputError("PLACEMENT_NAME_INVALID")
         if not isinstance(self.placement, Placement):
             raise PressureInputError("PLACEMENT_KIND_INVALID")
-        object.__setattr__(self, "transfer_pressure", _optional_non_negative_number(self.transfer_pressure, "PLACEMENT_TRANSFER_INVALID"))
-        object.__setattr__(self, "headroom_pressure", _optional_non_negative_number(self.headroom_pressure, "PLACEMENT_HEADROOM_INVALID"))
+        object.__setattr__(
+            self,
+            "transfer_pressure",
+            _optional_non_negative_number(
+                self.transfer_pressure, "PLACEMENT_TRANSFER_INVALID"
+            ),
+        )
+        object.__setattr__(
+            self,
+            "headroom_pressure",
+            _optional_non_negative_number(
+                self.headroom_pressure, "PLACEMENT_HEADROOM_INVALID"
+            ),
+        )
         for name in ("transfer_pressure", "headroom_pressure"):
             value = getattr(self, name)
             if value is not None and value > 1.0:
@@ -318,7 +403,9 @@ class Residency:
         if not isinstance(self.candidates, (tuple, list)) or not self.candidates:
             raise PressureInputError("PLACEMENT_CANDIDATES_MISSING")
         candidates = tuple(self.candidates)
-        if any(not isinstance(candidate, PlacementCandidate) for candidate in candidates):
+        if any(
+            not isinstance(candidate, PlacementCandidate) for candidate in candidates
+        ):
             raise PressureInputError("PLACEMENT_CANDIDATE_INVALID")
         if len({candidate.name for candidate in candidates}) != len(candidates):
             raise PressureInputError("PLACEMENT_NAME_DUPLICATE")
@@ -344,7 +431,9 @@ class PressureInputs:
             if not isinstance(self.capabilities, (frozenset, set, tuple, list)):
                 raise PressureInputError("CAPABILITY_SET_INVALID")
             capabilities = frozenset(self.capabilities)
-            if any(not isinstance(item, str) or not item.strip() for item in capabilities):
+            if any(
+                not isinstance(item, str) or not item.strip() for item in capabilities
+            ):
                 raise PressureInputError("CAPABILITY_SET_INVALID")
             object.__setattr__(self, "capabilities", capabilities)
         for name in _METRIC_NAMES:
@@ -490,10 +579,16 @@ def score_pressure(
 
     if not isinstance(inputs, PressureInputs):
         raise PressureInputError("PRESSURE_INPUTS_INVALID")
-    if isinstance(min_metrics, bool) or not isinstance(min_metrics, int) or min_metrics < 1:
+    if (
+        isinstance(min_metrics, bool)
+        or not isinstance(min_metrics, int)
+        or min_metrics < 1
+    ):
         raise PressureInputError("MIN_METRICS_INVALID")
     min_confidence = _finite_fraction(min_confidence, "MIN_CONFIDENCE_INVALID")
-    acceptance_rate = _optional_non_negative_number(acceptance_rate, "ACCEPTANCE_RATE_INVALID")
+    acceptance_rate = _optional_non_negative_number(
+        acceptance_rate, "ACCEPTANCE_RATE_INVALID"
+    )
     if acceptance_rate is not None and acceptance_rate > 1.0:
         raise PressureInputError("ACCEPTANCE_RATE_INVALID")
 
@@ -516,7 +611,9 @@ def score_pressure(
         )
 
     denominator = sum(item.weight * item.confidence for item in contributions)
-    numerator = sum(item.weight * item.confidence * item.pressure for item in contributions)
+    numerator = sum(
+        item.weight * item.confidence * item.pressure for item in contributions
+    )
     score = 100.0 * numerator / denominator if denominator else None
     coverage = sum(item.weight for item in contributions) / sum(_WEIGHTS.values())
     confidence = coverage * (
@@ -555,9 +652,7 @@ def score_pressure(
         reasons.append("PRESSURE_RISK_HIGH")
 
     recommendation = (
-        Recommendation.SPECULATIVE
-        if not reasons
-        else Recommendation.BASELINE
+        Recommendation.SPECULATIVE if not reasons else Recommendation.BASELINE
     )
     return PressureScore(
         score=round(score, 6) if score is not None else None,
@@ -571,10 +666,14 @@ def score_pressure(
     )
 
 
-def score_placement(inputs: PressureInputs, candidate: PlacementCandidate) -> PlacementScore:
+def score_placement(
+    inputs: PressureInputs, candidate: PlacementCandidate
+) -> PlacementScore:
     """Score one Local-provided placement option; lower score is preferred."""
 
-    if not isinstance(inputs, PressureInputs) or not isinstance(candidate, PlacementCandidate):
+    if not isinstance(inputs, PressureInputs) or not isinstance(
+        candidate, PlacementCandidate
+    ):
         raise PressureInputError("PLACEMENT_SCORE_INPUT_INVALID")
     score = _PLACEMENT_BASE[candidate.placement] * 100.0
     reasons = {
@@ -636,7 +735,10 @@ def rank_placements(inputs: PressureInputs) -> tuple[PlacementScore, ...]:
     if not inputs.metric_is_usable("residency"):
         return ()
     assert inputs.residency is not None and inputs.residency.value is not None
-    scores = [score_placement(inputs, candidate) for candidate in inputs.residency.value.candidates]
+    scores = [
+        score_placement(inputs, candidate)
+        for candidate in inputs.residency.value.candidates
+    ]
     return tuple(sorted(scores, key=lambda item: (item.score, item.candidate.name)))
 
 
@@ -655,11 +757,11 @@ __all__ = [
     "PressureInputs",
     "PressureMetric",
     "PressureScore",
-    "rank_placements",
     "Recommendation",
     "Residency",
-    "score_placement",
-    "score_pressure",
     "ThroughputCost",
     "TransferPressure",
+    "rank_placements",
+    "score_placement",
+    "score_pressure",
 ]
