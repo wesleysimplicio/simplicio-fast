@@ -4,6 +4,7 @@ import pytest
 
 from simplicio_fast import decision_cache
 
+
 def make_key(**overrides: str | None) -> decision_cache.DecisionCacheKey:
     values: dict[str, str | None] = {
         "model_digest": "sha256:model",
