@@ -6,13 +6,15 @@ user content, and other unbounded text are rejected at the boundary.
 
 from __future__ import annotations
 
-from collections import OrderedDict
-from copy import deepcopy
-from dataclasses import dataclass
 import hashlib
 import json
+import math
+from collections import OrderedDict
+from collections.abc import Mapping, Sequence
+from copy import deepcopy
+from dataclasses import dataclass
 from threading import RLock
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 
 KEY_SCHEMA = "simplicio.fast.decision-cache-key/v1"
@@ -127,7 +129,7 @@ def _validate_safe_payload(value: Any) -> Any:
     if isinstance(value, int) and not isinstance(value, bool):
         return value
     if isinstance(value, float):
-        if value != value or value in (float("inf"), float("-inf")):
+        if not math.isfinite(value):
             raise DecisionCacheError("payload_not_json")
         return value
     if isinstance(value, str):
@@ -673,11 +675,11 @@ class DecisionCache:
 
 __all__ = [
     "CACHE_SCHEMA",
-    "DEFAULT_MAX_ENTRIES",
     "DecisionCache",
     "DecisionCacheEntry",
     "DecisionCacheError",
     "DecisionCacheKey",
+    "DEFAULT_MAX_ENTRIES",
     "InvalidationReason",
     "KEY_SCHEMA",
     "MAX_ENTRIES",
