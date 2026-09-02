@@ -416,6 +416,30 @@ class SourceEncodingError(ValueError):
         )
 
 
+class SourceParseError(ValueError):
+    """A source file is readable but is not valid Python syntax."""
+
+    code = "source_parse_failed"
+
+    def __init__(self, path: Path, cause: SyntaxError) -> None:
+        self.path = path.as_posix()
+        self.line = cause.lineno
+        self.column = cause.offset
+        self.reason = cause.msg or "invalid Python syntax"
+        self.recovery = (
+            "fix the source syntax or exclude the malformed file before rebuilding"
+        )
+        location = ""
+        if self.line is not None:
+            location = f" line={self.line}"
+            if self.column is not None:
+                location += f" column={self.column}"
+        super().__init__(
+            f"{self.code} path={self.path}{location} reason={self.reason} "
+            f"recovery={self.recovery}"
+        )
+
+
 def _read_python_source(path: Path) -> str:
     try:
         with tokenize.open(path) as source:
@@ -431,7 +455,10 @@ def _parse_file(
         from .adapters import parse_path
 
         return parse_path(path, relative_path), []
-    tree = ast.parse(_read_python_source(path), filename=relative_path)
+    try:
+        tree = ast.parse(_read_python_source(path), filename=relative_path)
+    except SyntaxError as error:
+        raise SourceParseError(Path(relative_path), error) from error
     collector = _Collector(relative_path, repository)
     collector.visit(tree)
     return collector.symbols, collector.relations
