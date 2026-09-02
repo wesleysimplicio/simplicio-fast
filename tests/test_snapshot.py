@@ -14,6 +14,7 @@ from simplicio_fast.snapshot import (
     Snapshot,
     SnapshotBuildTimeout,
     SnapshotTooLarge,
+    SourceParseError,
     StaleSnapshotError,
     build_snapshot,
     source_files,
@@ -22,6 +23,24 @@ import simplicio_fast.snapshot as snapshot_module
 
 
 class SnapshotTest(unittest.TestCase):
+    def test_invalid_python_raises_typed_parse_error(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "broken.py"
+            source.write_text("def broken(:\n    pass\n", encoding="utf-8")
+            output = root / "project.sfast"
+
+            with self.assertRaises(SourceParseError) as raised:
+                build_snapshot(root, output)
+
+            error = raised.exception
+            self.assertEqual("source_parse_failed", error.code)
+            self.assertEqual("broken.py", error.path)
+            self.assertEqual(1, error.line)
+            self.assertIsNotNone(error.column)
+            self.assertIn("fix the source syntax", error.recovery)
+            self.assertFalse(output.exists())
+
     def test_source_files_prunes_ignored_directories_before_traversal(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

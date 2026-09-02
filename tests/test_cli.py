@@ -266,6 +266,28 @@ class ContextProvenanceTest(unittest.TestCase):
             self.assertEqual("SourceFileTooLarge", payload["error"])
             self.assertFalse(snapshot.exists())
 
+    def test_build_reports_typed_parse_error_without_traceback(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "valid.py").write_text(
+                "def valid():\n    return True\n", encoding="utf-8"
+            )
+            (root / "broken.py").write_text(
+                "def broken(:\n    pass\n", encoding="utf-8"
+            )
+            snapshot = root / "project.sfast"
+
+            code, payload = self.invoke("build", str(root), "-o", str(snapshot))
+
+            self.assertEqual(2, code)
+            self.assertEqual("simplicio.fast.error/v1", payload["schema"])
+            self.assertEqual("SourceParseError", payload["error"])
+            self.assertEqual("source_parse_failed", payload["reason_code"])
+            self.assertEqual("broken.py", payload["path"])
+            self.assertEqual(1, payload["line"])
+            self.assertIn("fix the source syntax", payload["recovery"])
+            self.assertFalse(snapshot.exists())
+
     def test_doctor_reports_stable_recovery_and_refresh_repairs_snapshot(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

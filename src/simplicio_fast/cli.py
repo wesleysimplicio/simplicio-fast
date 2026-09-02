@@ -16,6 +16,7 @@ from .snapshot import (
     DEFAULT_MAX_SOURCE_FILE_BYTES,
     Snapshot,
     SnapshotBuildTimeout,
+    SourceParseError,
     StaleSnapshotError,
     build_snapshot,
 )
@@ -1360,6 +1361,16 @@ def main() -> int:
                     "recovery_code": error.code,
                     "recovery": error.recovery,
                     "progress": error.progress,
+                }
+            )
+        if isinstance(error, SourceParseError):
+            payload.update(
+                {
+                    "reason_code": error.code,
+                    "path": error.path,
+                    "line": error.line,
+                    "column": error.column,
+                    "recovery": error.recovery,
                 }
             )
         emit(payload)
