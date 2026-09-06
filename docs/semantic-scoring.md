@@ -127,14 +127,17 @@ Run offline without a model:
 ```bash
 simplicio-fast semantic-score "cache invalidation" \
   --generation <snapshot-generation> \
-  --candidates candidates.json
+  --candidates candidates.json \
+  --no-model
 ```
 
 `candidates.json` is a list of `canonical_id`, `text`, optional
 `source_sha256`, and optional normalized `structural_score`. If a SHA is
 provided it must match text exactly. The CLI currently exposes the complete
-offline lane; Runtime injects the production provider through the Python
-contract. It never accepts a model URL and cannot download one.
+offline lane; `--no-model` makes that choice explicit. Runtime injects the
+production provider through the Python contract. It never accepts a model URL
+and cannot download one. Issue #517's held-out optional-model experiment is
+documented in [`docs/issue-517-optional-model-evaluation.md`](issue-517-optional-model-evaluation.md).
 
 `simplicio-fast capabilities` includes
 `simplicio.fast.semantic-capabilities/v1`, which reports Runtime-first status,
