@@ -10,6 +10,8 @@ from pathlib import Path
 from . import __version__
 from .processor import ProjectProcessor, load_changeset
 from .parser_adapter import adapter_capability, build_payload_from_mapper
+from .mapper_ingest import validate_handoff
+from .mapper_snapshot import compile_mapper_payload
 from .rollout import RolloutController
 from .snapshot import (
     DEFAULT_BUILD_TIMEOUT_SECONDS,
@@ -192,6 +194,24 @@ def json_option(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _compile_mapper_snapshot(
+    root: Path, output: Path, mapper_handoff: dict[str, object]
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Compile a `.sfast` projection from one validated Mapper handoff."""
+
+    provenance = validate_handoff(root, mapper_handoff)
+    payload = build_payload_from_mapper(root, mapper_handoff)
+    compiled = compile_mapper_payload(
+        root,
+        payload,
+        output,
+        mapper_generation=str(provenance["generation"]),
+        handoff_sha256=str(provenance["handoff_sha256"]),
+        mapper_provenance=provenance,
+    )
+    return compiled, provenance
+
+
 def snapshot_argument(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "-s",
@@ -241,7 +261,10 @@ def build_parser() -> argparse.ArgumentParser:
                     else "absorb a project into the binary semantic processor"
                 )
             ),
-            description="Parse changed Python files and atomically publish a complete snapshot.",
+            description=(
+                "Publish a bounded snapshot; integrated mode projects a validated "
+                "canonical Mapper handoff and bootstrap mode is development-only."
+            ),
         )
         command.add_argument(
             "root", nargs="?", default=".", help="repository root (default: .)"
@@ -266,6 +289,20 @@ def build_parser() -> argparse.ArgumentParser:
                 "reject a source file larger than this before parsing "
                 f"(default: {DEFAULT_MAX_SOURCE_FILE_BYTES})"
             ),
+        )
+        command.add_argument(
+            "--mapper-mode",
+            choices=("bootstrap", "integrated"),
+            default="bootstrap",
+            help=(
+                "snapshot input mode; integrated consumes only the supplied canonical "
+                "Mapper handoff"
+            ),
+        )
+        command.add_argument(
+            "--mapper-handoff",
+            default=None,
+            help="JSON file emitted by `simplicio-mapper fast-handoff`",
         )
         json_option(command)
     query = commands.add_parser(
@@ -410,6 +447,17 @@ def build_parser() -> argparse.ArgumentParser:
             "--selection-mode",
             choices=("semantic", "legacy-regex"),
             default="semantic",
+        )
+        command.add_argument(
+            "--mapper-mode",
+            choices=("bootstrap", "integrated"),
+            default="bootstrap",
+            help="context source mode; integrated requires a canonical Mapper handoff",
+        )
+        command.add_argument(
+            "--mapper-handoff",
+            default=None,
+            help="JSON file emitted by `simplicio-mapper fast-handoff`",
         )
 
     delivery = commands.add_parser(
@@ -721,11 +769,56 @@ def main() -> int:
         if args.command in {"build", "refresh", "ingest"}:
             processor = ProjectProcessor(Path(args.root), Path(args.output))
             if args.command == "ingest":
+                if args.mapper_mode == "integrated":
+                    if not args.mapper_handoff:
+                        raise ValueError(
+                            "--mapper-handoff is required for integrated ingest"
+                        )
+                    handoff = json.loads(
+                        Path(args.mapper_handoff).read_text(encoding="utf-8")
+                    )
+                    if not isinstance(handoff, dict):
+                        raise ValueError("--mapper-handoff must contain a JSON object")
+                    compiled, provenance = _compile_mapper_snapshot(
+                        Path(args.root).resolve(), Path(args.output), handoff
+                    )
+                    emit(
+                        {
+                            "schema": "simplicio.fast.ingest/v2",
+                            "snapshot": str(Path(args.output)),
+                            "mapper": provenance,
+                            "projection": compiled,
+                        }
+                    )
+                    return 0
                 emit(
                     processor.ingest(
                         timeout_seconds=args.timeout,
                         max_file_bytes=args.max_file_bytes,
                     )
+                )
+                return 0
+            if args.mapper_mode == "integrated":
+                if not args.mapper_handoff:
+                    raise ValueError(
+                        "--mapper-handoff is required for integrated snapshot build"
+                    )
+                handoff = json.loads(
+                    Path(args.mapper_handoff).read_text(encoding="utf-8")
+                )
+                if not isinstance(handoff, dict):
+                    raise ValueError("--mapper-handoff must contain a JSON object")
+                compiled, provenance = _compile_mapper_snapshot(
+                    Path(args.root).resolve(), Path(args.output), handoff
+                )
+                emit(
+                    {
+                        "schema": "simplicio.fast.build/v1",
+                        "version": __version__,
+                        "snapshot": str(Path(args.output)),
+                        "mapper": provenance,
+                        "projection": compiled,
+                    }
                 )
                 return 0
             emit(
@@ -751,6 +844,8 @@ def main() -> int:
                     {
                         "schema": "simplicio.fast.query/v1",
                         "snapshot_version": snapshot.format_version,
+                        "snapshot_generation": snapshot.generation,
+                        "snapshot_provenance": snapshot.provenance,
                         "matches": [
                             asdict(item)
                             for item in snapshot.find(args.term)[: args.limit]
@@ -768,6 +863,8 @@ def main() -> int:
                     {
                         "schema": "simplicio.fast.search/v1",
                         "snapshot_version": snapshot.format_version,
+                        "snapshot_generation": snapshot.generation,
+                        "snapshot_provenance": snapshot.provenance,
                         "filters": {
                             "prefix": args.prefix,
                             "path": args.path,
@@ -778,6 +875,19 @@ def main() -> int:
                 )
         elif args.command in {"understand", "plan"}:
             processor = ProjectProcessor(Path(args.root), Path(args.snapshot))
+            if args.mapper_mode == "integrated":
+                if not args.mapper_handoff:
+                    raise ValueError(
+                        "--mapper-handoff is required for integrated context selection"
+                    )
+                handoff = json.loads(
+                    Path(args.mapper_handoff).read_text(encoding="utf-8")
+                )
+                if not isinstance(handoff, dict):
+                    raise ValueError("--mapper-handoff must contain a JSON object")
+                _compile_mapper_snapshot(
+                    Path(args.root).resolve(), Path(args.snapshot), handoff
+                )
             if args.command == "understand":
                 emit(
                     asdict(
@@ -978,6 +1088,7 @@ def main() -> int:
                             "snapshot_path": str(snapshot_path),
                             "snapshot_sha256": snapshot.sha256,
                             "snapshot_generation": snapshot.generation,
+                            "snapshot_provenance": snapshot.provenance,
                             "span_count": len(spans),
                             "limits": {
                                 "max_results": args.max_results,
@@ -1015,6 +1126,8 @@ def main() -> int:
                     {
                         "schema": "simplicio.fast.impact/v1",
                         "snapshot_version": snapshot.format_version,
+                        "snapshot_generation": snapshot.generation,
+                        "snapshot_provenance": snapshot.provenance,
                         "query": args.term,
                         "relations": [
                             asdict(item)

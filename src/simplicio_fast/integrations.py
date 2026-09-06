@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Any
 
 
-MINIMUM_MAPPER = (0, 26, 1)
-MINIMUM_DEV_CLI = (0, 18, 1)
+MINIMUM_MAPPER = (0, 26, 11)
+MINIMUM_DEV_CLI = (0, 18, 6)
 
 
 def _version_tuple(value: str | None) -> tuple[int, ...] | None:

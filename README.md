@@ -318,7 +318,7 @@ The production delivery path is explicit and Mapper-owned. Produce the Mapper ha
 ```bash
 simplicio-mapper snapshot build --root .
 simplicio-mapper fast-handoff . > mapper-handoff.json
-simplicio-fast build . --output fast.sfast
+simplicio-fast build . --output fast.sfast --mapper-mode integrated --mapper-handoff mapper-handoff.json
 simplicio-fast delivery "implement the requested change" --root . --snapshot fast.sfast --mapper-mode integrated --mapper-handoff mapper-handoff.json
 ```
 

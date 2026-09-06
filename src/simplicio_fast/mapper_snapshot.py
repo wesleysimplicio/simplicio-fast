@@ -7,7 +7,16 @@ import json
 from pathlib import Path
 from typing import Any, Mapping
 
-from .snapshot import KIND_TO_ID, Relation, Snapshot, Symbol, _build_v2
+from .snapshot import (
+    KIND_TO_ID,
+    MAPPER_HANDOFF_SCHEMA,
+    Relation,
+    SNAPSHOT_PROVENANCE_SCHEMA,
+    Snapshot,
+    Symbol,
+    VERSION,
+    _build_v2,
+)
 
 
 MAPPER_SNAPSHOT_SCHEMA = "simplicio.fast.mapper-snapshot/v1"
@@ -42,10 +51,15 @@ def compile_mapper_payload(
     *,
     mapper_generation: str,
     handoff_sha256: str,
+    mapper_provenance: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Compile parser-adapter/v1 facts without reparsing source files."""
     if payload.get("schema") != "simplicio.fast.parser-adapter/v1":
         raise ValueError("mapper_payload_schema_unsupported")
+    if payload.get("mode") != "integrated":
+        raise ValueError("mapper_projection_requires_canonical_input")
+    if not isinstance(mapper_generation, str) or not mapper_generation.strip():
+        raise ValueError("mapper_generation_missing")
     files = payload.get("files")
     symbols = payload.get("symbols")
     relations = payload.get("relations")
@@ -131,7 +145,41 @@ def compile_mapper_payload(
             )
         )
 
-    _build_v2(entries, compiled_relations, output)
+    source = dict(mapper_provenance or {})
+    source_generation = source.get("generation", mapper_generation)
+    if source_generation != mapper_generation:
+        raise ValueError("mapper_generation_mismatch")
+    artifact_digest = str(source.get("artifact_digest") or handoff_sha256)
+    artifact_digest = artifact_digest.removeprefix("sha256:")
+    if len(artifact_digest) != 64 or any(
+        character not in "0123456789abcdef" for character in artifact_digest
+    ):
+        raise ValueError("mapper_artifact_digest_invalid")
+    mapper_version = str(source.get("mapper_version") or "unknown")
+    repository_id = str(source.get("repository_id") or root.name)
+    capability_coverage = source.get("capability_coverage")
+    if not isinstance(capability_coverage, Mapping):
+        capability_coverage = {
+            "context_graph": True,
+            "files": bool(files),
+            "symbols": bool(symbols),
+            "relations": True,
+            "source_hashes": True,
+            "stable_handles": True,
+        }
+    provenance = {
+        "schema": SNAPSHOT_PROVENANCE_SCHEMA,
+        "mode": "integrated",
+        "authority": "simplicio-mapper",
+        "mapper_schema": str(source.get("mapper_schema") or MAPPER_HANDOFF_SCHEMA),
+        "mapper_version": mapper_version,
+        "repository_id": repository_id,
+        "mapper_generation": mapper_generation,
+        "artifact_digest": artifact_digest,
+        "fast_format_version": VERSION,
+        "capability_coverage": dict(capability_coverage),
+    }
+    _build_v2(entries, compiled_relations, output, provenance=provenance)
     with Snapshot(output) as snapshot:
         generation = snapshot.generation
     sidecar = output.with_name(output.name + ".mapper.json")
@@ -141,6 +189,12 @@ def compile_mapper_payload(
                 "schema": MAPPER_SNAPSHOT_SCHEMA,
                 "mapper_generation": mapper_generation,
                 "handoff_sha256": handoff_sha256,
+                "mapper_schema": provenance["mapper_schema"],
+                "mapper_version": mapper_version,
+                "repository_id": repository_id,
+                "artifact_digest": artifact_digest,
+                "fast_format_version": provenance["fast_format_version"],
+                "capability_coverage": provenance["capability_coverage"],
                 "fast_generation": generation,
                 "files": len(entries),
                 "symbols": sum(len(item[3]) for item in entries),
@@ -155,6 +209,12 @@ def compile_mapper_payload(
     return {
         "schema": MAPPER_SNAPSHOT_SCHEMA,
         "mapper_generation": mapper_generation,
+        "mapper_schema": provenance["mapper_schema"],
+        "mapper_version": mapper_version,
+        "repository_id": repository_id,
+        "artifact_digest": artifact_digest,
+        "fast_format_version": provenance["fast_format_version"],
+        "capability_coverage": provenance["capability_coverage"],
         "fast_generation": generation,
         "files": len(entries),
         "symbols": sum(len(item[3]) for item in entries),

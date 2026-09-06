@@ -1,9 +1,11 @@
-"""Versioned, bounded and memory-mapped semantic snapshots.
+"""Versioned, bounded and memory-mapped Mapper projections.
 
 SFAST001/v1 remains readable for migration.  New snapshots use v2: a little-endian
 section directory, checksums for every section, direct lookup indexes and typed
-relationships.  The binary file is always a disposable cache; source files and
-their hashes remain authoritative.
+relationships.  Integrated binary files carry the canonical Mapper identity;
+the source parser is an explicit development-only bootstrap path.  The binary
+file is always a disposable cache; source files and Mapper artifacts remain
+authoritative.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable, Mapping
 
 MAGIC = b"SFAST001"
 LEGACY_VERSION = 1
@@ -34,6 +36,9 @@ MAX_RELATIONS = 10_000_000
 MAX_SECTIONS = 32
 ATOMIC_PUBLISH_ATTEMPTS = 4
 ATOMIC_PUBLISH_DELAY_SECONDS = 0.01
+
+SNAPSHOT_PROVENANCE_SCHEMA = "simplicio.fast.snapshot-provenance/v1"
+MAPPER_HANDOFF_SCHEMA = "simplicio.mapper-fast-handoff/v1"
 
 
 def _atomic_publish(temporary: Path, destination: Path) -> None:
@@ -119,6 +124,84 @@ def kind_to_id(kind: str) -> int:
 RELATION_KINDS = {"import", "reference", "call", "definition", "test"}
 
 
+def _bootstrap_provenance(repository_id: str) -> dict[str, Any]:
+    """Describe the explicit development-only source parser path."""
+
+    return {
+        "schema": SNAPSHOT_PROVENANCE_SCHEMA,
+        "mode": "bootstrap",
+        "authority": "simplicio-fast-bootstrap",
+        "mapper_schema": None,
+        "mapper_version": None,
+        "repository_id": repository_id,
+        "mapper_generation": None,
+        "artifact_digest": None,
+        "fast_format_version": VERSION,
+        "capability_coverage": {
+            "context_graph": False,
+            "files": True,
+            "symbols": True,
+            "relations": True,
+            "source_hashes": True,
+            "stable_handles": False,
+        },
+    }
+
+
+def _validate_snapshot_provenance(value: object) -> dict[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError("snapshot provenance is missing")
+    required = (
+        "schema",
+        "mode",
+        "authority",
+        "mapper_schema",
+        "mapper_version",
+        "repository_id",
+        "mapper_generation",
+        "artifact_digest",
+        "fast_format_version",
+        "capability_coverage",
+    )
+    if any(key not in value for key in required):
+        raise ValueError("snapshot provenance is incomplete")
+    if value["schema"] != SNAPSHOT_PROVENANCE_SCHEMA:
+        raise ValueError("snapshot provenance schema mismatch")
+    mode = value["mode"]
+    if mode not in {"bootstrap", "integrated", "legacy"}:
+        raise ValueError("snapshot provenance mode is unsupported")
+    if not isinstance(value["repository_id"], str) or not value["repository_id"].strip():
+        raise ValueError("snapshot provenance repository is invalid")
+    if value["fast_format_version"] != VERSION:
+        raise ValueError("snapshot provenance format mismatch")
+    if not isinstance(value["capability_coverage"], Mapping):
+        raise ValueError("snapshot capability coverage is invalid")
+    if mode == "integrated":
+        if value["authority"] != "simplicio-mapper":
+            raise ValueError("snapshot Mapper authority is invalid")
+        if value["mapper_schema"] != MAPPER_HANDOFF_SCHEMA:
+            raise ValueError("snapshot Mapper schema is invalid")
+        if not isinstance(value["mapper_version"], str) or not value["mapper_version"].strip():
+            raise ValueError("snapshot Mapper version is invalid")
+        if not isinstance(value["mapper_generation"], str) or not value["mapper_generation"].strip():
+            raise ValueError("snapshot Mapper generation is invalid")
+        digest = value["artifact_digest"]
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+        ):
+            raise ValueError("snapshot Mapper artifact digest is invalid")
+    elif mode == "bootstrap":
+        if value["authority"] != "simplicio-fast-bootstrap":
+            raise ValueError("snapshot bootstrap authority is invalid")
+        if value["mapper_schema"] is not None or value["mapper_generation"] is not None:
+            raise ValueError("bootstrap snapshot contains Mapper identity")
+        if value["artifact_digest"] is not None:
+            raise ValueError("bootstrap snapshot contains Mapper artifact digest")
+    return dict(value)
+
+
 @dataclass(frozen=True, slots=True)
 class Symbol:
     name: str
@@ -180,6 +263,12 @@ class ContextSpan:
 
 class StaleSnapshotError(RuntimeError):
     pass
+
+
+class SnapshotProvenanceError(ValueError):
+    """Raised when a source-parser build would replace a canonical projection."""
+
+    code = "snapshot_provenance_invalid"
 
 
 def stable_id(
@@ -510,6 +599,8 @@ def _build_v2(
     entries: list[tuple[str, bytes, int, list[Symbol]]],
     relations: list[Relation],
     output: Path,
+    *,
+    provenance: Mapping[str, Any] | None = None,
 ) -> tuple[int, str]:
     strings = bytearray()
     file_rows: list[bytes] = []
@@ -559,7 +650,15 @@ def _build_v2(
         exact.setdefault(symbol.qualified_name.casefold(), []).append(index)
         paths.setdefault(symbol.file, []).append(index)
         kinds.setdefault(symbol.kind, []).append(index)
-    indexes = {"exact": exact, "names": names, "paths": paths, "kinds": kinds}
+    indexes = {
+        "exact": exact,
+        "names": names,
+        "paths": paths,
+        "kinds": kinds,
+        "provenance": _validate_snapshot_provenance(
+            provenance or _bootstrap_provenance("unknown")
+        ),
+    }
     relation_payload = [
         {
             "origin": relation.origin,
@@ -779,6 +878,10 @@ def build_snapshot(
     if max_file_bytes < 1:
         raise ValueError("max_file_bytes must be positive")
     root = root.resolve()
+    if os.path.isfile(root / ".simplicio" / "fast-handoff.json"):
+        raise SnapshotProvenanceError(
+            "canonical Mapper handoff is present; compile a Mapper projection instead"
+        )
     repository = _repository_id(root)
     previous: dict[str, tuple[bytes, list[Symbol]]] = {}
     previous_relations: list[Relation] = []
@@ -786,6 +889,7 @@ def build_snapshot(
     previous_checksum = ""
     previous_valid = False
     previous_format_version = 0
+    previous_provenance: dict[str, Any] | None = None
     previous_start = time.perf_counter()
     if output.exists():
         try:
@@ -797,11 +901,18 @@ def build_snapshot(
                     symbol.qualified_name: symbol.file for symbol in snapshot.symbols()
                 }
                 previous_checksum = snapshot.content_checksum
+                previous_provenance = snapshot.provenance
                 previous_valid = True
         except (OSError, ValueError):
             previous = {}
             previous_relations = []
             previous_symbol_files = {}
+            previous_provenance = None
+    if previous_valid and previous_provenance is not None:
+        if previous_provenance.get("mode") == "integrated":
+            raise SnapshotProvenanceError(
+                "canonical Mapper projection requires Mapper input; refusing source-parser rebuild"
+            )
     phase_timings["previous_snapshot_load"] = (
         time.perf_counter() - previous_start
     ) * 1000
@@ -984,7 +1095,12 @@ def build_snapshot(
     if deadline is not None and time.perf_counter() >= deadline:
         raise_timeout()
     publication_start = time.perf_counter()
-    total_size, checksum = _build_v2(entries, relations, output)
+    total_size, checksum = _build_v2(
+        entries,
+        relations,
+        output,
+        provenance=_bootstrap_provenance(repository),
+    )
     try:
         _write_validation_cache(
             output,
@@ -1058,6 +1174,18 @@ class Snapshot:
         self._header_generation = ""
         self.relation_count = 0
         self._sections = {}
+        self._provenance = {
+            "schema": SNAPSHOT_PROVENANCE_SCHEMA,
+            "mode": "legacy",
+            "authority": "unknown",
+            "mapper_schema": None,
+            "mapper_version": None,
+            "repository_id": "unknown",
+            "mapper_generation": None,
+            "artifact_digest": None,
+            "fast_format_version": LEGACY_VERSION,
+            "capability_coverage": {},
+        }
         if self.file_count > MAX_FILES or self.symbol_count > MAX_SYMBOLS:
             raise ValueError("snapshot record limit exceeded")
         _validate_region(
@@ -1169,6 +1297,13 @@ class Snapshot:
         self.relation_count = 0
         if self.file_count > MAX_FILES or self.symbol_count > MAX_SYMBOLS:
             raise ValueError("snapshot record limit exceeded")
+        try:
+            index_data = json.loads(self._section_bytes("indexes"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("invalid index or relation section") from error
+        if not isinstance(index_data, dict):
+            raise ValueError("invalid index payload")
+        self._provenance = _validate_snapshot_provenance(index_data.get("provenance"))
         self._validate_v2_records()
 
     def _validate_v2_records(self) -> None:
@@ -1243,6 +1378,36 @@ class Snapshot:
         if self.format_version != VERSION:
             return self.sha256
         return self._content_checksum
+
+    @property
+    def provenance(self) -> dict[str, Any]:
+        """Return the immutable Mapper/source lineage stored in the snapshot."""
+
+        return dict(self._provenance)
+
+    def matches_mapper(self, mapper: Mapping[str, Any]) -> bool:
+        """Return whether this projection is pinned to a supplied Mapper identity."""
+
+        if self.provenance.get("mode") != "integrated":
+            return False
+        return all(
+            self.provenance.get(snapshot_key) == mapper.get(mapper_key)
+            for snapshot_key, mapper_key in (
+                ("mapper_schema", "mapper_schema"),
+                ("mapper_version", "mapper_version"),
+                ("repository_id", "repository_id"),
+                ("mapper_generation", "generation"),
+                ("artifact_digest", "artifact_digest"),
+            )
+        )
+
+    def require_mapper(self, mapper: Mapping[str, Any]) -> None:
+        """Fail closed when a caller tries to use a stale Mapper projection."""
+
+        if not self.matches_mapper(mapper):
+            raise StaleSnapshotError(
+                "snapshot Mapper provenance differs from the requested canonical generation"
+            )
 
     @property
     def sha256(self) -> str:
@@ -1326,7 +1491,7 @@ class Snapshot:
         files = [path for path, _ in self.files()]
         return [self._symbol_at(index, files) for index in range(self.symbol_count)]
 
-    def _indexes(self) -> dict[str, dict[str, list[int]]]:
+    def _indexes(self) -> dict[str, Any]:
         if self.format_version == LEGACY_VERSION:
             return {}
         value = json.loads(self._section_bytes("indexes"))
@@ -1545,6 +1710,7 @@ class Snapshot:
         max_lines: int = 120,
         max_bytes: int = 32_000,
         max_tokens: int | None = None,
+        mapper_provenance: Mapping[str, Any] | None = None,
     ) -> list[ContextSpan]:
         return self.context_many(
             root,
@@ -1553,6 +1719,7 @@ class Snapshot:
             max_lines=max_lines,
             max_bytes=max_bytes,
             max_tokens=max_tokens,
+            mapper_provenance=mapper_provenance,
         )
 
     def context_many(
@@ -1564,6 +1731,7 @@ class Snapshot:
         max_lines: int = 120,
         max_bytes: int = 32_000,
         max_tokens: int | None = None,
+        mapper_provenance: Mapping[str, Any] | None = None,
     ) -> list[ContextSpan]:
         """Resolve several queries with one verified source cache per request."""
         if (
@@ -1573,6 +1741,8 @@ class Snapshot:
             or (max_tokens is not None and max_tokens < 1)
         ):
             raise ValueError("context limits must be positive")
+        if mapper_provenance is not None:
+            self.require_mapper(mapper_provenance)
         root = root.resolve()
         expected_hashes = {path: digest for path, digest in self.files()}
         spans: list[ContextSpan] = []
@@ -1663,6 +1833,12 @@ class Snapshot:
             "symbols": self.symbol_count,
             "relations": self.relation_count,
             "sections": sorted(self._sections),
+            "provenance": self.provenance,
+            "repository_id": self.provenance.get("repository_id"),
+            "mapper_generation": self.provenance.get("mapper_generation"),
+            "artifact_digest": self.provenance.get("artifact_digest"),
+            "fast_format_version": self.provenance.get("fast_format_version"),
+            "capability_coverage": self.provenance.get("capability_coverage"),
         }
 
     def grouped(self) -> dict[str, tuple[bytes, list[Symbol]]]:
