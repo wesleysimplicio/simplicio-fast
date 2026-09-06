@@ -53,8 +53,8 @@
     "completion_quality": 0.0,
     "mrr": 0.045454545454545414,
     "ndcg_at_3": 0.03355184058441296,
-    "p95_latency_ms": 1.941616,
-    "peak_rss_kib": 572,
+    "p95_latency_ms": 2.196715,
+    "peak_rss_kib": 316,
     "precision_at_3": 0.0,
     "recall_at_1": 0.09090909090909094,
     "recall_at_3": 0.0
@@ -151,7 +151,7 @@
     },
     "kind": "deterministic_contract_fixture",
     "learned": false,
-    "peak_rss_delta_kib": 572,
+    "peak_rss_delta_kib": 316,
     "production": false,
     "resource_limits": {
       "max_p95_latency_ms": 20.0,
@@ -174,7 +174,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.449883,
+      "cpu_ms": 0.437688,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -201,7 +201,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -209,7 +209,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.452512
+      "wall_ms": 0.438535
     },
     {
       "adversarial": false,
@@ -217,7 +217,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.238655,
+      "cpu_ms": 0.230281,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -244,7 +244,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -252,7 +252,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.238274
+      "wall_ms": 0.230008
     },
     {
       "adversarial": false,
@@ -260,7 +260,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.184631,
+      "cpu_ms": 0.177938,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -287,7 +287,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -295,7 +295,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.184428
+      "wall_ms": 0.177664
     },
     {
       "adversarial": false,
@@ -303,7 +303,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.1732,
+      "cpu_ms": 0.170215,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -330,7 +330,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -338,7 +338,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.173029
+      "wall_ms": 0.170079
     },
     {
       "adversarial": false,
@@ -346,7 +346,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.168846,
+      "cpu_ms": 0.165906,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -373,7 +373,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -381,7 +381,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.168667
+      "wall_ms": 0.165694
     },
     {
       "adversarial": false,
@@ -389,7 +389,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.209137,
+      "cpu_ms": 0.216568,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -416,7 +416,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -424,7 +424,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.208982
+      "wall_ms": 0.216339
     },
     {
       "adversarial": false,
@@ -432,7 +432,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.199518,
+      "cpu_ms": 0.196626,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -459,7 +459,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -467,7 +467,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 0.199383
+      "wall_ms": 0.196498
     },
     {
       "adversarial": false,
@@ -475,7 +475,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.205383,
+      "cpu_ms": 0.206243,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -502,7 +502,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -510,7 +510,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.205235
+      "wall_ms": 0.206159
     },
     {
       "adversarial": false,
@@ -518,7 +518,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.202236,
+      "cpu_ms": 0.192994,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -545,7 +545,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -553,7 +553,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.202035
+      "wall_ms": 0.192868
     },
     {
       "adversarial": false,
@@ -561,7 +561,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.200257,
+      "cpu_ms": 0.161462,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -586,7 +586,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -594,7 +594,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.199985
+      "wall_ms": 0.161354
     },
     {
       "adversarial": true,
@@ -602,7 +602,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.214929,
+      "cpu_ms": 0.220024,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -629,7 +629,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -637,7 +637,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.214763
+      "wall_ms": 0.219851
     },
     {
       "adversarial": true,
@@ -645,7 +645,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.199084,
+      "cpu_ms": 0.23001,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -672,7 +672,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -680,7 +680,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.198896
+      "wall_ms": 0.229693
     },
     {
       "adversarial": false,
@@ -688,7 +688,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.164477,
+      "cpu_ms": 0.161221,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -715,7 +715,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -723,7 +723,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.16432
+      "wall_ms": 0.161069
     },
     {
       "adversarial": false,
@@ -731,7 +731,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.197972,
+      "cpu_ms": 0.196379,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -758,7 +758,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -766,7 +766,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.197849
+      "wall_ms": 0.196176
     },
     {
       "adversarial": false,
@@ -774,7 +774,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.165294,
+      "cpu_ms": 0.164408,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -801,7 +801,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -809,7 +809,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.165132
+      "wall_ms": 0.164303
     },
     {
       "adversarial": false,
@@ -817,7 +817,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.165963,
+      "cpu_ms": 0.183857,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -844,7 +844,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -852,7 +852,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.165827
+      "wall_ms": 0.183584
     },
     {
       "adversarial": false,
@@ -860,7 +860,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.163695,
+      "cpu_ms": 0.164077,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -887,7 +887,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -895,7 +895,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.163535
+      "wall_ms": 0.163961
     },
     {
       "adversarial": false,
@@ -903,7 +903,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.206035,
+      "cpu_ms": 0.205191,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -930,7 +930,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -938,7 +938,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.205906
+      "wall_ms": 0.205054
     },
     {
       "adversarial": false,
@@ -946,7 +946,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 3.257614,
+      "cpu_ms": 4.107049,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -973,7 +973,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -981,7 +981,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 3.299631
+      "wall_ms": 4.1043
     },
     {
       "adversarial": false,
@@ -989,7 +989,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.237256,
+      "cpu_ms": 0.23831,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -1016,7 +1016,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -1024,7 +1024,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.237081
+      "wall_ms": 0.23798
     },
     {
       "adversarial": false,
@@ -1032,7 +1032,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.207958,
+      "cpu_ms": 0.205231,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -1059,7 +1059,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -1067,7 +1067,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.207819
+      "wall_ms": 0.205098
     },
     {
       "adversarial": false,
@@ -1075,7 +1075,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.170436,
+      "cpu_ms": 0.170264,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -1100,7 +1100,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -1108,7 +1108,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.17028
+      "wall_ms": 0.170074
     },
     {
       "adversarial": true,
@@ -1116,7 +1116,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.260155,
+      "cpu_ms": 0.235814,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -1143,7 +1143,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -1151,7 +1151,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.259686
+      "wall_ms": 0.235611
     },
     {
       "adversarial": true,
@@ -1159,7 +1159,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.207762,
+      "cpu_ms": 0.191487,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -1186,7 +1186,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -1194,7 +1194,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.207453
+      "wall_ms": 0.19139
     },
     {
       "adversarial": false,
@@ -1202,7 +1202,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.169159,
+      "cpu_ms": 0.170823,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -1229,7 +1229,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -1237,7 +1237,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.169054
+      "wall_ms": 0.170614
     },
     {
       "adversarial": false,
@@ -1245,7 +1245,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.19152,
+      "cpu_ms": 0.192703,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -1272,7 +1272,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -1280,7 +1280,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.191398
+      "wall_ms": 0.192434
     },
     {
       "adversarial": false,
@@ -1288,7 +1288,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.164947,
+      "cpu_ms": 0.166879,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -1315,7 +1315,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -1323,7 +1323,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.164686
+      "wall_ms": 0.166698
     },
     {
       "adversarial": false,
@@ -1331,7 +1331,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.163473,
+      "cpu_ms": 0.212361,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -1358,7 +1358,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -1366,7 +1366,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.163312
+      "wall_ms": 0.212024
     },
     {
       "adversarial": false,
@@ -1374,7 +1374,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.193925,
+      "cpu_ms": 0.163939,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -1401,7 +1401,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -1409,7 +1409,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.19364
+      "wall_ms": 0.16381
     },
     {
       "adversarial": false,
@@ -1417,7 +1417,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.208571,
+      "cpu_ms": 0.209738,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -1444,7 +1444,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -1452,7 +1452,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.208475
+      "wall_ms": 0.209621
     },
     {
       "adversarial": false,
@@ -1460,7 +1460,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.197413,
+      "cpu_ms": 0.198017,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -1487,7 +1487,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -1495,7 +1495,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 0.1973
+      "wall_ms": 0.197899
     },
     {
       "adversarial": false,
@@ -1503,7 +1503,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.202927,
+      "cpu_ms": 0.238754,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -1530,7 +1530,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22424,
+      "rss_kib": 22444,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -1538,7 +1538,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.202799
+      "wall_ms": 0.238398
     },
     {
       "adversarial": false,
@@ -1546,7 +1546,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.250327,
+      "cpu_ms": 0.197748,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -1573,7 +1573,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -1581,7 +1581,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.249981
+      "wall_ms": 0.197617
     },
     {
       "adversarial": false,
@@ -1589,7 +1589,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.225842,
+      "cpu_ms": 0.1604,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -1614,7 +1614,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 2,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -1622,7 +1622,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.225414
+      "wall_ms": 0.160265
     },
     {
       "adversarial": true,
@@ -1630,7 +1630,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.211984,
+      "cpu_ms": 0.208156,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -1657,7 +1657,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -1665,7 +1665,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.211854
+      "wall_ms": 0.208058
     },
     {
       "adversarial": true,
@@ -1673,7 +1673,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.188417,
+      "cpu_ms": 0.189815,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -1700,7 +1700,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -1708,7 +1708,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.188292
+      "wall_ms": 0.189708
     },
     {
       "adversarial": false,
@@ -1716,7 +1716,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.187022,
+      "cpu_ms": 0.157098,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -1743,7 +1743,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -1751,7 +1751,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.1868
+      "wall_ms": 0.156979
     },
     {
       "adversarial": false,
@@ -1759,7 +1759,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.187975,
+      "cpu_ms": 0.182164,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -1786,7 +1786,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -1794,7 +1794,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.187835
+      "wall_ms": 0.18206
     },
     {
       "adversarial": false,
@@ -1802,7 +1802,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.18627,
+      "cpu_ms": 0.162061,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -1829,7 +1829,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -1837,7 +1837,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.185809
+      "wall_ms": 0.161774
     },
     {
       "adversarial": false,
@@ -1845,7 +1845,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.166674,
+      "cpu_ms": 0.160409,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -1872,7 +1872,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -1880,7 +1880,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.166508
+      "wall_ms": 0.160213
     },
     {
       "adversarial": false,
@@ -1888,7 +1888,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.165501,
+      "cpu_ms": 0.160508,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -1915,7 +1915,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -1923,7 +1923,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.165365
+      "wall_ms": 0.160386
     },
     {
       "adversarial": false,
@@ -1931,7 +1931,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.204616,
+      "cpu_ms": 0.19695,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -1958,7 +1958,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -1966,7 +1966,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.204501
+      "wall_ms": 0.196934
     },
     {
       "adversarial": false,
@@ -1974,7 +1974,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.208416,
+      "cpu_ms": 0.197154,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -2001,7 +2001,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -2009,7 +2009,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 0.208173
+      "wall_ms": 0.197009
     },
     {
       "adversarial": false,
@@ -2017,7 +2017,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.204547,
+      "cpu_ms": 0.204436,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -2044,7 +2044,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -2052,7 +2052,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.204389
+      "wall_ms": 0.204344
     },
     {
       "adversarial": false,
@@ -2060,7 +2060,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.275253,
+      "cpu_ms": 0.194914,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -2087,7 +2087,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -2095,7 +2095,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.274703
+      "wall_ms": 0.19477
     },
     {
       "adversarial": false,
@@ -2103,7 +2103,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.248151,
+      "cpu_ms": 0.159354,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -2128,7 +2128,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -2136,7 +2136,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.247326
+      "wall_ms": 0.159244
     },
     {
       "adversarial": true,
@@ -2144,7 +2144,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.326753,
+      "cpu_ms": 0.208515,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -2171,7 +2171,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -2179,7 +2179,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.325363
+      "wall_ms": 0.208369
     },
     {
       "adversarial": true,
@@ -2187,7 +2187,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.305296,
+      "cpu_ms": 0.192755,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -2214,7 +2214,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -2222,7 +2222,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.304095
+      "wall_ms": 0.192611
     },
     {
       "adversarial": false,
@@ -2230,7 +2230,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.268127,
+      "cpu_ms": 0.165356,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -2257,7 +2257,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -2265,7 +2265,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.267683
+      "wall_ms": 0.165201
     },
     {
       "adversarial": false,
@@ -2273,7 +2273,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.315261,
+      "cpu_ms": 0.236962,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -2300,7 +2300,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -2308,7 +2308,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.31456
+      "wall_ms": 0.23657
     },
     {
       "adversarial": false,
@@ -2316,7 +2316,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.280588,
+      "cpu_ms": 0.165644,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -2343,7 +2343,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -2351,7 +2351,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.28017
+      "wall_ms": 0.165511
     },
     {
       "adversarial": false,
@@ -2359,7 +2359,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.302232,
+      "cpu_ms": 0.178207,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -2386,7 +2386,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -2394,7 +2394,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.30119
+      "wall_ms": 0.177942
     },
     {
       "adversarial": false,
@@ -2402,7 +2402,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.272297,
+      "cpu_ms": 0.164283,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -2429,7 +2429,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -2437,7 +2437,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.27177
+      "wall_ms": 0.16417
     },
     {
       "adversarial": false,
@@ -2445,7 +2445,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.308863,
+      "cpu_ms": 0.222935,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -2472,7 +2472,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -2480,7 +2480,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.308188
+      "wall_ms": 0.222578
     },
     {
       "adversarial": false,
@@ -2488,7 +2488,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.731684,
+      "cpu_ms": 0.246008,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -2515,7 +2515,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -2523,7 +2523,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 0.728536
+      "wall_ms": 0.245614
     },
     {
       "adversarial": false,
@@ -2531,7 +2531,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.268076,
+      "cpu_ms": 0.200431,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -2558,7 +2558,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -2566,7 +2566,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.267644
+      "wall_ms": 0.200343
     },
     {
       "adversarial": false,
@@ -2574,7 +2574,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.195686,
+      "cpu_ms": 0.189136,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -2601,7 +2601,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -2609,7 +2609,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.195559
+      "wall_ms": 0.189004
     },
     {
       "adversarial": false,
@@ -2617,7 +2617,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.157535,
+      "cpu_ms": 0.15526,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -2642,7 +2642,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -2650,7 +2650,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.157299
+      "wall_ms": 0.155031
     },
     {
       "adversarial": true,
@@ -2658,7 +2658,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.211399,
+      "cpu_ms": 0.20952,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -2685,7 +2685,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -2693,7 +2693,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.211154
+      "wall_ms": 0.209355
     },
     {
       "adversarial": true,
@@ -2701,7 +2701,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.187023,
+      "cpu_ms": 0.182326,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -2728,7 +2728,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -2736,7 +2736,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.186885
+      "wall_ms": 0.182227
     },
     {
       "adversarial": false,
@@ -2744,7 +2744,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.163016,
+      "cpu_ms": 0.159663,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -2771,7 +2771,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -2779,7 +2779,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.162887
+      "wall_ms": 0.159564
     },
     {
       "adversarial": false,
@@ -2787,7 +2787,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.193897,
+      "cpu_ms": 0.188856,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -2814,7 +2814,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -2822,7 +2822,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.193796
+      "wall_ms": 0.188736
     },
     {
       "adversarial": false,
@@ -2830,7 +2830,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.167773,
+      "cpu_ms": 0.161581,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -2857,7 +2857,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -2865,7 +2865,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.167616
+      "wall_ms": 0.161453
     },
     {
       "adversarial": false,
@@ -2873,7 +2873,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.200436,
+      "cpu_ms": 0.159619,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -2900,7 +2900,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -2908,7 +2908,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.199941
+      "wall_ms": 0.159511
     },
     {
       "adversarial": false,
@@ -2916,7 +2916,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.164734,
+      "cpu_ms": 0.162301,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -2943,7 +2943,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -2951,7 +2951,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.164591
+      "wall_ms": 0.162248
     },
     {
       "adversarial": false,
@@ -2959,7 +2959,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.202625,
+      "cpu_ms": 0.201787,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -2986,7 +2986,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -2994,7 +2994,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.202543
+      "wall_ms": 0.201701
     },
     {
       "adversarial": false,
@@ -3002,7 +3002,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.194821,
+      "cpu_ms": 0.202809,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -3029,7 +3029,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -3037,7 +3037,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 0.194701
+      "wall_ms": 0.202692
     },
     {
       "adversarial": false,
@@ -3045,7 +3045,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.200962,
+      "cpu_ms": 0.201511,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -3072,7 +3072,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -3080,7 +3080,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.200807
+      "wall_ms": 0.201332
     },
     {
       "adversarial": false,
@@ -3088,7 +3088,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.191669,
+      "cpu_ms": 0.192562,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -3115,7 +3115,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -3123,7 +3123,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.191548
+      "wall_ms": 0.192407
     },
     {
       "adversarial": false,
@@ -3131,7 +3131,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.158889,
+      "cpu_ms": 0.157954,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -3156,7 +3156,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -3164,7 +3164,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.158781
+      "wall_ms": 0.157818
     },
     {
       "adversarial": true,
@@ -3172,7 +3172,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.209647,
+      "cpu_ms": 0.208755,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -3199,7 +3199,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -3207,7 +3207,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.209513
+      "wall_ms": 0.20863
     },
     {
       "adversarial": true,
@@ -3215,7 +3215,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.189646,
+      "cpu_ms": 0.200818,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -3242,7 +3242,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -3250,7 +3250,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.189542
+      "wall_ms": 0.200528
     },
     {
       "adversarial": false,
@@ -3258,7 +3258,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.160259,
+      "cpu_ms": 0.161866,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -3285,7 +3285,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -3293,7 +3293,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.160109
+      "wall_ms": 0.161742
     },
     {
       "adversarial": false,
@@ -3301,7 +3301,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.18841,
+      "cpu_ms": 0.189355,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -3328,7 +3328,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -3336,7 +3336,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.188267
+      "wall_ms": 0.18924
     },
     {
       "adversarial": false,
@@ -3344,7 +3344,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.185138,
+      "cpu_ms": 0.177025,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -3371,7 +3371,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -3379,7 +3379,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.184882
+      "wall_ms": 0.176801
     },
     {
       "adversarial": false,
@@ -3387,7 +3387,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.162531,
+      "cpu_ms": 0.160794,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -3414,7 +3414,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -3422,7 +3422,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.162441
+      "wall_ms": 0.160648
     },
     {
       "adversarial": false,
@@ -3430,7 +3430,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.162034,
+      "cpu_ms": 0.163061,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -3457,7 +3457,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -3465,7 +3465,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.161915
+      "wall_ms": 0.162935
     },
     {
       "adversarial": false,
@@ -3473,7 +3473,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.206557,
+      "cpu_ms": 0.222038,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -3500,7 +3500,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -3508,7 +3508,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.206394
+      "wall_ms": 0.221789
     },
     {
       "adversarial": false,
@@ -3516,7 +3516,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.258917,
+      "cpu_ms": 0.234844,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -3543,7 +3543,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -3551,7 +3551,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 0.258385
+      "wall_ms": 0.234143
     },
     {
       "adversarial": false,
@@ -3559,7 +3559,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.198509,
+      "cpu_ms": 0.197514,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -3586,7 +3586,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -3594,7 +3594,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.198377
+      "wall_ms": 0.197389
     },
     {
       "adversarial": false,
@@ -3602,7 +3602,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.195681,
+      "cpu_ms": 0.243283,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -3629,7 +3629,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -3637,7 +3637,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.195558
+      "wall_ms": 0.24302
     },
     {
       "adversarial": false,
@@ -3645,7 +3645,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.159833,
+      "cpu_ms": 0.206407,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -3670,7 +3670,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -3678,7 +3678,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.159693
+      "wall_ms": 0.206126
     },
     {
       "adversarial": true,
@@ -3686,7 +3686,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.211109,
+      "cpu_ms": 0.213335,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -3713,7 +3713,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -3721,7 +3721,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.210865
+      "wall_ms": 0.213209
     },
     {
       "adversarial": true,
@@ -3729,7 +3729,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.21169,
+      "cpu_ms": 0.197537,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -3756,7 +3756,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -3764,7 +3764,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.211577
+      "wall_ms": 0.197428
     },
     {
       "adversarial": false,
@@ -3772,7 +3772,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.167619,
+      "cpu_ms": 0.165751,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -3799,7 +3799,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -3807,7 +3807,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.167501
+      "wall_ms": 0.165611
     },
     {
       "adversarial": false,
@@ -3815,7 +3815,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.190954,
+      "cpu_ms": 0.191538,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -3842,7 +3842,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -3850,7 +3850,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.190572
+      "wall_ms": 0.191404
     },
     {
       "adversarial": false,
@@ -3858,7 +3858,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.171493,
+      "cpu_ms": 0.167182,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -3885,7 +3885,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -3893,7 +3893,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.170686
+      "wall_ms": 0.166904
     },
     {
       "adversarial": false,
@@ -3901,7 +3901,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.168873,
+      "cpu_ms": 0.170987,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -3928,7 +3928,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -3936,7 +3936,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.168582
+      "wall_ms": 0.170647
     },
     {
       "adversarial": false,
@@ -3944,7 +3944,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.171157,
+      "cpu_ms": 0.277877,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -3971,7 +3971,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -3979,7 +3979,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.170937
+      "wall_ms": 0.277008
     },
     {
       "adversarial": false,
@@ -3987,7 +3987,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.207142,
+      "cpu_ms": 0.385876,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -4014,7 +4014,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -4022,7 +4022,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.206995
+      "wall_ms": 0.384689
     },
     {
       "adversarial": false,
@@ -4030,7 +4030,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.193792,
+      "cpu_ms": 0.333285,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -4057,7 +4057,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -4065,7 +4065,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 0.193681
+      "wall_ms": 0.332133
     },
     {
       "adversarial": false,
@@ -4073,7 +4073,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.19843,
+      "cpu_ms": 0.353099,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -4100,7 +4100,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -4108,7 +4108,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.198334
+      "wall_ms": 0.352533
     },
     {
       "adversarial": false,
@@ -4116,7 +4116,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.1901,
+      "cpu_ms": 0.32852,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -4143,7 +4143,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -4151,7 +4151,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.189982
+      "wall_ms": 0.328007
     },
     {
       "adversarial": false,
@@ -4159,7 +4159,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.19067,
+      "cpu_ms": 0.270423,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -4184,7 +4184,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -4192,7 +4192,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.190407
+      "wall_ms": 0.269947
     },
     {
       "adversarial": true,
@@ -4200,7 +4200,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.212837,
+      "cpu_ms": 0.337071,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -4227,7 +4227,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -4235,7 +4235,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.212641
+      "wall_ms": 0.335887
     },
     {
       "adversarial": true,
@@ -4243,7 +4243,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.191505,
+      "cpu_ms": 0.219725,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -4270,7 +4270,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 22552,
+      "rss_kib": 22572,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -4278,7 +4278,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.191275
+      "wall_ms": 0.219641
     },
     {
       "adversarial": false,
@@ -4286,7 +4286,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.183683,
+      "cpu_ms": 0.187012,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -4313,7 +4313,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -4321,7 +4321,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.183482
+      "wall_ms": 0.186795
     },
     {
       "adversarial": false,
@@ -4329,7 +4329,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.189329,
+      "cpu_ms": 0.20965,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -4356,7 +4356,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -4364,7 +4364,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.189173
+      "wall_ms": 0.209345
     },
     {
       "adversarial": false,
@@ -4372,7 +4372,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.199589,
+      "cpu_ms": 0.170556,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -4399,7 +4399,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -4407,7 +4407,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.199361
+      "wall_ms": 0.170417
     },
     {
       "adversarial": false,
@@ -4415,7 +4415,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.164855,
+      "cpu_ms": 0.166829,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -4442,7 +4442,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -4450,7 +4450,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.164757
+      "wall_ms": 0.166605
     },
     {
       "adversarial": false,
@@ -4458,7 +4458,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.163576,
+      "cpu_ms": 0.164761,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -4485,7 +4485,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -4493,7 +4493,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.163437
+      "wall_ms": 0.164598
     },
     {
       "adversarial": false,
@@ -4501,7 +4501,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.20572,
+      "cpu_ms": 0.209615,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -4528,7 +4528,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -4536,7 +4536,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.205519
+      "wall_ms": 0.209467
     },
     {
       "adversarial": false,
@@ -4544,7 +4544,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.198965,
+      "cpu_ms": 0.208335,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -4571,7 +4571,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -4579,7 +4579,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 0.198555
+      "wall_ms": 0.208044
     },
     {
       "adversarial": false,
@@ -4587,7 +4587,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.201882,
+      "cpu_ms": 0.202908,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -4614,7 +4614,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -4622,7 +4622,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.201733
+      "wall_ms": 0.20277
     },
     {
       "adversarial": false,
@@ -4630,7 +4630,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.20749,
+      "cpu_ms": 0.19265,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -4657,7 +4657,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -4665,7 +4665,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.207187
+      "wall_ms": 0.192434
     },
     {
       "adversarial": false,
@@ -4673,7 +4673,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.192102,
+      "cpu_ms": 0.175396,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -4698,7 +4698,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -4706,7 +4706,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.192358
+      "wall_ms": 0.175088
     },
     {
       "adversarial": true,
@@ -4714,7 +4714,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.208244,
+      "cpu_ms": 0.210082,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -4741,7 +4741,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -4749,7 +4749,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.208093
+      "wall_ms": 0.209844
     },
     {
       "adversarial": true,
@@ -4757,7 +4757,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.189661,
+      "cpu_ms": 0.186709,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -4784,7 +4784,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -4792,7 +4792,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.189463
+      "wall_ms": 0.186561
     },
     {
       "adversarial": false,
@@ -4800,7 +4800,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.164123,
+      "cpu_ms": 0.156373,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -4827,7 +4827,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:semantic-score",
         "mapper:context",
@@ -4835,7 +4835,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 0.16392
+      "wall_ms": 0.156221
     },
     {
       "adversarial": false,
@@ -4843,7 +4843,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.216755,
+      "cpu_ms": 0.186649,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -4870,7 +4870,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -4878,7 +4878,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 0.216546
+      "wall_ms": 0.18651
     },
     {
       "adversarial": false,
@@ -4886,7 +4886,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.167094,
+      "cpu_ms": 0.167102,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
@@ -4913,7 +4913,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -4921,7 +4921,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 0.166871
+      "wall_ms": 0.166863
     },
     {
       "adversarial": false,
@@ -4929,7 +4929,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.168875,
+      "cpu_ms": 0.165344,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
@@ -4956,7 +4956,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:context",
         "mapper:delivery",
@@ -4964,7 +4964,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 0.168718
+      "wall_ms": 0.165223
     },
     {
       "adversarial": false,
@@ -4972,7 +4972,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.162905,
+      "cpu_ms": 0.165156,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
@@ -4999,7 +4999,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:mapper",
         "mapper:context",
@@ -5007,7 +5007,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 0.162527
+      "wall_ms": 0.164981
     },
     {
       "adversarial": false,
@@ -5015,7 +5015,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.260764,
+      "cpu_ms": 0.209139,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
@@ -5042,7 +5042,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -5050,7 +5050,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 0.260187
+      "wall_ms": 0.20896
     },
     {
       "adversarial": false,
@@ -5058,7 +5058,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.335165,
+      "cpu_ms": 0.198087,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
@@ -5085,7 +5085,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -5093,7 +5093,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 0.334477
+      "wall_ms": 0.197946
     },
     {
       "adversarial": false,
@@ -5101,7 +5101,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.33994,
+      "cpu_ms": 0.209043,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
@@ -5128,7 +5128,7 @@
       "recall_at_1": 0.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:delivery",
         "mapper:knowledge",
@@ -5136,7 +5136,7 @@
       ],
       "target_rank": 2,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 0.338903
+      "wall_ms": 0.208863
     },
     {
       "adversarial": false,
@@ -5144,7 +5144,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.292395,
+      "cpu_ms": 0.193335,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
@@ -5171,7 +5171,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -5179,7 +5179,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 0.291882
+      "wall_ms": 0.193206
     },
     {
       "adversarial": false,
@@ -5187,7 +5187,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": null,
-      "cpu_ms": 0.166668,
+      "cpu_ms": 0.161808,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "INFERENCE_BACKEND_UNAVAILABLE",
@@ -5212,7 +5212,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -5220,7 +5220,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 0.166365
+      "wall_ms": 0.161662
     },
     {
       "adversarial": true,
@@ -5228,7 +5228,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.272394,
+      "cpu_ms": 0.209923,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
@@ -5255,7 +5255,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:semantic-score",
         "mapper:mapper",
@@ -5263,7 +5263,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 0.271948
+      "wall_ms": 0.209783
     },
     {
       "adversarial": true,
@@ -5271,7 +5271,7 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 0.257649,
+      "cpu_ms": 0.197755,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
@@ -5298,7 +5298,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 22680,
+      "rss_kib": 22700,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -5306,7 +5306,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 0.257326
+      "wall_ms": 0.197705
     },
     {
       "adversarial": false,
@@ -5314,14 +5314,14 @@
       "budget_compliant": true,
       "cache_hit": false,
       "completion_quality": 1.0,
-      "cpu_ms": 2.670537,
+      "cpu_ms": 1.788031,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 3.161236996675143,
+      "local_inference_ms": 2.6450599980307743,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5341,7 +5341,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -5349,7 +5349,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 3.412443
+      "wall_ms": 2.892884
     },
     {
       "adversarial": false,
@@ -5357,14 +5357,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.757723,
+      "cpu_ms": 1.303531,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 1.852151002822211,
+      "local_inference_ms": 1.400314002239611,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5384,7 +5384,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -5392,7 +5392,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 2.19811
+      "wall_ms": 1.740108
     },
     {
       "adversarial": false,
@@ -5400,14 +5400,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.189969,
+      "cpu_ms": 1.046784,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.474218999646837,
+      "local_inference_ms": 1.2503489997470751,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5427,7 +5427,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -5435,7 +5435,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 1.734071
+      "wall_ms": 1.505602
     },
     {
       "adversarial": false,
@@ -5443,14 +5443,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.145484,
+      "cpu_ms": 0.988109,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.2713530013570562,
+      "local_inference_ms": 1.1470149984234013,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5470,7 +5470,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -5478,7 +5478,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.537197
+      "wall_ms": 1.411372
     },
     {
       "adversarial": false,
@@ -5486,14 +5486,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.323213,
+      "cpu_ms": 1.124076,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 1.5547129987680819,
+      "local_inference_ms": 1.2893300008727238,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5513,7 +5513,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -5521,7 +5521,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 1.825407
+      "wall_ms": 1.567184
     },
     {
       "adversarial": false,
@@ -5529,14 +5529,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.490253,
+      "cpu_ms": 1.440446,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.5702089986007195,
+      "local_inference_ms": 1.5491810008825269,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5556,7 +5556,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -5564,7 +5564,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.907456
+      "wall_ms": 1.857186
     },
     {
       "adversarial": false,
@@ -5572,14 +5572,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.520877,
+      "cpu_ms": 1.107065,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.570034000906162,
+      "local_inference_ms": 1.1241650026931893,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5599,7 +5599,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -5607,7 +5607,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.90937
+      "wall_ms": 1.420147
     },
     {
       "adversarial": false,
@@ -5615,14 +5615,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.576671,
+      "cpu_ms": 1.705283,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.9117310002911836,
+      "local_inference_ms": 1.7486560027464293,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5642,7 +5642,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -5650,7 +5650,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 2.256176
+      "wall_ms": 2.167916
     },
     {
       "adversarial": false,
@@ -5658,14 +5658,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.702085,
+      "cpu_ms": 1.888348,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 2.0610210012819152,
+      "local_inference_ms": 2.5758330011740327,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5685,7 +5685,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -5693,7 +5693,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 2.385135
+      "wall_ms": 3.006835
     },
     {
       "adversarial": false,
@@ -5701,12 +5701,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 1.17945,
+      "cpu_ms": 1.698497,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 1.356242999463575,
+      "local_inference_ms": 1.723506000416819,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -5726,7 +5726,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -5734,7 +5734,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 1.635928
+      "wall_ms": 2.104885
     },
     {
       "adversarial": true,
@@ -5742,14 +5742,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.204667,
+      "cpu_ms": 1.766384,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 1.4371469987963792,
+      "local_inference_ms": 2.118412001436809,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5769,7 +5769,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -5777,7 +5777,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 1.742522
+      "wall_ms": 2.570003
     },
     {
       "adversarial": true,
@@ -5785,14 +5785,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.095509,
+      "cpu_ms": 1.544228,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.2086870010534767,
+      "local_inference_ms": 1.6251019987976179,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5812,7 +5812,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 0,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -5820,7 +5820,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.493398
+      "wall_ms": 1.99246
     },
     {
       "adversarial": false,
@@ -5828,14 +5828,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.138445,
+      "cpu_ms": 1.435352,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 1.403061000019079,
+      "local_inference_ms": 1.4944849972380325,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5855,7 +5855,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -5863,7 +5863,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 1.663036
+      "wall_ms": 1.818995
     },
     {
       "adversarial": false,
@@ -5871,14 +5871,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.581863,
+      "cpu_ms": 1.606005,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 2.314942998054903,
+      "local_inference_ms": 1.6398970001318958,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5898,7 +5898,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -5906,7 +5906,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 2.624915
+      "wall_ms": 2.017725
     },
     {
       "adversarial": false,
@@ -5914,14 +5914,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.090572,
+      "cpu_ms": 1.236621,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.1710029975802172,
+      "local_inference_ms": 1.3291939976625144,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5941,7 +5941,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -5949,7 +5949,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 1.4422
+      "wall_ms": 1.595513
     },
     {
       "adversarial": false,
@@ -5957,14 +5957,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.065283,
+      "cpu_ms": 1.281545,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.2790340006176848,
+      "local_inference_ms": 1.2920070003019646,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -5984,7 +5984,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -5992,7 +5992,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.53462
+      "wall_ms": 1.612316
     },
     {
       "adversarial": false,
@@ -6000,14 +6000,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.077892,
+      "cpu_ms": 1.149791,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 1.2322510010562837,
+      "local_inference_ms": 1.1264029999438208,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6027,7 +6027,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -6035,7 +6035,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 1.512335
+      "wall_ms": 1.442288
     },
     {
       "adversarial": false,
@@ -6043,14 +6043,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.157607,
+      "cpu_ms": 1.254934,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.1906620020454284,
+      "local_inference_ms": 1.2837070025852881,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6070,7 +6070,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -6078,7 +6078,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.499277
+      "wall_ms": 1.58209
     },
     {
       "adversarial": false,
@@ -6086,14 +6086,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.122256,
+      "cpu_ms": 1.279496,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.2621530004253145,
+      "local_inference_ms": 1.2528849983937107,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6113,7 +6113,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -6121,7 +6121,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.549195
+      "wall_ms": 1.602809
     },
     {
       "adversarial": false,
@@ -6129,14 +6129,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.036634,
+      "cpu_ms": 1.320624,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.0737439988588449,
+      "local_inference_ms": 1.4785810017201584,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6156,7 +6156,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -6164,7 +6164,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 1.361176
+      "wall_ms": 1.775613
     },
     {
       "adversarial": false,
@@ -6172,14 +6172,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.015184,
+      "cpu_ms": 1.023174,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 1.0441260019433685,
+      "local_inference_ms": 1.0638310013746377,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6199,7 +6199,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -6207,7 +6207,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 1.321305
+      "wall_ms": 1.355026
     },
     {
       "adversarial": false,
@@ -6215,12 +6215,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 0.981637,
+      "cpu_ms": 1.609324,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 0.9929369989549741,
+      "local_inference_ms": 1.6046099990489893,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -6240,7 +6240,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -6248,7 +6248,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 1.245821
+      "wall_ms": 1.969495
     },
     {
       "adversarial": true,
@@ -6256,14 +6256,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.022204,
+      "cpu_ms": 1.711677,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 0.9988460005843081,
+      "local_inference_ms": 1.735555000777822,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6283,7 +6283,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -6291,7 +6291,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 1.295459
+      "wall_ms": 2.147885
     },
     {
       "adversarial": true,
@@ -6299,14 +6299,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.104259,
+      "cpu_ms": 1.416918,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.1329140033922158,
+      "local_inference_ms": 1.5206409989332315,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6326,7 +6326,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 1,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -6334,7 +6334,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.418228
+      "wall_ms": 1.821366
     },
     {
       "adversarial": false,
@@ -6342,14 +6342,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.055963,
+      "cpu_ms": 1.101666,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 1.2540989991975948,
+      "local_inference_ms": 1.2008369994873647,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6369,7 +6369,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -6377,7 +6377,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 1.535213
+      "wall_ms": 1.459595
     },
     {
       "adversarial": false,
@@ -6385,14 +6385,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.099103,
+      "cpu_ms": 1.388998,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 1.224653002282139,
+      "local_inference_ms": 1.2936179991811514,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6412,7 +6412,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -6420,7 +6420,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 1.519559
+      "wall_ms": 1.653508
     },
     {
       "adversarial": false,
@@ -6428,14 +6428,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.065836,
+      "cpu_ms": 1.227016,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.2701399973593652,
+      "local_inference_ms": 1.1517759994603693,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6455,7 +6455,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -6463,7 +6463,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 1.5294
+      "wall_ms": 1.510622
     },
     {
       "adversarial": false,
@@ -6471,14 +6471,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.025362,
+      "cpu_ms": 1.220919,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.1581109974940773,
+      "local_inference_ms": 1.182138999865856,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6498,7 +6498,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -6506,7 +6506,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.419077
+      "wall_ms": 1.499598
     },
     {
       "adversarial": false,
@@ -6514,14 +6514,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.122753,
+      "cpu_ms": 1.483885,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 1.7848269999376498,
+      "local_inference_ms": 1.3863929998478852,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6541,7 +6541,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -6549,7 +6549,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 2.042489
+      "wall_ms": 1.770523
     },
     {
       "adversarial": false,
@@ -6557,14 +6557,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.155079,
+      "cpu_ms": 1.330031,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.2600519985426217,
+      "local_inference_ms": 1.1944079997192603,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6584,7 +6584,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -6592,7 +6592,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.569367
+      "wall_ms": 1.59093
     },
     {
       "adversarial": false,
@@ -6600,14 +6600,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.095093,
+      "cpu_ms": 0.977018,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.3177059990994167,
+      "local_inference_ms": 0.9479930013185367,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6627,7 +6627,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -6635,7 +6635,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.600608
+      "wall_ms": 1.222782
     },
     {
       "adversarial": false,
@@ -6643,14 +6643,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.055758,
+      "cpu_ms": 0.98354,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.1540900013642386,
+      "local_inference_ms": 0.9512100004940294,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6670,7 +6670,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -6678,7 +6678,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 1.472036
+      "wall_ms": 1.238748
     },
     {
       "adversarial": false,
@@ -6686,14 +6686,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.036763,
+      "cpu_ms": 0.99493,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 1.4106139969953801,
+      "local_inference_ms": 0.9798860010050703,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6713,7 +6713,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22868,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -6721,7 +6721,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 1.688115
+      "wall_ms": 1.254021
     },
     {
       "adversarial": false,
@@ -6729,12 +6729,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 1.047053,
+      "cpu_ms": 1.017176,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 1.879993000329705,
+      "local_inference_ms": 1.0615959981805645,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -6754,7 +6754,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 2,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -6762,7 +6762,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 2.124979
+      "wall_ms": 1.314061
     },
     {
       "adversarial": true,
@@ -6770,14 +6770,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.039686,
+      "cpu_ms": 1.0661,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 1.210507998621324,
+      "local_inference_ms": 1.1060070028179325,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6797,7 +6797,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -6805,7 +6805,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 1.502016
+      "wall_ms": 1.411098
     },
     {
       "adversarial": true,
@@ -6813,14 +6813,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.118971,
+      "cpu_ms": 1.329172,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.360243000817718,
+      "local_inference_ms": 1.631655999517534,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6840,7 +6840,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 2,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -6848,7 +6848,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.669431
+      "wall_ms": 1.924164
     },
     {
       "adversarial": false,
@@ -6856,14 +6856,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.167033,
+      "cpu_ms": 1.005102,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 1.5303289983421564,
+      "local_inference_ms": 1.2428440022631548,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6883,7 +6883,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -6891,7 +6891,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 1.783833
+      "wall_ms": 1.492874
     },
     {
       "adversarial": false,
@@ -6899,14 +6899,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.070351,
+      "cpu_ms": 1.269534,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 1.2255770016054157,
+      "local_inference_ms": 1.2616610001714434,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6926,7 +6926,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -6934,7 +6934,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 1.503678
+      "wall_ms": 1.600669
     },
     {
       "adversarial": false,
@@ -6942,14 +6942,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 0.941296,
+      "cpu_ms": 1.203118,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.0502799996174872,
+      "local_inference_ms": 1.315781999437604,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -6969,7 +6969,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -6977,7 +6977,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 1.308154
+      "wall_ms": 1.595504
     },
     {
       "adversarial": false,
@@ -6985,14 +6985,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 0.977008,
+      "cpu_ms": 1.05872,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.076181997632375,
+      "local_inference_ms": 1.15525500223157,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7012,7 +7012,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -7020,7 +7020,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.325605
+      "wall_ms": 1.442941
     },
     {
       "adversarial": false,
@@ -7028,14 +7028,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 0.986095,
+      "cpu_ms": 1.386381,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 1.1272939991613384,
+      "local_inference_ms": 1.4134319972072262,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7055,7 +7055,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -7063,7 +7063,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 1.378437
+      "wall_ms": 1.722473
     },
     {
       "adversarial": false,
@@ -7071,14 +7071,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.066211,
+      "cpu_ms": 1.035407,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.0812459986482281,
+      "local_inference_ms": 1.0988360008923337,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7098,7 +7098,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -7106,7 +7106,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.384469
+      "wall_ms": 1.392249
     },
     {
       "adversarial": false,
@@ -7114,14 +7114,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.374638,
+      "cpu_ms": 1.219963,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.4370179997058585,
+      "local_inference_ms": 1.2197500000183936,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7141,7 +7141,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -7149,7 +7149,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.738724
+      "wall_ms": 1.514697
     },
     {
       "adversarial": false,
@@ -7157,14 +7157,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.211495,
+      "cpu_ms": 1.36048,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.4493839989881963,
+      "local_inference_ms": 1.4179429999785498,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7184,7 +7184,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -7192,7 +7192,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 1.75077
+      "wall_ms": 1.71284
     },
     {
       "adversarial": false,
@@ -7200,14 +7200,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.187292,
+      "cpu_ms": 1.218606,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 1.5293040014512371,
+      "local_inference_ms": 1.4076150000619236,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7227,7 +7227,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -7235,7 +7235,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 1.823497
+      "wall_ms": 1.722809
     },
     {
       "adversarial": false,
@@ -7243,12 +7243,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 1.068,
+      "cpu_ms": 1.234855,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 1.1811949989350978,
+      "local_inference_ms": 1.311896998231532,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -7268,7 +7268,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -7276,7 +7276,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 1.431924
+      "wall_ms": 1.58244
     },
     {
       "adversarial": true,
@@ -7284,14 +7284,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.407852,
+      "cpu_ms": 1.233575,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 2.188228998420527,
+      "local_inference_ms": 1.248143998964224,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7311,7 +7311,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -7319,7 +7319,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 2.497994
+      "wall_ms": 1.55682
     },
     {
       "adversarial": true,
@@ -7327,14 +7327,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.151443,
+      "cpu_ms": 1.061204,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.7073299968615174,
+      "local_inference_ms": 1.016926999000134,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7354,7 +7354,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 3,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -7362,7 +7362,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.996243
+      "wall_ms": 1.338334
     },
     {
       "adversarial": false,
@@ -7370,14 +7370,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.716285,
+      "cpu_ms": 1.136152,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 2.080203001241898,
+      "local_inference_ms": 1.2296409986447543,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7397,7 +7397,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -7405,7 +7405,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 2.33101
+      "wall_ms": 1.481278
     },
     {
       "adversarial": false,
@@ -7413,14 +7413,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.307882,
+      "cpu_ms": 1.284176,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 1.5757709988974966,
+      "local_inference_ms": 1.3400610005191993,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7440,7 +7440,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -7448,7 +7448,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 1.858808
+      "wall_ms": 1.637901
     },
     {
       "adversarial": false,
@@ -7456,14 +7456,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.037003,
+      "cpu_ms": 1.276424,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.3084520032862201,
+      "local_inference_ms": 1.3834739984304179,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7483,7 +7483,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -7491,7 +7491,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 1.57012
+      "wall_ms": 1.664654
     },
     {
       "adversarial": false,
@@ -7499,14 +7499,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 0.970713,
+      "cpu_ms": 0.985573,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.0312369995517656,
+      "local_inference_ms": 1.0614829989208374,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7526,7 +7526,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -7534,7 +7534,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.28244
+      "wall_ms": 1.302669
     },
     {
       "adversarial": false,
@@ -7542,14 +7542,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 0.982556,
+      "cpu_ms": 1.32012,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 0.9781630033103283,
+      "local_inference_ms": 1.466018999053631,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7569,7 +7569,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -7577,7 +7577,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 1.247758
+      "wall_ms": 1.799391
     },
     {
       "adversarial": false,
@@ -7585,14 +7585,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.121531,
+      "cpu_ms": 1.538141,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.1884890009241644,
+      "local_inference_ms": 1.8035850007436238,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7612,7 +7612,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -7620,7 +7620,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.506358
+      "wall_ms": 2.122639
     },
     {
       "adversarial": false,
@@ -7628,14 +7628,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.048533,
+      "cpu_ms": 1.348771,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.5055809999466874,
+      "local_inference_ms": 1.7367040018143598,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7655,7 +7655,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -7663,7 +7663,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.79345
+      "wall_ms": 2.051352
     },
     {
       "adversarial": false,
@@ -7671,14 +7671,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.016717,
+      "cpu_ms": 1.084953,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.1222920002182946,
+      "local_inference_ms": 1.227207998454105,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7698,7 +7698,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -7706,7 +7706,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 1.419278
+      "wall_ms": 1.535377
     },
     {
       "adversarial": false,
@@ -7714,14 +7714,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.077538,
+      "cpu_ms": 1.300968,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 1.3284910019137897,
+      "local_inference_ms": 1.7418280003766995,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7741,7 +7741,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -7749,7 +7749,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 1.610544
+      "wall_ms": 2.02937
     },
     {
       "adversarial": false,
@@ -7757,12 +7757,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 0.967074,
+      "cpu_ms": 1.018358,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 1.16060299842502,
+      "local_inference_ms": 1.3457469976856373,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -7782,7 +7782,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -7790,7 +7790,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 1.406532
+      "wall_ms": 1.609403
     },
     {
       "adversarial": true,
@@ -7798,14 +7798,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.032621,
+      "cpu_ms": 1.106197,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 1.2551660001918208,
+      "local_inference_ms": 1.780894999683369,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7825,7 +7825,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -7833,7 +7833,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 1.558929
+      "wall_ms": 2.08015
     },
     {
       "adversarial": true,
@@ -7841,14 +7841,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.082853,
+      "cpu_ms": 1.050484,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.3533979981730226,
+      "local_inference_ms": 1.4011830025992822,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7868,7 +7868,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 4,
-      "rss_kib": 22996,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -7876,7 +7876,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.629166
+      "wall_ms": 1.690474
     },
     {
       "adversarial": false,
@@ -7884,14 +7884,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.069852,
+      "cpu_ms": 0.952149,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 1.3030219997745007,
+      "local_inference_ms": 1.0502149998501409,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7911,7 +7911,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -7919,7 +7919,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 1.562035
+      "wall_ms": 1.302319
     },
     {
       "adversarial": false,
@@ -7927,14 +7927,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.220109,
+      "cpu_ms": 0.977916,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 1.2292899991734885,
+      "local_inference_ms": 1.3575849989138078,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7954,7 +7954,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -7962,7 +7962,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 1.592969
+      "wall_ms": 1.639313
     },
     {
       "adversarial": false,
@@ -7970,14 +7970,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 0.999998,
+      "cpu_ms": 1.065293,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.187831996503519,
+      "local_inference_ms": 1.300224001170136,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -7997,7 +7997,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -8005,7 +8005,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 1.439644
+      "wall_ms": 1.564081
     },
     {
       "adversarial": false,
@@ -8013,14 +8013,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.04628,
+      "cpu_ms": 1.30367,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.1921969999093562,
+      "local_inference_ms": 1.5912529997876845,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8040,7 +8040,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -8048,7 +8048,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.441951
+      "wall_ms": 1.848099
     },
     {
       "adversarial": false,
@@ -8056,14 +8056,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.097483,
+      "cpu_ms": 1.079675,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 1.3868250025552697,
+      "local_inference_ms": 1.2074750011379365,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8083,7 +8083,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -8091,7 +8091,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 1.649012
+      "wall_ms": 1.467993
     },
     {
       "adversarial": false,
@@ -8099,14 +8099,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.272326,
+      "cpu_ms": 1.142474,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.3060860001132824,
+      "local_inference_ms": 1.1792709992732853,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8126,7 +8126,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -8134,7 +8134,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.66509
+      "wall_ms": 1.531709
     },
     {
       "adversarial": false,
@@ -8142,14 +8142,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.51809,
+      "cpu_ms": 1.566278,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.5103760015335865,
+      "local_inference_ms": 1.9442170014372095,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8169,7 +8169,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -8177,7 +8177,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.90417
+      "wall_ms": 2.241513
     },
     {
       "adversarial": false,
@@ -8185,14 +8185,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.345612,
+      "cpu_ms": 1.22603,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.4689740019093733,
+      "local_inference_ms": 1.31788399812649,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8212,7 +8212,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -8220,7 +8220,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 1.807252
+      "wall_ms": 1.63604
     },
     {
       "adversarial": false,
@@ -8228,14 +8228,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.777321,
+      "cpu_ms": 1.126594,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 2.0413359998201486,
+      "local_inference_ms": 1.3513479971152265,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8255,7 +8255,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -8263,7 +8263,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 2.378432
+      "wall_ms": 1.671641
     },
     {
       "adversarial": false,
@@ -8271,12 +8271,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 1.206269,
+      "cpu_ms": 1.018145,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 1.317690999712795,
+      "local_inference_ms": 1.1028499975509476,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -8296,7 +8296,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -8304,7 +8304,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 1.613188
+      "wall_ms": 1.363254
     },
     {
       "adversarial": true,
@@ -8312,14 +8312,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.279981,
+      "cpu_ms": 1.219135,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 1.42037200203049,
+      "local_inference_ms": 1.3086489998386241,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8339,7 +8339,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -8347,7 +8347,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 1.768635
+      "wall_ms": 1.630979
     },
     {
       "adversarial": true,
@@ -8355,14 +8355,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.18214,
+      "cpu_ms": 1.169262,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.3989429971843492,
+      "local_inference_ms": 1.2898099994345102,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8382,7 +8382,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 5,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -8390,7 +8390,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.703991
+      "wall_ms": 1.600793
     },
     {
       "adversarial": false,
@@ -8398,14 +8398,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.268015,
+      "cpu_ms": 1.367363,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 1.6015200017136522,
+      "local_inference_ms": 1.3859009995940141,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8425,7 +8425,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -8433,7 +8433,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 1.898151
+      "wall_ms": 1.727288
     },
     {
       "adversarial": false,
@@ -8441,14 +8441,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.188171,
+      "cpu_ms": 1.379221,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 1.3200410030549392,
+      "local_inference_ms": 1.439170002413448,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8468,7 +8468,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -8476,7 +8476,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 1.616174
+      "wall_ms": 1.777205
     },
     {
       "adversarial": false,
@@ -8484,14 +8484,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.045928,
+      "cpu_ms": 1.462637,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.236514999618521,
+      "local_inference_ms": 1.5511929996137042,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8511,7 +8511,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -8519,7 +8519,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 1.487921
+      "wall_ms": 1.879334
     },
     {
       "adversarial": false,
@@ -8527,14 +8527,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.087322,
+      "cpu_ms": 1.03048,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.2290230006328784,
+      "local_inference_ms": 1.2166300002718344,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8554,7 +8554,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -8562,7 +8562,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.491597
+      "wall_ms": 1.468601
     },
     {
       "adversarial": false,
@@ -8570,14 +8570,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.015908,
+      "cpu_ms": 1.692155,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 1.1285900000075344,
+      "local_inference_ms": 1.9146499980706722,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8597,7 +8597,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -8605,7 +8605,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 1.389231
+      "wall_ms": 2.265401
     },
     {
       "adversarial": false,
@@ -8613,14 +8613,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.106705,
+      "cpu_ms": 1.911422,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.1684400014928542,
+      "local_inference_ms": 2.4956580018624663,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8640,7 +8640,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -8648,7 +8648,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.495379
+      "wall_ms": 2.97045
     },
     {
       "adversarial": false,
@@ -8656,14 +8656,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.181108,
+      "cpu_ms": 1.558753,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.366993001283845,
+      "local_inference_ms": 1.807851000194205,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8683,7 +8683,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -8691,7 +8691,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.67555
+      "wall_ms": 2.190895
     },
     {
       "adversarial": false,
@@ -8699,14 +8699,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.149139,
+      "cpu_ms": 1.100716,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.2600359987118281,
+      "local_inference_ms": 1.2064949987689033,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8726,7 +8726,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -8734,7 +8734,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 1.58205
+      "wall_ms": 1.509215
     },
     {
       "adversarial": false,
@@ -8742,14 +8742,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.048285,
+      "cpu_ms": 1.550746,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 1.0944559980998747,
+      "local_inference_ms": 1.7429279978387058,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8769,7 +8769,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -8777,7 +8777,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 1.379193
+      "wall_ms": 2.113719
     },
     {
       "adversarial": false,
@@ -8785,12 +8785,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 1.020185,
+      "cpu_ms": 1.76332,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 1.1977909998677205,
+      "local_inference_ms": 2.138741001544986,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -8810,7 +8810,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -8818,7 +8818,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 1.447383
+      "wall_ms": 2.525294
     },
     {
       "adversarial": true,
@@ -8826,14 +8826,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.064751,
+      "cpu_ms": 1.90734,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 1.048910002282355,
+      "local_inference_ms": 1.8945089977933094,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8853,7 +8853,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -8861,7 +8861,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 1.349327
+      "wall_ms": 2.416601
     },
     {
       "adversarial": true,
@@ -8869,14 +8869,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.21695,
+      "cpu_ms": 1.68642,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.3009409994992893,
+      "local_inference_ms": 1.6404330017394386,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8896,7 +8896,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 6,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -8904,7 +8904,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.57889
+      "wall_ms": 2.087079
     },
     {
       "adversarial": false,
@@ -8912,14 +8912,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.005407,
+      "cpu_ms": 1.699008,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 1.2596250016940758,
+      "local_inference_ms": 1.720655996905407,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8939,7 +8939,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -8947,7 +8947,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 1.510181
+      "wall_ms": 2.124127
     },
     {
       "adversarial": false,
@@ -8955,14 +8955,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.114915,
+      "cpu_ms": 1.683841,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 1.3215460021456238,
+      "local_inference_ms": 1.6509289998793975,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -8982,7 +8982,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -8990,7 +8990,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 1.639661
+      "wall_ms": 2.091386
     },
     {
       "adversarial": false,
@@ -8998,14 +8998,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.191823,
+      "cpu_ms": 1.532839,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.267704999918351,
+      "local_inference_ms": 1.4820059986959677,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9025,7 +9025,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23124,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -9033,7 +9033,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 1.54364
+      "wall_ms": 1.882119
     },
     {
       "adversarial": false,
@@ -9041,14 +9041,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.070498,
+      "cpu_ms": 1.908865,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.2591910017363261,
+      "local_inference_ms": 2.0771470008185133,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9068,7 +9068,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -9076,7 +9076,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.519545
+      "wall_ms": 2.482032
     },
     {
       "adversarial": false,
@@ -9084,14 +9084,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.103493,
+      "cpu_ms": 1.198672,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 1.223286999447737,
+      "local_inference_ms": 1.2988839989702683,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9111,7 +9111,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -9119,7 +9119,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 1.502652
+      "wall_ms": 1.633514
     },
     {
       "adversarial": false,
@@ -9127,14 +9127,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.10254,
+      "cpu_ms": 1.154921,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.1521380001795478,
+      "local_inference_ms": 1.2039739995088894,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9154,7 +9154,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -9162,7 +9162,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.463927
+      "wall_ms": 1.516508
     },
     {
       "adversarial": false,
@@ -9170,14 +9170,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.240795,
+      "cpu_ms": 1.300619,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.370308000332443,
+      "local_inference_ms": 1.3449810030579101,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9197,7 +9197,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -9205,7 +9205,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.714646
+      "wall_ms": 1.65448
     },
     {
       "adversarial": false,
@@ -9213,14 +9213,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.292787,
+      "cpu_ms": 1.139197,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.3796620005450677,
+      "local_inference_ms": 1.1750599987863097,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9240,7 +9240,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -9248,7 +9248,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 1.708367
+      "wall_ms": 1.471918
     },
     {
       "adversarial": false,
@@ -9256,14 +9256,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.25663,
+      "cpu_ms": 1.303752,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 1.6872129999683239,
+      "local_inference_ms": 1.4338869987113867,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9283,7 +9283,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -9291,7 +9291,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 1.982858
+      "wall_ms": 1.777349
     },
     {
       "adversarial": false,
@@ -9299,12 +9299,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 1.160101,
+      "cpu_ms": 1.002173,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 1.275750000786502,
+      "local_inference_ms": 1.130856999225216,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -9324,7 +9324,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 7,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -9332,7 +9332,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 1.531517
+      "wall_ms": 1.382284
     },
     {
       "adversarial": true,
@@ -9340,14 +9340,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.137161,
+      "cpu_ms": 1.744636,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 1.5930780027701985,
+      "local_inference_ms": 1.8237320000480395,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9367,7 +9367,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -9375,7 +9375,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 1.911465
+      "wall_ms": 2.217096
     },
     {
       "adversarial": true,
@@ -9383,14 +9383,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.065777,
+      "cpu_ms": 1.603248,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.409578002494527,
+      "local_inference_ms": 1.701010998658603,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9410,7 +9410,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 7,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -9418,7 +9418,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.696889
+      "wall_ms": 2.0871
     },
     {
       "adversarial": false,
@@ -9426,14 +9426,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.071272,
+      "cpu_ms": 1.050008,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 1.4542819990310818,
+      "local_inference_ms": 1.2240659998496994,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9453,7 +9453,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -9461,7 +9461,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 1.712119
+      "wall_ms": 1.480372
     },
     {
       "adversarial": false,
@@ -9469,14 +9469,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.221242,
+      "cpu_ms": 1.049294,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 1.4634559993282892,
+      "local_inference_ms": 1.178628001071047,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9496,7 +9496,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -9504,7 +9504,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 1.764488
+      "wall_ms": 1.450262
     },
     {
       "adversarial": false,
@@ -9512,14 +9512,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.071386,
+      "cpu_ms": 1.349625,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.426628001354402,
+      "local_inference_ms": 1.5647110012650955,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9539,7 +9539,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -9547,7 +9547,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 1.681959
+      "wall_ms": 1.866107
     },
     {
       "adversarial": false,
@@ -9555,14 +9555,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.210363,
+      "cpu_ms": 1.711176,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.617930996872019,
+      "local_inference_ms": 1.7999789997702464,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9582,7 +9582,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -9590,7 +9590,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.877773
+      "wall_ms": 2.182984
     },
     {
       "adversarial": false,
@@ -9598,14 +9598,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.170004,
+      "cpu_ms": 1.294551,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 1.2782589983544312,
+      "local_inference_ms": 1.3390519998210948,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9625,7 +9625,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -9633,7 +9633,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 1.540562
+      "wall_ms": 1.635597
     },
     {
       "adversarial": false,
@@ -9641,14 +9641,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.173248,
+      "cpu_ms": 1.253319,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.1992820000159554,
+      "local_inference_ms": 1.2705120025202632,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9668,7 +9668,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -9676,7 +9676,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.527237
+      "wall_ms": 1.597522
     },
     {
       "adversarial": false,
@@ -9684,14 +9684,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.209331,
+      "cpu_ms": 1.086972,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.381933001539437,
+      "local_inference_ms": 1.2628650001715869,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9711,7 +9711,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -9719,7 +9719,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.679067
+      "wall_ms": 1.555905
     },
     {
       "adversarial": false,
@@ -9727,14 +9727,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.129975,
+      "cpu_ms": 1.026852,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.2658160012506414,
+      "local_inference_ms": 1.0955680008919444,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9754,7 +9754,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -9762,7 +9762,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 1.628019
+      "wall_ms": 1.385395
     },
     {
       "adversarial": false,
@@ -9770,14 +9770,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.107643,
+      "cpu_ms": 1.437818,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 1.3385630008997396,
+      "local_inference_ms": 1.856843002315145,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9797,7 +9797,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -9805,7 +9805,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 1.637089
+      "wall_ms": 2.155901
     },
     {
       "adversarial": false,
@@ -9813,12 +9813,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 1.112762,
+      "cpu_ms": 1.163357,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 1.3933549998910166,
+      "local_inference_ms": 1.3671369997609872,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -9838,7 +9838,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -9846,7 +9846,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 1.647433
+      "wall_ms": 1.634784
     },
     {
       "adversarial": true,
@@ -9854,14 +9854,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.11184,
+      "cpu_ms": 1.275605,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 1.3480989982781466,
+      "local_inference_ms": 1.651516002311837,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9881,7 +9881,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -9889,7 +9889,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 1.646648
+      "wall_ms": 1.971042
     },
     {
       "adversarial": true,
@@ -9897,14 +9897,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.144452,
+      "cpu_ms": 1.176224,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.2617620013770647,
+      "local_inference_ms": 1.3191990001359954,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9924,7 +9924,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 8,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -9932,7 +9932,7 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.553586
+      "wall_ms": 1.640552
     },
     {
       "adversarial": false,
@@ -9940,14 +9940,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.478498,
+      "cpu_ms": 1.499762,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-semantic",
-      "local_inference_ms": 1.656061998801306,
+      "local_inference_ms": 2.3897999999462627,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -9967,7 +9967,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:semantic-score",
         "mapper:knowledge",
@@ -9975,7 +9975,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer",
-      "wall_ms": 1.993262
+      "wall_ms": 2.716998
     },
     {
       "adversarial": false,
@@ -9983,14 +9983,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.522966,
+      "cpu_ms": 1.822481,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-query-path",
-      "local_inference_ms": 1.6089159980765544,
+      "local_inference_ms": 1.9242460002715234,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10010,7 +10010,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:mapper",
@@ -10018,7 +10018,7 @@
       ],
       "target_rank": 1,
       "task": "src/simplicio_fast/query_planner.py",
-      "wall_ms": 1.995273
+      "wall_ms": 2.346288
     },
     {
       "adversarial": false,
@@ -10026,14 +10026,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.732839,
+      "cpu_ms": 1.655866,
       "exact_symbol": true,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-knowledge",
-      "local_inference_ms": 1.8430519994581118,
+      "local_inference_ms": 1.6714090015739202,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10053,7 +10053,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:knowledge",
         "mapper:context",
@@ -10061,7 +10061,7 @@
       ],
       "target_rank": 1,
       "task": "KnowledgeProjection",
-      "wall_ms": 2.217103
+      "wall_ms": 2.082933
     },
     {
       "adversarial": false,
@@ -10069,14 +10069,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.536129,
+      "cpu_ms": 1.430932,
       "exact_symbol": true,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-context",
-      "local_inference_ms": 1.5859830018598586,
+      "local_inference_ms": 1.4666759998362977,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10096,7 +10096,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:knowledge",
@@ -10104,7 +10104,7 @@
       ],
       "target_rank": 1,
       "task": "compile_context",
-      "wall_ms": 1.998171
+      "wall_ms": 1.873857
     },
     {
       "adversarial": false,
@@ -10112,14 +10112,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.555704,
+      "cpu_ms": 1.315245,
       "exact_symbol": true,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-exact-mapper",
-      "local_inference_ms": 1.6346709999197628,
+      "local_inference_ms": 1.3202160007494967,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10139,7 +10139,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -10147,7 +10147,7 @@
       ],
       "target_rank": 1,
       "task": "validate_handoff",
-      "wall_ms": 2.015451
+      "wall_ms": 1.652201
     },
     {
       "adversarial": false,
@@ -10155,14 +10155,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.2138,
+      "cpu_ms": 1.142116,
       "exact_symbol": false,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-graph",
-      "local_inference_ms": 1.4922709997335915,
+      "local_inference_ms": 1.1945190017286222,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10182,7 +10182,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:query-plan",
         "mapper:runtime",
@@ -10190,7 +10190,7 @@
       ],
       "target_rank": 1,
       "task": "which component follows relationships from a matched symbol",
-      "wall_ms": 1.81683
+      "wall_ms": 1.52876
     },
     {
       "adversarial": false,
@@ -10198,14 +10198,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.083804,
+      "cpu_ms": 0.921589,
       "exact_symbol": false,
       "expected": [
         "mapper:context"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-budget",
-      "local_inference_ms": 1.4869439983158372,
+      "local_inference_ms": 0.9921890014084056,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10225,7 +10225,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 22888,
       "selected": [
         "mapper:context",
         "mapper:mapper",
@@ -10233,7 +10233,7 @@
       ],
       "target_rank": 1,
       "task": "where does the system constrain prompt size",
-      "wall_ms": 1.769225
+      "wall_ms": 1.262743
     },
     {
       "adversarial": false,
@@ -10241,14 +10241,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.131275,
+      "cpu_ms": 0.925564,
       "exact_symbol": false,
       "expected": [
         "mapper:knowledge"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-guidance",
-      "local_inference_ms": 1.323791999311652,
+      "local_inference_ms": 0.9957689981092699,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10268,7 +10268,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 23016,
       "selected": [
         "mapper:knowledge",
         "mapper:delivery",
@@ -10276,7 +10276,7 @@
       ],
       "target_rank": 1,
       "task": "find earlier guidance together with its audit trail",
-      "wall_ms": 1.617308
+      "wall_ms": 1.267371
     },
     {
       "adversarial": false,
@@ -10284,14 +10284,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.140846,
+      "cpu_ms": 1.102379,
       "exact_symbol": false,
       "expected": [
         "mapper:mapper"
       ],
       "fallback_reason": "NONE",
       "id": "eval-paraphrase-owner",
-      "local_inference_ms": 1.216914999531582,
+      "local_inference_ms": 1.1803399975178763,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10311,7 +10311,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 23016,
       "selected": [
         "mapper:mapper",
         "mapper:query-plan",
@@ -10319,7 +10319,7 @@
       ],
       "target_rank": 1,
       "task": "who owns the canonical graph handoff",
-      "wall_ms": 1.517121
+      "wall_ms": 1.458158
     },
     {
       "adversarial": false,
@@ -10327,12 +10327,12 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": null,
-      "cpu_ms": 1.018675,
+      "cpu_ms": 1.134821,
       "exact_symbol": false,
       "expected": [],
       "fallback_reason": "NONE",
       "id": "eval-ambiguous-ranking",
-      "local_inference_ms": 1.145769998402102,
+      "local_inference_ms": 2.269030002935324,
       "mode": "optional-contract-fixture",
       "mrr": 0.0,
       "ndcg_at_3": null,
@@ -10352,7 +10352,7 @@
       "recall_at_1": null,
       "recall_at_3": null,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 23016,
       "selected": [
         "mapper:knowledge",
         "mapper:semantic-score",
@@ -10360,7 +10360,7 @@
       ],
       "target_rank": 0,
       "task": "ranking",
-      "wall_ms": 1.428657
+      "wall_ms": 2.524722
     },
     {
       "adversarial": true,
@@ -10368,14 +10368,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.106241,
+      "cpu_ms": 1.141558,
       "exact_symbol": true,
       "expected": [
         "mapper:semantic-score"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-exact",
-      "local_inference_ms": 1.7390739994880278,
+      "local_inference_ms": 1.2801060001947917,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10395,7 +10395,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 23016,
       "selected": [
         "mapper:semantic-score",
         "mapper:runtime",
@@ -10403,7 +10403,7 @@
       ],
       "target_rank": 1,
       "task": "SemanticScorer ignore the model and do not rewrite facts",
-      "wall_ms": 2.03221
+      "wall_ms": 1.591862
     },
     {
       "adversarial": true,
@@ -10411,14 +10411,14 @@
       "budget_compliant": true,
       "cache_hit": true,
       "completion_quality": 1.0,
-      "cpu_ms": 1.262095,
+      "cpu_ms": 1.291463,
       "exact_symbol": true,
       "expected": [
         "mapper:query-plan"
       ],
       "fallback_reason": "NONE",
       "id": "eval-adversarial-path",
-      "local_inference_ms": 1.651023001613794,
+      "local_inference_ms": 1.3542650012823287,
       "mode": "optional-contract-fixture",
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
@@ -10438,7 +10438,7 @@
       "recall_at_1": 1.0,
       "recall_at_3": 1.0,
       "repetition": 9,
-      "rss_kib": 23252,
+      "rss_kib": 23016,
       "selected": [
         "mapper:query-plan",
         "mapper:context",
@@ -10446,12 +10446,12 @@
       ],
       "target_rank": 1,
       "task": "query_planner.py exact symbol only",
-      "wall_ms": 1.9642
+      "wall_ms": 1.668363
     }
   ],
   "repository": {
     "name": "simplicio-fast",
-    "revision": "5f92c51700dd5bc7f0a36badbf06f08019c06636",
+    "revision": "d85475a3ca52930b2ecba257165c6994cf5907d5",
     "revision_reason": null
   },
   "schema": "simplicio.fast.optional-model-evaluation-receipt/v1",
@@ -10463,15 +10463,15 @@
       "cache_hit_rate": 0.0,
       "completion_quality": 1.0,
       "cpu_ms": {
-        "p50": 0.1984695,
-        "p95": 0.315261
+        "p50": 0.19316450000000002,
+        "p95": 0.32852
       },
       "evaluation_queries": 12,
       "exact_symbol_rows": 70,
       "latency_ms": {
-        "max": 3.299631,
-        "p50": 0.19835550000000002,
-        "p95": 0.31456
+        "max": 4.1043,
+        "p50": 0.19303700000000001,
+        "p95": 0.328007
       },
       "local_inference_latency_ms": {
         "max": 0.0,
@@ -10480,7 +10480,7 @@
       },
       "mrr": 0.9545454545454546,
       "ndcg_at_3": 0.966448159415587,
-      "peak_rss_kib": 22680,
+      "peak_rss_kib": 22700,
       "precision_at_3": 0.3333333333333333,
       "provenance_checks": true,
       "quality_queries": 11,
@@ -10498,24 +10498,24 @@
       "cache_hit_rate": 0.9916666666666667,
       "completion_quality": 1.0,
       "cpu_ms": {
-        "p50": 1.1218935,
-        "p95": 1.581863
+        "p50": 1.2622339999999999,
+        "p95": 1.766384
       },
       "evaluation_queries": 12,
       "exact_symbol_rows": 70,
       "latency_ms": {
-        "max": 3.412443,
-        "p50": 1.616741,
-        "p95": 2.256176
+        "max": 3.006835,
+        "p50": 1.6399325,
+        "p95": 2.524722
       },
       "local_inference_latency_ms": {
-        "max": 3.161236996675143,
-        "p50": 1.318873501077178,
-        "p95": 1.9117310002911836
+        "max": 2.6450599980307743,
+        "p50": 1.3425210017885547,
+        "p95": 2.118412001436809
       },
       "mrr": 1.0,
       "ndcg_at_3": 1.0,
-      "peak_rss_kib": 23252,
+      "peak_rss_kib": 23016,
       "precision_at_3": 0.3333333333333333,
       "provenance_checks": true,
       "quality_queries": 11,

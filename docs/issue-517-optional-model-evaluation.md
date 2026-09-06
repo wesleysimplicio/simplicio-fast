@@ -51,15 +51,15 @@ on the checkout revision used for this evaluation. It measured:
 
 | Lane | Recall@1 | Recall@3 | MRR | nDCG@3 | Wall p95 | CPU p95 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Deterministic baseline | 0.9091 | 1.0000 | 0.9545 | 0.9664 | 0.315 ms | 0.315 ms |
-| Optional contract fixture | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 2.256 ms | 1.582 ms |
+| Deterministic baseline | 0.9091 | 1.0000 | 0.9545 | 0.9664 | 0.328 ms | 0.329 ms |
+| Optional contract fixture | 1.0000 | 1.0000 | 1.0000 | 1.0000 | 2.525 ms | 1.766 ms |
 
 The fixture delta is Recall@1 `+0.0909`, MRR `+0.0455` and nDCG@3 `+0.0336`.
 Exact-symbol/path cases had no regression; every ranked row retained its
 fixture generation and candidate-text hash, with source path/symbol and source
 file hashes recorded in the evidence bindings; and all rows stayed within the
 declared candidate, byte and token budgets. The observed fixture RSS delta was
-572 KiB.
+316 KiB.
 
 ## Decision
 
