@@ -704,6 +704,11 @@ def build_parser() -> argparse.ArgumentParser:
     semantic.add_argument("--max-results", type=int, default=10)
     semantic.add_argument("--max-request-bytes", type=int, default=256_000)
     semantic.add_argument("--max-tokens", type=int, default=8_000)
+    semantic.add_argument(
+        "--no-model",
+        action="store_true",
+        help="explicitly select the deterministic offline lane (the CLI never loads a model)",
+    )
     json_option(semantic)
 
     commands.add_parser("capabilities", help="report parser capability negotiation")

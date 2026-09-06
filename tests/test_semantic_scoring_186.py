@@ -548,6 +548,7 @@ class CliSeamTests(unittest.TestCase):
                     "g1",
                     "--candidates",
                     str(candidates),
+                    "--no-model",
                 ],
                 capture_output=True,
                 text=True,
