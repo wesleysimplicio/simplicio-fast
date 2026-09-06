@@ -7,7 +7,7 @@ import json
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 
 SCHEMA = "simplicio.fast.mapper-ingest/v1"
@@ -36,6 +36,31 @@ def _sha256(path: Path) -> tuple[str, int]:
             size += len(block)
             digest.update(block)
     return digest.hexdigest(), size
+
+
+def artifact_digest(artifacts: list[Mapping[str, Any]]) -> str:
+    """Return the content-addressed digest of a Mapper artifact manifest.
+
+    The individual artifact digests are the source facts.  This aggregate is
+    the identity Fast pins for the canonical handoff, so a changed artifact
+    cannot reuse a snapshot merely because its Mapper generation string was
+    accidentally reused.
+    """
+
+    manifest = [
+        {
+            "name": str(item.get("name") or ""),
+            "path": item["path"],
+            "bytes": item["bytes"],
+            "sha256": item["sha256"],
+        }
+        for item in sorted(
+            artifacts,
+            key=lambda value: (str(value.get("path")), str(value.get("name") or "")),
+        )
+    ]
+    encoded = json.dumps(manifest, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
 
 
 def _head(root: Path) -> str:
@@ -108,13 +133,11 @@ def validate_handoff(
     if receipt_generation is not None and receipt_generation != generation:
         raise MapperIngestError("mapper_generation_stale")
     producer = handoff.get("producer")
-    if producer is not None and (
+    if (
         not isinstance(producer, dict)
-        or producer.get("name") not in {None, "simplicio-mapper"}
-        or (
-            producer.get("version") is not None
-            and not isinstance(producer.get("version"), str)
-        )
+        or producer.get("name") != "simplicio-mapper"
+        or not isinstance(producer.get("version"), str)
+        or not producer["version"].strip()
     ):
         raise MapperIngestError("mapper_schema_unsupported")
     fidelity = handoff.get("fidelity")
@@ -182,18 +205,53 @@ def validate_handoff(
         if digest != artifact.get("sha256") or size != artifact.get("bytes"):
             raise MapperIngestError("mapper_digest_mismatch", relative)
         checked.append(
-            {"name": artifact.get("name"), "path": relative, "sha256": digest}
+            {
+                "name": artifact.get("name"),
+                "path": relative,
+                "bytes": size,
+                "sha256": digest,
+            }
         )
+    aggregate_digest = artifact_digest(checked)
+    supplied_artifact_digest = handoff.get("artifact_digest")
+    if supplied_artifact_digest is None:
+        supplied_artifact_digest = receipt.get("artifact_digest")
+    if supplied_artifact_digest is not None:
+        normalized_artifact_digest = (
+            supplied_artifact_digest.removeprefix("sha256:")
+            if isinstance(supplied_artifact_digest, str)
+            else None
+        )
+        if (
+            not _is_digest(normalized_artifact_digest)
+            or normalized_artifact_digest != aggregate_digest
+        ):
+            raise MapperIngestError("mapper_artifact_digest_mismatch")
+    artifact_names = {str(item.get("name") or "") for item in checked}
+    supplied_coverage = handoff.get("capability_coverage")
+    if supplied_coverage is not None and not isinstance(supplied_coverage, dict):
+        raise MapperIngestError("mapper_schema_unsupported")
+    capability_coverage = dict(supplied_coverage or {})
+    capability_coverage.setdefault("context_graph", "context_snapshot" in artifact_names)
+    capability_coverage.setdefault("files", "project_map" in artifact_names)
+    capability_coverage.setdefault("symbols", "symbol_index" in artifact_names)
+    capability_coverage.setdefault("relations", "call_graph" in artifact_names)
+    capability_coverage.setdefault("source_hashes", True)
+    capability_coverage.setdefault("stable_handles", "context_snapshot" in artifact_names)
     return {
         "schema": SCHEMA,
         "mode": "integrated",
         "producer": {
             "name": "simplicio-mapper",
-            "version": handoff.get("producer", {}).get("version"),
+            "version": producer["version"],
         },
+        "mapper_schema": HANDOFF_SCHEMA,
+        "mapper_version": producer["version"],
         "repository_id": handoff["repository_id"],
         "commit": revision,
         "generation": generation,
+        "artifact_digest": aggregate_digest,
+        "capability_coverage": capability_coverage,
         "fidelity": fidelity,
         "handoff_sha256": receipt["handoff_sha256"],
         "artifacts": checked,
@@ -215,6 +273,7 @@ __all__ = [
     "HANDOFF_SCHEMA",
     "MapperIngestError",
     "SCHEMA",
+    "artifact_digest",
     "load_handoff",
     "validate_handoff",
 ]

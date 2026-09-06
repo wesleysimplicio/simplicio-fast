@@ -241,6 +241,7 @@ class NavigationIndex:
             "snapshot_sha256": self.snapshot.sha256,
             "snapshot_generation": self._generation,
             "snapshot_version": self.snapshot.format_version,
+            "snapshot_provenance": self.snapshot.provenance,
             "item_count": len(selected),
             "limits": {
                 "max_nodes": limits.max_nodes,
@@ -445,6 +446,7 @@ class NavigationIndex:
             "snapshot_sha256": self.snapshot.sha256,
             "snapshot_generation": self._generation,
             "snapshot_version": self.snapshot.format_version,
+            "snapshot_provenance": self.snapshot.provenance,
             "source_id": source.symbol_id,
             "relation_kind": raw_kind,
         }

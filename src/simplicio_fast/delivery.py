@@ -265,6 +265,16 @@ class DeliveryEngine:
             "bytes": sum(path.stat().st_size for path in paths),
         }
 
+    def _refresh_after_write(self) -> tuple[str | None, str]:
+        """Refresh only bootstrap snapshots; Mapper projections need a new handoff."""
+
+        with Snapshot(self.snapshot) as snapshot:
+            if snapshot.provenance.get("mode") == "integrated":
+                return None, "mapper_refresh_required"
+        build_snapshot(self.root, self.snapshot)
+        with Snapshot(self.snapshot) as snapshot:
+            return snapshot.generation, "refreshed"
+
     def prepare(
         self,
         task: str,
@@ -309,6 +319,15 @@ class DeliveryEngine:
                             sidecar_data = candidate
                     except (OSError, UnicodeDecodeError, json.JSONDecodeError):
                         sidecar_data = None
+                snapshot_matches_mapper = False
+                if self.snapshot.is_file():
+                    try:
+                        with Snapshot(self.snapshot) as existing:
+                            snapshot_matches_mapper = existing.matches_mapper(
+                                mapper_provenance
+                            )
+                    except (OSError, ValueError):
+                        snapshot_matches_mapper = False
                 if (
                     not self.snapshot.is_file()
                     or sidecar_data is None
@@ -316,6 +335,7 @@ class DeliveryEngine:
                     != mapper_provenance["generation"]
                     or sidecar_data.get("handoff_sha256")
                     != mapper_provenance["handoff_sha256"]
+                    or not snapshot_matches_mapper
                 ):
                     compile_mapper_payload(
                         self.root,
@@ -323,6 +343,7 @@ class DeliveryEngine:
                         self.snapshot,
                         mapper_generation=str(mapper_provenance["generation"]),
                         handoff_sha256=str(mapper_provenance["handoff_sha256"]),
+                        mapper_provenance=mapper_provenance,
                     )
             except (OSError, TypeError, ValueError) as error:
                 reason = getattr(error, "reason_code", None) or str(error)
@@ -580,6 +601,12 @@ class DeliveryEngine:
                     "mode": mode,
                     "producer": mapper_provenance["producer"],
                     "generation": mapper_provenance.get("generation"),
+                    "source_schema": mapper_provenance.get("mapper_schema"),
+                    "version": mapper_provenance.get("mapper_version"),
+                    "artifact_digest": mapper_provenance.get("artifact_digest"),
+                    "capability_coverage": mapper_provenance.get(
+                        "capability_coverage", {}
+                    ),
                     "handle": mapper_provenance.get("handle"),
                     "traceability": (
                         "mapper-symbol-id" if mode == "integrated" else "bootstrap"
@@ -695,7 +722,10 @@ class DeliveryEngine:
         if not isinstance(changeset.get("changes"), list) or not changeset["changes"]:
             raise ValueError("changeset must contain at least one change")
         if not self.snapshot.is_file():
-            build_snapshot(self.root, self.snapshot)
+            raise MapperIngestError(
+                "snapshot_missing",
+                "prepare a canonical Mapper projection before delivery",
+            )
         canonical = json.dumps(changeset, sort_keys=True, separators=(",", ":"))
         change_digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         request_key = (
@@ -756,9 +786,7 @@ class DeliveryEngine:
                     ]
                 else:
                     if runtime_outcome.get("state") == "completed":
-                        build_snapshot(self.root, self.snapshot)
-                        with Snapshot(self.snapshot) as snapshot:
-                            after_generation = snapshot.generation
+                        after_generation, refresh_status = self._refresh_after_write()
                         receipt = {
                             "schema": SCHEMA,
                             "status": "applied",
@@ -783,8 +811,18 @@ class DeliveryEngine:
                                 "mutation_applied": True,
                             },
                             "runtime": runtime_outcome,
-                            "refresh": {"attempted": True, "status": "refreshed"},
-                            "reason_codes": ["runtime_effect_completed"],
+                            "refresh": {
+                                "attempted": refresh_status == "refreshed",
+                                "status": refresh_status,
+                            },
+                            "reason_codes": [
+                                "runtime_effect_completed",
+                                *(
+                                    ["mapper_refresh_required"]
+                                    if refresh_status == "mapper_refresh_required"
+                                    else []
+                                ),
+                            ],
                             "timings": {
                                 "delivery_wall_ms": (time.perf_counter_ns() - started)
                                 / 1_000_000
@@ -823,11 +861,9 @@ class DeliveryEngine:
         after_generation = before_generation
         refresh = {"attempted": False, "status": "not-needed"}
         if write and applied:
-            refresh["attempted"] = True
-            build_snapshot(self.root, self.snapshot)
-            with Snapshot(self.snapshot) as snapshot:
-                after_generation = snapshot.generation
-            refresh["status"] = "refreshed"
+            after_generation, refresh_status = self._refresh_after_write()
+            refresh["attempted"] = refresh_status == "refreshed"
+            refresh["status"] = refresh_status
         outcome = "applied" if applied else "dry_run" if not write else "refused"
         reason_codes = []
         if applied_receipt.get("reason_code"):

@@ -8,7 +8,7 @@ and issue #38.
 | Contract | Producer | Consumer | Required fields | Forbidden |
 | --- | --- | --- | --- | --- |
 | simplicio.context-snapshot/v1 | Mapper | Fast adapter, Loop/Runtime handles | repository, commit, snapshot, IDs, fidelity | mmap offsets |
-| simplicio.fast.snapshot/v3 | Fast | Fast readers/adapters | schema, generation, sections, checksums, source hashes | mutable in-place records |
+| simplicio.fast.snapshot/v3 | Fast | Fast readers/adapters | schema, generation, sections, checksums, source hashes, Mapper projection provenance | mutable in-place records or an independent ContextGraph |
 | simplicio.fast.context/v1 | Fast | Agent/Loop/Runtime/Prompt | generation, spans, IDs, hashes, budgets, provenance | unbounded repository dump |
 | simplicio.fast.understanding/v1 | Fast | coordinator/Dev CLI handoff | task hash, targets, impact, risks, tests, generation | public competing ContextGraph |
 | simplicio.fast.changeset/v2 | Fast/Dev CLI boundary | Dev CLI/Runtime | generation, paths, expected hashes, idempotency | stale or hashless writes |
@@ -27,6 +27,14 @@ and issue #38.
 8. Python and Rust must produce semantically equivalent contracts.
 9. JSON is boundary output; internal persistence follows binary/HBP/HBI rules.
 10. Missing capability must be explicit; empty context is not success.
+
+Every v2 `.sfast` projection also carries
+`simplicio.fast.snapshot-provenance/v1` in its validated index metadata. Integrated
+projections must pin the Mapper handoff schema, Mapper version, repository id,
+Mapper generation, aggregate artifact digest, Fast format version and capability
+coverage. A source-parser bootstrap snapshot is development-only and is never
+accepted as an integrated Mapper projection. A generation, version or artifact
+digest mismatch causes Fast to rebuild from the new handoff or fail closed.
 
 ## Engine selector contract
 

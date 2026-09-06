@@ -420,6 +420,7 @@ class ProjectProcessor:
                         snapshot, terms, max_results=max_results, max_bytes=max_bytes
                     )
                     selection["requested_mode"] = selection_mode
+            selection["snapshot_provenance"] = snapshot.provenance
         return Understanding(
             schema="simplicio.fast.understanding/v2",
             task=task,
