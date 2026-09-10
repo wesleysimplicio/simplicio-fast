@@ -265,9 +265,17 @@ class PluginContextSpan:
     byte_length: int
     text: str | None
     overlay_id: str | None = None
+    requested_start_line: int | None = None
+    requested_end_line: int | None = None
+    start_byte: int = 0
+    end_byte: int = 0
+    content_sha256: str = ""
+    fidelity: str = "complete"
+    omitted_ranges: tuple[tuple[int, int], ...] = ()
+    needs_broader_context: bool = False
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        body = {
             "handle": self.handle,
             "path": self.path,
             "kind": self.kind,
@@ -278,6 +286,22 @@ class PluginContextSpan:
             "text": self.text,
             "overlay_id": self.overlay_id,
         }
+        # Keep complete-span packets wire compatible.  The extra range and
+        # content identity fields are required when a budget cuts a span.
+        if self.fidelity != "complete" or self.omitted_ranges or self.needs_broader_context:
+            body.update(
+                {
+                    "requested_start_line": self.requested_start_line,
+                    "requested_end_line": self.requested_end_line,
+                    "start_byte": self.start_byte,
+                    "end_byte": self.end_byte,
+                    "content_sha256": self.content_sha256,
+                    "fidelity": self.fidelity,
+                    "omitted_ranges": [list(item) for item in self.omitted_ranges],
+                    "needs_broader_context": self.needs_broader_context,
+                }
+            )
+        return body
 
 
 @dataclass(frozen=True, slots=True)
@@ -693,9 +717,11 @@ class PluginContextStore:
             if blob is None:
                 raise PluginContextError("slice_missing", spec.path)
             text = _span_text(blob, spec)
+            truncated = False
             if len(text) > budget.max_span_bytes:
                 text = text[: budget.max_span_bytes]
                 reasons.append("span_budget")
+                truncated = True
             rendered = None
             if budget.fidelity == "exact":
                 rendered = text.decode("utf-8", "replace")
@@ -712,11 +738,32 @@ class PluginContextStore:
                     path=spec.path,
                     kind=spec.kind,
                     start_line=spec.start_line,
-                    end_line=spec.end_line,
+                    end_line=(
+                        spec.start_line + text.count(b"\n") - 1
+                        if text.endswith(b"\n") and text
+                        else spec.start_line + text.count(b"\n")
+                    ),
                     source_sha256=_hex_digest(bytes(blob)),
                     byte_length=len(text),
                     text=rendered,
                     overlay_id=overlay_id,
+                    requested_start_line=spec.start_line,
+                    requested_end_line=spec.end_line,
+                    start_byte=spec.start_offset,
+                    end_byte=spec.start_offset + len(text),
+                    content_sha256=_hex_digest(text),
+                    fidelity="partial" if truncated else "complete",
+                    omitted_ranges=(
+                        (
+                            (
+                                spec.start_line + text.count(b"\n"),
+                                spec.end_line,
+                            ),
+                        )
+                        if truncated and text
+                        else ()
+                    ),
+                    needs_broader_context=truncated,
                 ).to_dict()
             )
         return spans, bool(reasons), sorted(set(reasons))

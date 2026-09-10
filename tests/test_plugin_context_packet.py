@@ -160,6 +160,23 @@ def test_byte_and_fidelity_budgets_are_exact() -> None:
     assert squeezed["encoded_bytes"] <= 1500
 
 
+def test_span_budget_reports_delivered_range_and_distinct_content_hash() -> None:
+    store = _store()
+    packet = store.compile(
+        _request(budget=PluginContextBudget(4096, 1, 12, "exact"))
+    )
+    span = packet["spans"][0]
+    assert span["requested_start_line"] == 1
+    assert span["requested_end_line"] == 3
+    assert span["start_line"] == 1
+    assert span["end_line"] == 1
+    assert span["fidelity"] == "partial"
+    assert span["needs_broader_context"] is True
+    assert span["source_sha256"] != span["content_sha256"]
+    assert span["end_byte"] - span["start_byte"] == span["byte_length"]
+    assert span["omitted_ranges"] == [[1, 3]]
+
+
 def test_cache_cold_warm_and_invalidation() -> None:
     store = _store()
     first = store.compile(_request())

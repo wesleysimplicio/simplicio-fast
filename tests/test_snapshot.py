@@ -144,6 +144,20 @@ class SnapshotTest(unittest.TestCase):
                     sum(len(item.content.encode()) for item in spans), 6
                 )
                 self.assertLessEqual(sum(item.tokens for item in spans), 2)
+                self.assertEqual(4, spans[0].start_line)
+                self.assertEqual(4, spans[0].end_line)
+                self.assertEqual((4, 5), spans[0].omitted_ranges[0])
+                self.assertEqual("partial", spans[0].fidelity)
+                self.assertTrue(spans[0].needs_broader_context)
+                self.assertNotEqual(
+                    spans[0].source_sha256, spans[0].content_sha256
+                )
+
+                line_limited = snapshot.context(root, "run", max_lines=1)
+                self.assertEqual(4, line_limited[0].start_line)
+                self.assertEqual(4, line_limited[0].end_line)
+                self.assertEqual((5, 5), line_limited[0].omitted_ranges[0])
+                self.assertEqual("partial", line_limited[0].fidelity)
 
     def test_context_reads_each_matching_source_file_once(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -169,6 +183,38 @@ class SnapshotTest(unittest.TestCase):
 
             self.assertGreaterEqual(len(spans), 2)
             self.assertEqual(1, reads)
+
+    def test_context_cut_reports_fixture_range_and_utf8_content_digest(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "guard.py"
+            source.write_text(
+                "def idempotency(user):\n"
+                "    if not user:\n"
+                "        return False\n"
+                "    return True\n",
+                encoding="utf-8",
+            )
+            output = root / "project.sfast"
+            build_snapshot(root, output)
+            with Snapshot(output) as snapshot:
+                span = snapshot.context(root, "idempotency", max_bytes=24)[0]
+                self.assertEqual((1, 4), (span.requested_start_line, span.requested_end_line))
+                self.assertEqual(2, span.end_line)
+                self.assertEqual("partial", span.fidelity)
+                self.assertEqual(((2, 4),), span.omitted_ranges)
+                self.assertTrue(span.needs_broader_context)
+                self.assertNotEqual(span.source_sha256, span.content_sha256)
+
+            source.write_text(
+                "def café():\n    return True\n", encoding="utf-8"
+            )
+            build_snapshot(root, output)
+            with Snapshot(output) as snapshot:
+                span = snapshot.context(root, "café", max_bytes=8)[0]
+                self.assertEqual("def caf", span.content)
+                self.assertEqual("partial", span.fidelity)
+                self.assertNotIn("�", span.content)
 
     def test_async_imports_and_repository_derived_ids(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

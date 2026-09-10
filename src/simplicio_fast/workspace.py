@@ -808,24 +808,61 @@ class EffectiveSnapshot:
                     f"source changed after generation: {symbol.file}; run refresh"
                 )
             lines = path.read_text(encoding="utf-8").splitlines()
-            end = min(symbol.end_line, symbol.line + max_lines - 1)
+            requested_end = symbol.end_line
+            end = min(requested_end, symbol.line + max_lines - 1)
             content = "\n".join(lines[symbol.line - 1 : end])
+            truncated = end < requested_end
+            content_truncated = False
             remaining = max_bytes - consumed
             if remaining <= 0:
                 break
+            original_size = len(content.encode())
             content = content.encode()[:remaining].decode("utf-8", errors="ignore")
+            if len(content.encode()) < original_size:
+                truncated = True
+                content_truncated = True
             consumed += len(content.encode())
+            delivered_end = (
+                symbol.line + content.count("\n")
+                if content_truncated and content and not content.endswith("\n")
+                else symbol.line + content.count("\n") - 1
+                if content_truncated and content
+                else end
+            )
+            omitted_start = (
+                delivered_end
+                if content_truncated and content and not content.endswith("\n")
+                else symbol.line
+                if content_truncated and not content
+                else delivered_end + 1
+            )
+            omitted_ranges = (
+                ((omitted_start, requested_end),)
+                if truncated and omitted_start <= requested_end
+                else ()
+            )
+            prefix_bytes = len("\n".join(lines[: symbol.line - 1]).encode()) + (
+                1 if symbol.line > 1 else 0
+            )
             spans.append(
                 ContextSpan(
-                    symbol.qualified_name,
-                    symbol.kind,
-                    symbol.file,
-                    symbol.line,
-                    end,
-                    actual,
-                    content,
-                    self.base_generation,
-                    self.overlay_generation,
+                    symbol=symbol.qualified_name,
+                    kind=symbol.kind,
+                    file=symbol.file,
+                    start_line=symbol.line,
+                    end_line=delivered_end,
+                    source_sha256=actual,
+                    content=content,
+                    base_generation=self.base_generation,
+                    overlay_generation=self.overlay_generation,
+                    requested_start_line=symbol.line,
+                    requested_end_line=requested_end,
+                    start_byte=prefix_bytes,
+                    end_byte=prefix_bytes + len(content.encode()),
+                    content_sha256=hashlib.sha256(content.encode()).hexdigest(),
+                    fidelity="partial" if truncated else "complete",
+                    omitted_ranges=omitted_ranges,
+                    needs_broader_context=truncated,
                 )
             )
         return spans
