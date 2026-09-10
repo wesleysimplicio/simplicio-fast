@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.0.32 - 2026-09-10
+- Report the delivered source range and incomplete fidelity when bounded context cuts occur.
+- Preserve requested ranges, byte offsets, omitted ranges, and separate delivered-content identity.
+
 ## 2.0.30 - 2026-08-23
 
 - Add the versioned Fast–Local contract surface, deterministic policy
