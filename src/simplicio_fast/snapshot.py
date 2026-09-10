@@ -259,6 +259,16 @@ class ContextSpan:
     tokens: int = 0
     base_generation: str | None = None
     overlay_generation: str | None = None
+    # The semantic symbol range is retained separately from the bounded view.
+    # Existing start_line/end_line fields describe the delivered content.
+    requested_start_line: int | None = None
+    requested_end_line: int | None = None
+    start_byte: int = 0
+    end_byte: int = 0
+    content_sha256: str = ""
+    fidelity: str = "complete"
+    omitted_ranges: tuple[tuple[int, int], ...] = ()
+    needs_broader_context: bool = False
 
 
 class StaleSnapshotError(RuntimeError):
@@ -1782,11 +1792,23 @@ class Snapshot:
                         f"source changed after snapshot: {symbol.file}; run simplicio-fast refresh"
                     )
                 start = symbol.line
-                end = min(symbol.end_line, start + max_lines - 1)
+                requested_end = symbol.end_line
+                end = min(requested_end, start + max_lines - 1)
+                source_line_starts = [0]
+                source_line_starts.extend(
+                    index + 1
+                    for index, value in enumerate(contents)
+                    if value == 10
+                )
+                source_start = source_line_starts[
+                    min(start - 1, len(source_line_starts) - 1)
+                ]
                 key = (symbol.file, start, end)
                 if key in seen:
                     continue
                 snippet = "\n".join(lines[start - 1 : end])
+                truncated = end < requested_end
+                content_truncated = False
                 if consumed + len(snippet.encode("utf-8")) > max_bytes:
                     remaining = max_bytes - consumed
                     if remaining <= 0:
@@ -1794,6 +1816,8 @@ class Snapshot:
                     snippet = snippet.encode("utf-8")[:remaining].decode(
                         "utf-8", errors="ignore"
                     )
+                    truncated = True
+                    content_truncated = True
                 encoded_size = len(snippet.encode("utf-8"))
                 tokens = max(1, (encoded_size + 3) // 4) if encoded_size else 0
                 if max_tokens is not None and consumed_tokens + tokens > max_tokens:
@@ -1803,22 +1827,54 @@ class Snapshot:
                     snippet = snippet.encode("utf-8")[: remaining_tokens * 4].decode(
                         "utf-8", errors="ignore"
                     )
+                    truncated = True
+                    content_truncated = True
                     encoded_size = len(snippet.encode("utf-8"))
                     tokens = max(1, (encoded_size + 3) // 4) if encoded_size else 0
                 seen.add(key)
                 consumed += encoded_size
                 consumed_tokens += tokens
+                content_bytes = snippet.encode("utf-8")
+                delivered_end = (
+                    start + snippet.count("\n")
+                    if content_truncated and snippet and not snippet.endswith("\n")
+                    else start + snippet.count("\n") - 1
+                    if content_truncated and snippet
+                    else end
+                )
+                omitted_start = (
+                    delivered_end
+                    if content_truncated and snippet and not snippet.endswith("\n")
+                    else start
+                    if content_truncated and not snippet
+                    else delivered_end + 1
+                )
+                omitted_ranges = (
+                    ((omitted_start, requested_end),)
+                    if truncated and omitted_start <= requested_end
+                    else ()
+                )
                 spans.append(
                     ContextSpan(
                         symbol.qualified_name,
                         symbol.kind,
                         symbol.file,
                         start,
-                        end,
+                        delivered_end,
                         actual_hash.hex(),
                         snippet,
                         symbol.symbol_id,
                         tokens,
+                        None,
+                        None,
+                        start,
+                        requested_end,
+                        source_start,
+                        source_start + len(content_bytes),
+                        hashlib.sha256(content_bytes).hexdigest(),
+                        "partial" if truncated else "complete",
+                        omitted_ranges,
+                        truncated,
                     )
                 )
         return spans

@@ -167,6 +167,32 @@ class WorkspaceGenerationTest(unittest.TestCase):
                 ).exists()
             )
 
+    def test_context_reports_delivered_range_and_content_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "main.py"
+            source.write_text(
+                "def main():\n    return True\n    return False\n",
+                encoding="utf-8",
+            )
+            store = WorkspaceStore(root)
+            base = store.build_base()
+            with store.open(base.generation_id) as view:
+                spans = view.context("main", max_bytes=8)
+
+            span = spans[0]
+            self.assertEqual(1, span.start_line)
+            self.assertEqual(1, span.end_line)
+            self.assertEqual(1, span.requested_start_line)
+            self.assertEqual(3, span.requested_end_line)
+            self.assertEqual("partial", span.fidelity)
+            self.assertTrue(span.needs_broader_context)
+            self.assertEqual((1, 3), span.omitted_ranges[0])
+            self.assertNotEqual(span.source_sha256, span.content_sha256)
+            self.assertEqual(
+                len(span.content.encode()), span.end_byte - span.start_byte
+            )
+
     def test_watch_refresh_is_debounced_and_writes_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
