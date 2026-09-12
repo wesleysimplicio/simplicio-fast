@@ -784,85 +784,142 @@ class EffectiveSnapshot:
         max_results: int = 10,
         max_lines: int = 120,
         max_bytes: int = 32_000,
+        max_tokens: int | None = None,
     ) -> list[ContextSpan]:
-        if max_results < 1 or max_lines < 1 or max_bytes < 1:
+        return self.context_many(
+            (query,),
+            max_results=max_results,
+            max_lines=max_lines,
+            max_bytes=max_bytes,
+            max_tokens=max_tokens,
+        )
+
+    def context_many(
+        self,
+        queries: Iterable[str],
+        *,
+        max_results: int = 10,
+        max_lines: int = 120,
+        max_bytes: int = 32_000,
+        max_tokens: int | None = None,
+    ) -> list[ContextSpan]:
+        """Resolve bounded context with the same fidelity contract as Snapshot."""
+        if (
+            max_results < 1
+            or max_lines < 1
+            or max_bytes < 1
+            or (max_tokens is not None and max_tokens < 1)
+        ):
             raise ValueError("context limits must be positive")
         spans: list[ContextSpan] = []
-        consumed = 0
-        for symbol in self.find(query)[:max_results]:
-            path = (self.root / symbol.file).resolve()
-            try:
-                path.relative_to(self.root)
-            except ValueError as error:
-                raise ValueError(
-                    f"snapshot path escapes root: {symbol.file}"
-                ) from error
-            actual = _hash_source(path)
-            expected = (
-                self.overlay.changed.get(symbol.file, {}).get("sha256")
-                if self.overlay
-                else None
-            ) or self.manifest.source_hashes.get(symbol.file)
-            if actual != expected:
-                raise StaleSnapshotError(
-                    f"source changed after generation: {symbol.file}; run refresh"
+        consumed = consumed_tokens = 0
+        seen: set[tuple[str, int, int]] = set()
+        source_cache: dict[str, tuple[bytes, str, list[str]]] = {}
+        for query in queries:
+            for symbol in self.find(query):
+                if len(spans) >= max_results:
+                    return spans
+                path = (self.root / symbol.file).resolve()
+                try:
+                    path.relative_to(self.root)
+                except ValueError as error:
+                    raise ValueError(
+                        f"snapshot path escapes root: {symbol.file}"
+                    ) from error
+                cached = source_cache.get(symbol.file)
+                if cached is None:
+                    contents = path.read_bytes()
+                    actual = hashlib.sha256(contents).hexdigest()
+                    try:
+                        lines = contents.decode("utf-8").splitlines()
+                    except UnicodeDecodeError as error:
+                        raise ValueError(f"source is not valid UTF-8: {symbol.file}") from error
+                    cached = (contents, actual, lines)
+                    source_cache[symbol.file] = cached
+                contents, actual, lines = cached
+                expected = (
+                    self.overlay.changed.get(symbol.file, {}).get("sha256")
+                    if self.overlay
+                    else None
+                ) or self.manifest.source_hashes.get(symbol.file)
+                if actual != expected:
+                    raise StaleSnapshotError(
+                        f"source changed after generation: {symbol.file}; run refresh"
+                    )
+                requested_end = symbol.end_line
+                end = min(requested_end, symbol.line + max_lines - 1)
+                key = (symbol.file, symbol.line, end)
+                if key in seen:
+                    continue
+                content = "\n".join(lines[symbol.line - 1 : end])
+                truncated = end < requested_end
+                remaining = max_bytes - consumed
+                if remaining <= 0:
+                    return spans
+                content = content.encode("utf-8")[:remaining].decode("utf-8", errors="ignore")
+                encoded_size = len(content.encode("utf-8"))
+                if encoded_size < len("\n".join(lines[symbol.line - 1 : end]).encode("utf-8")):
+                    truncated = True
+                tokens = max(1, (encoded_size + 3) // 4) if encoded_size else 0
+                if max_tokens is not None and consumed_tokens + tokens > max_tokens:
+                    remaining_tokens = max_tokens - consumed_tokens
+                    if remaining_tokens <= 0:
+                        return spans
+                    content = content.encode("utf-8")[: remaining_tokens * 4].decode(
+                        "utf-8", errors="ignore"
+                    )
+                    truncated = True
+                    encoded_size = len(content.encode("utf-8"))
+                    tokens = max(1, (encoded_size + 3) // 4) if encoded_size else 0
+                seen.add(key)
+                consumed += encoded_size
+                consumed_tokens += tokens
+                content_bytes = content.encode("utf-8")
+                content_truncated = truncated and encoded_size < len(
+                    "\n".join(lines[symbol.line - 1 : end]).encode("utf-8")
                 )
-            lines = path.read_text(encoding="utf-8").splitlines()
-            requested_end = symbol.end_line
-            end = min(requested_end, symbol.line + max_lines - 1)
-            content = "\n".join(lines[symbol.line - 1 : end])
-            truncated = end < requested_end
-            content_truncated = False
-            remaining = max_bytes - consumed
-            if remaining <= 0:
-                break
-            original_size = len(content.encode())
-            content = content.encode()[:remaining].decode("utf-8", errors="ignore")
-            if len(content.encode()) < original_size:
-                truncated = True
-                content_truncated = True
-            consumed += len(content.encode())
-            delivered_end = (
-                symbol.line + content.count("\n")
-                if content_truncated and content and not content.endswith("\n")
-                else symbol.line + content.count("\n") - 1
-                if content_truncated and content
-                else end
-            )
-            omitted_start = (
-                delivered_end
-                if content_truncated and content and not content.endswith("\n")
-                else symbol.line
-                if content_truncated and not content
-                else delivered_end + 1
-            )
-            omitted_ranges = (
-                ((omitted_start, requested_end),)
-                if truncated and omitted_start <= requested_end
-                else ()
-            )
-            prefix_bytes = len("\n".join(lines[: symbol.line - 1]).encode()) + (
-                1 if symbol.line > 1 else 0
-            )
-            spans.append(
-                ContextSpan(
-                    symbol=symbol.qualified_name,
-                    kind=symbol.kind,
-                    file=symbol.file,
-                    start_line=symbol.line,
-                    end_line=delivered_end,
-                    source_sha256=actual,
-                    content=content,
-                    base_generation=self.base_generation,
-                    overlay_generation=self.overlay_generation,
-                    requested_start_line=symbol.line,
-                    requested_end_line=requested_end,
-                    start_byte=prefix_bytes,
-                    end_byte=prefix_bytes + len(content.encode()),
-                    content_sha256=hashlib.sha256(content.encode()).hexdigest(),
-                    fidelity="partial" if truncated else "complete",
-                    omitted_ranges=omitted_ranges,
-                    needs_broader_context=truncated,
+                delivered_end = (
+                    symbol.line + content.count("\n")
+                    if content_truncated and content and not content.endswith("\n")
+                    else symbol.line + content.count("\n") - 1
+                    if content_truncated and content
+                    else end
                 )
-            )
+                omitted_start = (
+                    delivered_end
+                    if content_truncated and content and not content.endswith("\n")
+                    else symbol.line
+                    if content_truncated and not content
+                    else delivered_end + 1
+                )
+                omitted_ranges = (
+                    ((omitted_start, requested_end),)
+                    if truncated and omitted_start <= requested_end
+                    else ()
+                )
+                prefix_bytes = len("\n".join(lines[: symbol.line - 1]).encode("utf-8")) + (
+                    1 if symbol.line > 1 else 0
+                )
+                spans.append(
+                    ContextSpan(
+                        symbol=symbol.qualified_name,
+                        kind=symbol.kind,
+                        file=symbol.file,
+                        start_line=symbol.line,
+                        end_line=delivered_end,
+                        source_sha256=actual,
+                        content=content,
+                        base_generation=self.base_generation,
+                        overlay_generation=self.overlay_generation,
+                        requested_start_line=symbol.line,
+                        requested_end_line=requested_end,
+                        start_byte=prefix_bytes,
+                        end_byte=prefix_bytes + len(content_bytes),
+                        content_sha256=hashlib.sha256(content_bytes).hexdigest(),
+                        fidelity="partial" if truncated else "complete",
+                        omitted_ranges=omitted_ranges,
+                        needs_broader_context=truncated,
+                        tokens=tokens,
+                    )
+                )
         return spans
