@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from simplicio_fast.adapters import negotiate, parse_path
-from simplicio_fast.workspace import GenerationId, WorkspaceStore
+from simplicio_fast.workspace import GenerationId, StaleSnapshotError, WorkspaceStore
 
 
 class WorkspaceGenerationTest(unittest.TestCase):
@@ -192,6 +192,36 @@ class WorkspaceGenerationTest(unittest.TestCase):
             self.assertEqual(
                 len(span.content.encode()), span.end_byte - span.start_byte
             )
+
+    def test_context_many_applies_token_budget_and_deduplicates_overlap(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "main.py"
+            source.write_text(
+                "def main():\n    return True\n    return False\n",
+                encoding="utf-8",
+            )
+            store = WorkspaceStore(root)
+            base = store.build_base()
+            with store.open(base.generation_id) as view:
+                spans = view.context_many(("main", "ain"), max_tokens=2)
+            assert len(spans) == 1
+            assert spans[0].fidelity == "partial"
+            assert spans[0].needs_broader_context
+            assert spans[0].tokens <= 2
+            assert spans[0].source_sha256 != spans[0].content_sha256
+
+    def test_context_many_rejects_stale_source_after_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "main.py"
+            source.write_text("def main():\n    return True\n", encoding="utf-8")
+            store = WorkspaceStore(root)
+            base = store.build_base()
+            source.write_text("def main():\n    return False\n", encoding="utf-8")
+            with store.open(base.generation_id) as view:
+                with self.assertRaises(StaleSnapshotError):
+                    view.context_many(("main",))
 
     def test_watch_refresh_is_debounced_and_writes_atomically(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
